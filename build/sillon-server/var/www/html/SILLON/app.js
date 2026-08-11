@@ -154,10 +154,50 @@ function basculerOnglet(nomOnglet) {
     if (nomOnglet === "scripts") Scripts.remplirSelecteurBase();
 }
 
+// =============================================================================
+// MODALES (§4.2) - ouverture/fermeture de <dialog class="fr-modal">
+// =============================================================================
+// Le CSS de DSFR pilote l'affichage via la classe "fr-modal--opened", pas via
+// l'attribut natif [open] seul (hérité de versions antérieures au <dialog>
+// natif) : "show()" lève juste le display:none par défaut du navigateur,
+// la classe fait le reste (positionnement plein écran, fondu). "show()" est
+// préféré à "showModal()" pour ne pas cumuler le ::backdrop natif avec la
+// surcouche déjà peinte par le CSS de DSFR (--modal, arrière-plan opaque).
+const Modales = {
+    ouvrir(modale) {
+        modale.show();
+        modale.classList.add("fr-modal--opened");
+    },
+    fermer(modale) {
+        modale.classList.remove("fr-modal--opened");
+        modale.close();
+    },
+    init() {
+        document.querySelectorAll("[data-fr-opened]").forEach((declencheur) => {
+            declencheur.addEventListener("click", () => {
+                const modale = document.getElementById(declencheur.getAttribute("aria-controls"));
+                if (modale) Modales.ouvrir(modale);
+            });
+        });
+        document.querySelectorAll(".fr-modal").forEach((modale) => {
+            modale.querySelector(".fr-btn--close")?.addEventListener("click", () => Modales.fermer(modale));
+            // Clic sur la surcouche (en dehors de fr-modal__body) : ferme comme un clic hors-modale classique.
+            modale.addEventListener("click", (evenement) => {
+                if (evenement.target === modale) Modales.fermer(modale);
+            });
+        });
+        document.addEventListener("keydown", (evenement) => {
+            if (evenement.key !== "Escape") return;
+            document.querySelectorAll(".fr-modal--opened").forEach((modale) => Modales.fermer(modale));
+        });
+    },
+};
+
 document.addEventListener("DOMContentLoaded", () => {
     document.querySelectorAll(".fr-tabs__tab").forEach((bouton) => {
         bouton.addEventListener("click", () => basculerOnglet(bouton.dataset.onglet));
     });
+    Modales.init();
     Auth.chargerSession();
 });
 
