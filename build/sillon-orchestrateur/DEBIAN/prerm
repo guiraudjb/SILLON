@@ -1,0 +1,12 @@
+#!/bin/bash
+set -e
+
+# Comme pour sillon-server : arrêter le service seulement sur un vrai
+# retrait, jamais lors d'une mise à jour de version (dpkg réinstalle
+# aussitôt après, et postinst relance le service - §12.4).
+if [ "$1" = "remove" ]; then
+    systemctl stop sillon-orchestrateur 2>/dev/null || true
+    systemctl disable sillon-orchestrateur 2>/dev/null || true
+fi
+
+exit 0

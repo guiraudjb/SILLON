@@ -1,0 +1,11 @@
+Package: sillon-worker
+Version: 0.1.0
+Architecture: all
+Maintainer: Administrateur SILLON <admin@sillon.local>
+Depends: sillon-orchestrateur, podman
+Section: web
+Priority: optional
+Description: SILLON - Travailleur de la file d'attente.
+ Consomme la file de jobs, lance les conteneurs ephemeres d'execution de
+ scripts Python/R et applique les quotas cgroups. Voir cahier des charges
+ §7 et §12.2.

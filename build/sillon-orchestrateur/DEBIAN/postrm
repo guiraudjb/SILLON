@@ -1,0 +1,34 @@
+#!/bin/bash
+set -e
+
+case "$1" in
+    remove)
+        # __pycache__ est généré à l'exécution par Python, hors de
+        # l'arborescence livrée par le paquet : dpkg ne le retire jamais
+        # de lui-même, et sa présence empêcherait dpkg de retirer le
+        # répertoire /opt/sillon-orchestrateur devenu vide par ailleurs.
+        rm -rf /opt/sillon-orchestrateur/__pycache__
+        rmdir --ignore-fail-on-non-empty /opt/sillon-orchestrateur 2>/dev/null || true
+        systemctl daemon-reload 2>/dev/null || true
+        # Rien d'autre à nettoyer ici : ce paquet ne possède aucune
+        # configuration propre (il lit /etc/sillon/secrets.env, propriété
+        # de sillon-server, jamais touché depuis ce script) ni aucune
+        # donnée - bases et jobs sont gérés par PostgreSQL, hors de son
+        # périmètre (§12.6).
+        ;;
+
+    purge)
+        # Pas de fichier de configuration propre à ce paquet à distinguer
+        # d'une simple suppression : purge va simplement jusqu'au bout du
+        # nettoyage du répertoire applicatif.
+        rm -rf /opt/sillon-orchestrateur
+        systemctl daemon-reload 2>/dev/null || true
+        ;;
+
+    upgrade|failed-upgrade|abort-install|abort-upgrade|disappear)
+        # Rien à faire : la nouvelle version du paquet (ou l'annulation de
+        # l'opération) réinstalle ou conserve ce qui est nécessaire.
+        ;;
+esac
+
+exit 0

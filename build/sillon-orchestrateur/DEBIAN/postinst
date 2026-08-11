@@ -1,0 +1,46 @@
+#!/bin/bash
+set -e
+
+echo "=== Installation de SILLON (sillon-orchestrateur) ==="
+
+SECRETS_FILE="/etc/sillon/secrets.env"
+APP_DIR="/opt/sillon-orchestrateur"
+
+# =====================================================================
+# 1. PREREQUIS (§4.3, §4.4, §12.1)
+# =====================================================================
+# Les dependances Python (Flask, psycopg2, PyJWT, gunicorn) viennent des
+# paquets Debian officiels declares dans DEBIAN/control : rien a installer
+# a la volee, aucun acces reseau necessaire a ce stade.
+
+if [ ! -f "$SECRETS_FILE" ]; then
+    echo "ERREUR : $SECRETS_FILE introuvable." >&2
+    echo "Le paquet sillon-server doit être installé et configuré avant sillon-orchestrateur." >&2
+    exit 1
+fi
+
+# =====================================================================
+# 2. DROITS SUR LE REPERTOIRE APPLICATIF (§4.2)
+# =====================================================================
+chown -R www-data:www-data "$APP_DIR"
+chmod 750 "$APP_DIR"
+
+# =====================================================================
+# 3. ACTIVATION DU SERVICE (§4.2)
+# =====================================================================
+# Les secrets (SILLON_JWT_SECRET, SILLON_ORCHESTRATEUR_PASS) sont transmis
+# au service par "EnvironmentFile" dans l'unite systemd, lus directement
+# depuis $SECRETS_FILE : aucune duplication dans un fichier propre a ce
+# paquet (§4.3, §4.4).
+systemctl daemon-reload
+systemctl enable sillon-orchestrateur
+
+if ! systemctl restart sillon-orchestrateur; then
+    echo "AVERTISSEMENT : le service sillon-orchestrateur ne démarre pas encore" >&2
+    echo "(orchestrateur.py reste à implémenter - voir le TODO du fichier)." >&2
+    echo "L'installation du paquet se poursuit malgré tout ; consultez" >&2
+    echo "'journalctl -u sillon-orchestrateur' une fois le code applicatif en place." >&2
+fi
+
+echo "=== Installation de SILLON (sillon-orchestrateur) terminée ==="
+exit 0

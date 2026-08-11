@@ -1,0 +1,34 @@
+#!/bin/bash
+set -e
+
+echo "=== Installation de SILLON (sillon-image-execution) ==="
+
+# Nom d'image partagé avec postrm (§8.7) : les deux scripts doivent rester
+# alignés sur cette même convention.
+IMAGE_TAG="sillon-image-execution:latest"
+ARCHIVE_IMAGE="/usr/lib/sillon/image-execution.tar"
+
+# Même convention que sillon-worker (dont ce paquet dépend, donc déjà
+# installé et configuré à ce stade - cf. son postinst) : worker.py exécute
+# Podman en rootless sous www-data, avec ce $HOME dédié - une image chargée
+# ici en root atterrirait dans un stockage rootful que worker.py ne
+# consulte jamais.
+PODMAN_HOME="/var/lib/sillon/podman-home"
+
+# Chargement de l'image figée depuis l'archive embarquée par build.sh
+# (§8.7, §12.2) - jamais de "podman build" ici : le serveur cible n'a accès
+# qu'aux dépôts Debian via son proxy d'entreprise, pas à un registre de
+# conteneurs (Docker Hub), donc "FROM debian:13-slim" y échouerait
+# systématiquement (constaté lors d'un déploiement réel). L'image est
+# construite une seule fois, côté build, là où l'accès réseau existe ;
+# cette étape ne fait plus qu'un chargement purement local.
+if [ ! -f "$ARCHIVE_IMAGE" ]; then
+    echo "ERREUR : archive d'image introuvable ($ARCHIVE_IMAGE)." >&2
+    echo "Le paquet a été construit sans exécuter l'étape de vendoring de build.sh." >&2
+    exit 1
+fi
+echo "Chargement de l'image d'exécution ($IMAGE_TAG) depuis $ARCHIVE_IMAGE..."
+runuser -u www-data -- env HOME="$PODMAN_HOME" podman load -i "$ARCHIVE_IMAGE"
+
+echo "=== Installation terminée ==="
+exit 0

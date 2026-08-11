@@ -1,0 +1,58 @@
+/* SILLON - Feuille de style
+   Complète le DSFR plutôt que de le redéfinir : le thème (couleurs,
+   typographie, composants) reste entièrement porté par dsfr.min.css. */
+
+:root {
+    --sillon-accent: #000091;
+}
+
+/* [hidden] seul ne suffit pas toujours : certains composants DSFR posent
+   leur propre "display" (flex/grid) avec une spécificité qui l'emporte
+   sur la règle native du navigateur pour [hidden] - constaté en pratique
+   sur .fr-btns-group. */
+[hidden] {
+    display: none !important;
+}
+
+#ecran-connexion {
+    min-height: 60vh;
+    padding-top: 4rem;
+}
+
+/* Le conteneur DSFR doit garder sa largeur normale : ne pas l'englober
+   dans un display:flex personnalisé, qui casse le calcul de largeur de
+   .fr-grid-row/.fr-col-* imbriqués (constaté en pratique : la grille se
+   réduit à la largeur de son contenu au lieu de la colonne demandée). */
+
+.fr-tabs__panel {
+    padding-top: 1.5rem;
+}
+
+.ligne-partage td {
+    padding: 0;
+    border: none;
+}
+
+#historique-travaux {
+    list-style: none;
+    padding-left: 0;
+}
+
+#historique-travaux li {
+    padding: 0.25rem 0;
+    border-bottom: 1px solid var(--border-default-grey);
+}
+
+#resultat-travaux table,
+#resultat-import table,
+#table-suivi,
+#table-utilisateurs,
+#table-audit {
+    font-size: 0.9rem;
+}
+
+code {
+    background: var(--background-alt-grey);
+    padding: 0.1rem 0.3rem;
+    border-radius: 2px;
+}

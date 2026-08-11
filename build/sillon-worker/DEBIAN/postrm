@@ -1,0 +1,62 @@
+#!/bin/bash
+set -e
+
+# Même convention que le postinst : www-data (pas root) est le seul
+# contexte Podman rootless que worker.py utilise réellement (§8.7) - une
+# commande "podman ps" lancée ici en root, sans cet alias, interrogerait un
+# stockage rootful totalement différent et ne verrait jamais les
+# conteneurs de worker.py.
+PODMAN_HOME="/var/lib/sillon/podman-home"
+podman_www_data() {
+    runuser -u www-data -- env HOME="$PODMAN_HOME" podman "$@"
+}
+
+nettoyer_conteneurs_orphelins() {
+    # Filet de sécurité (§8.7) : si worker.py n'a pas eu le temps de
+    # libérer son conteneur en cours avant l'arrêt du service (crash,
+    # dépassement du délai d'arrêt systemd), on le retrouve ici grâce au
+    # label que worker.py devra poser à chaque lancement de conteneur -
+    # contrat à respecter lors de son implémentation :
+    #   podman run --label sillon.managed-by=sillon-worker ...
+    if command -v podman >/dev/null 2>&1 && id www-data >/dev/null 2>&1; then
+        conteneurs=$(podman_www_data ps -aq --filter "label=sillon.managed-by=sillon-worker" 2>/dev/null || true)
+        if [ -n "$conteneurs" ]; then
+            echo "Arrêt de conteneur(s) d'exécution SILLON resté(s) actif(s)..." >&2
+            # shellcheck disable=SC2086
+            podman_www_data stop --time 10 $conteneurs >/dev/null 2>&1 || true
+            # shellcheck disable=SC2086
+            podman_www_data rm --force $conteneurs >/dev/null 2>&1 || true
+        fi
+    fi
+}
+
+case "$1" in
+    remove)
+        nettoyer_conteneurs_orphelins
+
+        # __pycache__ est généré à l'exécution par Python, hors de
+        # l'arborescence livrée par le paquet.
+        rm -rf /opt/sillon-worker/__pycache__
+        rmdir --ignore-fail-on-non-empty /opt/sillon-worker 2>/dev/null || true
+        systemctl daemon-reload 2>/dev/null || true
+
+        # Les jobs restés au statut "en_cours" sans conteneur associé ne
+        # sont pas corrigés ici : cette réconciliation relève de worker.py
+        # lui-même au redémarrage d'un futur worker, pas d'un script de
+        # désinstallation (à traiter lors de son implémentation).
+        ;;
+
+    purge)
+        nettoyer_conteneurs_orphelins
+        rm -rf /opt/sillon-worker
+        systemctl daemon-reload 2>/dev/null || true
+        # L'image d'exécution des scripts appartient au paquet
+        # sillon-image-execution (§12.2), pas à sillon-worker : rien à
+        # retirer ici de ce côté.
+        ;;
+
+    upgrade|failed-upgrade|abort-install|abort-upgrade|disappear)
+        ;;
+esac
+
+exit 0

@@ -1,0 +1,49 @@
+#!/bin/bash
+set -e
+
+# Nom d'image partagé avec postinst (§8.7) : les deux scripts doivent
+# rester alignés sur cette même convention.
+IMAGE_TAG="sillon-image-execution:latest"
+# Même convention que sillon-worker/sillon-image-execution postinst :
+# l'image vit dans le stockage rootless de www-data, jamais dans celui de
+# root.
+PODMAN_HOME="/var/lib/sillon/podman-home"
+podman_www_data() {
+    runuser -u www-data -- env HOME="$PODMAN_HOME" podman "$@"
+}
+
+retirer_image() {
+    if command -v podman >/dev/null 2>&1 && id www-data >/dev/null 2>&1; then
+        if podman_www_data image exists "$IMAGE_TAG" 2>/dev/null; then
+            if ! podman_www_data rmi "$IMAGE_TAG" 2>/dev/null; then
+                # Pas de "--force" ici : cette image peut être utilisée par
+                # un conteneur que sillon-worker a actuellement en charge
+                # (§8.7). Le lui arracher de force relève de sillon-worker
+                # lui-même (déjà traité dans son propre postrm), pas de ce
+                # script.
+                echo "AVERTISSEMENT : l'image $IMAGE_TAG n'a pas pu être retirée" >&2
+                echo "(probablement utilisée par un conteneur en cours via sillon-worker)." >&2
+                echo "Nouvelle tentative possible plus tard, ou manuellement avec :" >&2
+                echo "  podman rmi --force $IMAGE_TAG" >&2
+            fi
+        fi
+    fi
+}
+
+case "$1" in
+    remove|purge)
+        # Contrairement aux autres paquets SILLON, remove et purge se
+        # comportent ici à l'identique : l'image est un artefact de build
+        # entièrement reconstructible depuis le Dockerfile livré par le
+        # paquet, sans aucune donnée propre à préserver pour une
+        # réinstallation (§12.6 - la distinction remove/purge n'a de sens
+        # que lorsqu'il existe une configuration ou des secrets à
+        # conserver).
+        retirer_image
+        ;;
+
+    upgrade|failed-upgrade|abort-install|abort-upgrade|disappear)
+        ;;
+esac
+
+exit 0

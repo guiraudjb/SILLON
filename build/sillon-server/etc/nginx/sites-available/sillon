@@ -1,0 +1,80 @@
+# =====================================================================
+# SILLON - Configuration Nginx
+# Voir cahier des charges §4, §8.5, §8.6
+# =====================================================================
+
+server {
+    listen 80;
+    server_name _;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name _;
+
+    ssl_certificate /etc/ssl/sillon/sillon.crt;
+    ssl_certificate_key /etc/ssl/sillon/sillon.key;
+
+    root /var/www/html/SILLON/;
+    index index.html;
+
+    # Sans ceci, la limite par défaut de Nginx (1 Mo) rejette silencieusement
+    # tout import CSV ou dépôt de script réel avec un 413 - avant même que
+    # la requête n'atteigne l'orchestrateur, dont la propre limite
+    # configurable (paramètre "taille_max_csv_mo", 2048 Mo par défaut - §5.1)
+    # ne sert donc à rien tant que Nginx bloque en amont. Constaté avec un
+    # import réel une fois passé par le nginx du paquet (les tests
+    # précédents utilisaient des fichiers < 1 Mo ou contournaient Nginx).
+    # Laissé à 0 (illimité) plutôt que dupliqué ici en dur : l'orchestrateur
+    # reste la seule source de vérité pour la taille maximale, déjà
+    # configurable sans reconstruire de paquet.
+    client_max_body_size 0;
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    # Authentification : limitation de débit dédiée (zone définie dans
+    # /etc/nginx/conf.d/sillon-ratelimit.conf, §8.6) et purge de tout
+    # en-tête Authorization pré-existant, pour qu'un jeton ne puisse pas
+    # être rejoué sur cet endpoint.
+    location = /api/rpc/login {
+        limit_req zone=login_limit burst=5 nodelay;
+        proxy_set_header Authorization "";
+        proxy_pass http://127.0.0.1:3000/rpc/login;
+        proxy_set_header Host $host;
+        proxy_hide_header X-Powered-By;
+        server_tokens off;
+    }
+
+    # L'API de requêtage n'accepte le jeton que via l'en-tête Authorization
+    # (§4.3) : on l'extrait ici du cookie HttpOnly déposé par login() (§8.2),
+    # puisque le navigateur ne peut pas le lire ni le poser lui-même.
+    location /api/ {
+        set $auth_header "";
+        if ($http_cookie ~* "sillon_token=([^;]+)") {
+            set $auth_header "Bearer $1";
+        }
+        proxy_set_header Authorization $auth_header;
+        proxy_pass http://127.0.0.1:3000/;
+        proxy_set_header Host $host;
+        proxy_hide_header X-Powered-By;
+        server_tokens off;
+    }
+
+    # Même extraction pour l'orchestrateur : il a besoin du jeton pour
+    # basculer sur le rôle personnel de l'appelant (§4.3, §4.4).
+    location /orchestrateur/ {
+        set $auth_header "";
+        if ($http_cookie ~* "sillon_token=([^;]+)") {
+            set $auth_header "Bearer $1";
+        }
+        proxy_set_header Authorization $auth_header;
+        proxy_pass http://127.0.0.1:5000/;
+        proxy_set_header Host $host;
+        proxy_hide_header X-Powered-By;
+        server_tokens off;
+    }
+}

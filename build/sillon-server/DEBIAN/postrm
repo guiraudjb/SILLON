@@ -1,0 +1,60 @@
+#!/bin/bash
+set -e
+
+# =====================================================================
+# NETTOYAGE DES ARTEFACTS GENERES PAR LE POSTINST (§12.6)
+# =====================================================================
+# Ces fichiers ne font pas partie de l'arborescence livrée par le paquet
+# (ils sont créés dynamiquement par postinst avec des "cat << EOF") : dpkg
+# ne les retire jamais de lui-même, il faut le faire ici explicitement.
+nettoyer_artefacts_runtime() {
+    rm -f /etc/nginx/sites-enabled/sillon
+    rm -f /etc/nginx/conf.d/sillon-ratelimit.conf
+    rm -f /etc/fail2ban/filter.d/sillon-login.conf
+    rm -f /etc/fail2ban/jail.d/sillon-login.conf
+
+    if command -v nginx >/dev/null 2>&1 && systemctl is-active --quiet nginx 2>/dev/null; then
+        nginx -t >/dev/null 2>&1 && systemctl reload nginx || true
+    fi
+    if command -v fail2ban-client >/dev/null 2>&1 && systemctl is-active --quiet fail2ban 2>/dev/null; then
+        systemctl restart fail2ban || true
+    fi
+}
+
+case "$1" in
+    remove)
+        nettoyer_artefacts_runtime
+        # /etc/sillon/secrets.env et /etc/sillon-api.conf sont conservés :
+        # une réinstallation doit pouvoir reprendre à l'identique (§12.4),
+        # sans régénérer de nouveaux secrets ni perdre l'accès aux bases
+        # déjà créées par les directions utilisatrices.
+        ;;
+
+    purge)
+        nettoyer_artefacts_runtime
+
+        echo "Suppression de la configuration SILLON..." >&2
+        rm -f /etc/sillon-api.conf
+        rm -rf /etc/sillon
+        rm -rf /etc/ssl/sillon
+        rm -rf /var/lib/sillon
+
+        echo "" >&2
+        echo "=== Les bases de données PostgreSQL n'ont PAS été supprimées ===" >&2
+        echo "SILLON ne supprime jamais de données par effet de bord d'une" >&2
+        echo "désinstallation (§12.6 du cahier des charges) : ni le catalogue" >&2
+        echo "applicatif, ni les bases créées par les agents, ni les rôles" >&2
+        echo "PostgreSQL associés. Pour les retirer manuellement si c'est" >&2
+        echo "réellement souhaité :" >&2
+        echo "  sudo -u postgres psql -c \"\\l\" | grep sillon" >&2
+        echo "  sudo -u postgres psql -c \"\\du\" | grep -E 'u_|sillon_'" >&2
+        echo "  sudo -u postgres dropdb <nom_de_base>" >&2
+        ;;
+
+    upgrade|failed-upgrade|abort-install|abort-upgrade|disappear)
+        # Rien à faire : la nouvelle version du paquet (ou l'annulation de
+        # l'opération) régénère ou conserve ce qui est nécessaire.
+        ;;
+esac
+
+exit 0

@@ -1,0 +1,196 @@
+#!/bin/bash
+set -e
+
+echo "=== Installation de SILLON (sillon-server) ==="
+
+# =====================================================================
+# VARIABLES GLOBALES
+# =====================================================================
+DB_NAME="sillon_catalog"
+SCHEMA_SRC="/usr/share/sillon/schema.sql"
+SSL_DIR="/etc/ssl/sillon"
+SECRETS_DIR="/etc/sillon"
+SECRETS_FILE="$SECRETS_DIR/secrets.env"
+API_CONF="/etc/sillon-api.conf"
+WEB_ROOT="/var/www/html/SILLON"
+
+PG_VERSION=$(pg_lsclusters -h 2>/dev/null | awk 'NR==1{print $1}')
+pg_ctlcluster "${PG_VERSION:-17}" main start || systemctl start postgresql || true
+
+# =====================================================================
+# 1-2. DETECTION D'UNE INSTALLATION EXISTANTE, SECRETS, SCHEMA (§12.3, §12.4)
+# =====================================================================
+DB_EXISTE=$(sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname = '$DB_NAME'" 2>/dev/null || true)
+
+if [ "$DB_EXISTE" = "1" ]; then
+    echo "Installation existante détectée (base $DB_NAME présente)."
+    echo "Application des migrations incrémentales (§12.4) - aucune recréation du catalogue."
+
+    # TODO : au-delà de la version 0.1.0, appliquer ici les scripts de
+    # migration correspondant aux versions intermédiaires installées.
+    # Rien à migrer pour cette toute première version du schéma.
+
+    # Les secrets existants sont conservés tels quels (§12.3) : les
+    # régénérer invaliderait toutes les sessions actives et romprait la
+    # connexion des paquets déjà installés (sillon-orchestrateur, sillon-worker).
+    if [ ! -f "$SECRETS_FILE" ]; then
+        echo "ERREUR : base existante mais fichier de secrets introuvable ($SECRETS_FILE)." >&2
+        echo "Intervention manuelle requise avant de poursuivre la mise à jour." >&2
+        exit 1
+    fi
+    # shellcheck disable=SC1090
+    source "$SECRETS_FILE"
+
+else
+    echo "Aucune installation existante : premier déploiement."
+
+    # Génération aléatoire des secrets (§12.3) - jamais fournis en dur dans
+    # le paquet, jamais commités dans un dépôt de code.
+    SILLON_JWT_SECRET=$(tr -dc 'A-Za-z0-9_-' < /dev/urandom | head -c 48)
+    SILLON_SERVICE_PASS=$(tr -dc 'A-Za-z0-9_-' < /dev/urandom | head -c 24)
+    SILLON_ORCHESTRATEUR_PASS=$(tr -dc 'A-Za-z0-9_-' < /dev/urandom | head -c 24)
+    ADMIN_EMAIL="admin@sillon.local"
+    ADMIN_PASS=$(tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 16)
+
+    mkdir -p "$SECRETS_DIR"
+    cat << EOF > "$SECRETS_FILE"
+SILLON_JWT_SECRET=${SILLON_JWT_SECRET}
+SILLON_SERVICE_PASS=${SILLON_SERVICE_PASS}
+SILLON_ORCHESTRATEUR_PASS=${SILLON_ORCHESTRATEUR_PASS}
+EOF
+    # Lu par ce paquet et par les paquets sillon-orchestrateur / sillon-worker
+    # installés ensuite (§4.4) : accès restreint au compte système.
+    chmod 600 "$SECRETS_FILE"
+    chown root:root "$SECRETS_FILE"
+
+    echo "Création de la base $DB_NAME et déploiement du catalogue (§6)..."
+    sudo -u postgres psql -c "CREATE DATABASE $DB_NAME;"
+
+    TMP_SCHEMA=$(mktemp)
+    cp "$SCHEMA_SRC" "$TMP_SCHEMA"
+    sed -i "s/__JWT_SECRET__/$SILLON_JWT_SECRET/g" "$TMP_SCHEMA"
+    sed -i "s/__SERVICE_PASS__/$SILLON_SERVICE_PASS/g" "$TMP_SCHEMA"
+    sed -i "s/__ORCHESTRATEUR_PASS__/$SILLON_ORCHESTRATEUR_PASS/g" "$TMP_SCHEMA"
+    sed -i "s/__ADMIN_EMAIL__/$ADMIN_EMAIL/g" "$TMP_SCHEMA"
+    sed -i "s/__ADMIN_PASS__/$ADMIN_PASS/g" "$TMP_SCHEMA"
+
+    # Redirection par entrée standard plutôt que "-f" : mktemp crée le
+    # fichier en mode 600 appartenant à root, illisible par l'utilisateur
+    # système "postgres" que sudo -u fait exécuter psql - "psql -f" tente
+    # de rouvrir le fichier depuis ce contexte et échoue avec "Permission
+    # non accordée" (constaté lors d'un déploiement réel sur VM). En
+    # entrée standard, seul ce script (root) lit le fichier ; son contenu
+    # est simplement transmis au processus psql, sans accès disque requis
+    # côté "postgres".
+    sudo -u postgres psql -d "$DB_NAME" -v ON_ERROR_STOP=1 < "$TMP_SCHEMA"
+    rm -f "$TMP_SCHEMA"
+
+    echo "=== Identifiant administrateur initial : $ADMIN_EMAIL ==="
+    echo "=== Mot de passe administrateur initial : $ADMIN_PASS ==="
+fi
+
+# =====================================================================
+# 3. CONFIGURATION DE L'API DE REQUETAGE (§4.3)
+# =====================================================================
+echo "Configuration de l'API de requêtage..."
+cat << EOF > "$API_CONF"
+db-uri = "postgres://sillon_service:${SILLON_SERVICE_PASS}@localhost:5432/${DB_NAME}"
+db-schema = "public"
+db-anon-role = "sillon_service"
+jwt-secret = "${SILLON_JWT_SECRET}"
+server-port = 3000
+server-host = "127.0.0.1"
+EOF
+chmod 600 "$API_CONF"
+chown www-data:www-data "$API_CONF"
+
+# =====================================================================
+# 4. CERTIFICAT TLS ET SITE NGINX (§8.5)
+# =====================================================================
+echo "Vérification du certificat TLS..."
+mkdir -p "$SSL_DIR"
+if [ ! -f "$SSL_DIR/sillon.crt" ]; then
+    # Auto-signé, à remplacer par un certificat institutionnel avant mise en
+    # production (§12.3). Généré une seule fois : ne jamais écraser un
+    # certificat institutionnel déjà installé par l'administrateur lors
+    # d'une mise à jour ultérieure du paquet.
+    openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+        -keyout "$SSL_DIR/sillon.key" -out "$SSL_DIR/sillon.crt" \
+        -subj "/C=FR/ST=Paris/L=Paris/O=Direction/OU=SILLON/CN=localhost" 2>/dev/null
+fi
+chown root:www-data "$SSL_DIR/sillon.key"
+chown root:root "$SSL_DIR/sillon.crt"
+chmod 640 "$SSL_DIR/sillon.key"
+chmod 644 "$SSL_DIR/sillon.crt"
+chmod 755 "$SSL_DIR"
+
+echo "Application des droits sur le dossier web..."
+chmod -R 755 "$WEB_ROOT"
+chown -R www-data:www-data "$WEB_ROOT"
+
+ln -sf /etc/nginx/sites-available/sillon /etc/nginx/sites-enabled/sillon
+rm -f /etc/nginx/sites-enabled/default || true
+
+# =====================================================================
+# 5. ANTI-BRUTEFORCE : LIMITATION DE DEBIT + FAIL2BAN (§8.6)
+# =====================================================================
+echo "Mise en place de l'anti-bruteforce..."
+
+cat << EOF > /etc/nginx/conf.d/sillon-ratelimit.conf
+# Zone mémoire pour limiter les tentatives de connexion SILLON (§8.6)
+limit_req_zone \$binary_remote_addr zone=login_limit:10m rate=3r/s;
+limit_req_status 429;
+EOF
+
+cat << EOF > /etc/fail2ban/filter.d/sillon-login.conf
+[Definition]
+failregex = ^<HOST> \- \- \[.*\] "POST /api/rpc/login HTTP.*" (400|401|429) .+$
+ignoreregex =
+EOF
+
+cat << EOF > /etc/fail2ban/jail.d/sillon-login.conf
+[sillon-login]
+enabled  = true
+port     = http,https
+filter   = sillon-login
+logpath  = /var/log/nginx/access.log
+maxretry = 5
+findtime = 600
+bantime  = 3600
+EOF
+
+systemctl restart fail2ban
+systemctl enable fail2ban
+
+# =====================================================================
+# 6. PURGE AUTOMATIQUE DU JOURNAL D'AUDIT (§8.12)
+# =====================================================================
+# Le fichier /etc/cron.d/sillon_purge_logs est livré par le paquet ; on
+# s'assure ici de ses droits (exigence standard pour /etc/cron.d).
+chown root:root /etc/cron.d/sillon_purge_logs
+chmod 644 /etc/cron.d/sillon_purge_logs
+
+# =====================================================================
+# 7. REPERTOIRE DE DEPOT TEMPORAIRE DES IMPORTS CSV (§5.1)
+# =====================================================================
+# Utilisé par l'orchestrateur entre /import/apercu et /import/valider
+# (orchestrateur.py, STAGING_DIR) ; sans ce répertoire pré-créé avec les
+# bons droits, le service retombe sur /tmp au démarrage, ce qui fonctionne
+# mais sort du périmètre géré par le paquet.
+mkdir -p /var/lib/sillon/staging
+chown -R www-data:www-data /var/lib/sillon
+chmod 750 /var/lib/sillon/staging
+# Point de vigilance non traité ici : un fichier déposé via /import/apercu
+# et jamais validé reste indéfiniment dans ce répertoire (§15.2, à traiter
+# avec une purge périodique le jour où ça devient nécessaire).
+
+# =====================================================================
+# ACTIVATION DES SERVICES
+# =====================================================================
+systemctl daemon-reload
+systemctl enable sillon-api
+systemctl restart sillon-api
+systemctl restart nginx
+
+echo "=== Installation de SILLON (sillon-server) terminée ==="
+exit 0

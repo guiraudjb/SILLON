@@ -1,0 +1,10 @@
+Package: sillon-server
+Version: 0.1.0
+Architecture: amd64
+Maintainer: Administrateur SILLON <admin@sillon.local>
+Depends: postgresql-17, nginx, openssl, sudo, fail2ban
+Section: web
+Priority: optional
+Description: SILLON - Systeme d'Interrogation Local et Libre d'Outils Numeriques.
+ Paquet principal : socle applicatif (PostgreSQL, Nginx, API de requetage,
+ catalogue applicatif, anti-bruteforce). Voir cahier des charges §12.2.

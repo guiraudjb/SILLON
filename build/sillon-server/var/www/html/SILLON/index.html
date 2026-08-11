@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="fr" data-fr-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SILLON — Système d'Interrogation Local et Libre d'Outils Numériques</title>
+    <link rel="apple-touch-icon" href="./dsfr-v1.14.3/dist/favicon/apple-touch-icon.png">
+    <link rel="icon" href="./dsfr-v1.14.3/dist/favicon/favicon.svg" type="image/svg+xml">
+    <link rel="shortcut icon" href="./dsfr-v1.14.3/dist/favicon/favicon.ico" type="image/x-icon">
+    <link rel="manifest" href="./dsfr-v1.14.3/dist/favicon/manifest.webmanifest" crossorigin="use-credentials">
+    <link rel="stylesheet" href="./dsfr-v1.14.3/dist/dsfr.min.css">
+    <link rel="stylesheet" href="./dsfr-v1.14.3/dist/utility/icons/icons.min.css">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header role="banner" class="fr-header">
+    <div class="fr-header__body">
+        <div class="fr-container">
+            <div class="fr-header__body-row">
+                <div class="fr-header__brand fr-enlarge-link">
+                    <div class="fr-header__brand-top">
+                        <div class="fr-header__logo">
+                            <p class="fr-logo">République<br>Française</p>
+                        </div>
+                    </div>
+                    <div class="fr-header__service">
+                        <p class="fr-header__service-title">
+                            SILLON <span class="fr-badge fr-badge--sm fr-badge--green-emeraude">Avant-projet</span>
+                        </p>
+                        <p class="fr-header__service-tagline">Système d'Interrogation Local et Libre d'Outils Numériques</p>
+                    </div>
+                </div>
+                <div class="fr-header__tools">
+                    <div class="fr-header__tools-links">
+                        <ul class="fr-btns-group" id="zone-utilisateur" hidden>
+                            <li><span class="fr-btn fr-btn--tertiary fr-icon-user-fill" id="libelle-utilisateur"></span></li>
+                            <li><button class="fr-btn fr-btn--secondary fr-icon-logout-box-r-line" onclick="Auth.deconnecter()">Se déconnecter</button></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</header>
+
+<main id="ecran-connexion" class="fr-container fr-my-10w">
+    <div class="fr-grid-row fr-grid-row--center">
+        <div class="fr-col-12 fr-col-md-5">
+            <form id="formulaire-connexion" class="fr-p-4w" style="border:1px solid var(--border-default-grey);" onsubmit="Auth.tenterConnexion(event)">
+                <h2 class="fr-h4">Connexion</h2>
+                <div id="alerte-connexion" class="fr-alert fr-alert--error fr-mb-2w" hidden></div>
+                <div class="fr-input-group">
+                    <label class="fr-label" for="champ-email">Adresse email professionnelle</label>
+                    <input class="fr-input" type="email" id="champ-email" required autocomplete="username">
+                </div>
+                <div class="fr-input-group">
+                    <label class="fr-label" for="champ-mdp">Mot de passe</label>
+                    <input class="fr-input" type="password" id="champ-mdp" required autocomplete="current-password">
+                </div>
+                <button class="fr-btn fr-mt-2w" type="submit">Se connecter</button>
+            </form>
+        </div>
+    </div>
+</main>
+
+<div id="application" class="fr-container fr-my-4w" hidden>
+
+    <nav class="fr-tabs" aria-label="Navigation SILLON">
+        <ul class="fr-tabs__list" role="tablist">
+            <li role="presentation"><button class="fr-tabs__tab fr-icon-database-line fr-tabs__tab--icon-left" data-onglet="bases" role="tab" aria-selected="true">Bases</button></li>
+            <li role="presentation"><button class="fr-tabs__tab fr-icon-terminal-box-line fr-tabs__tab--icon-left" data-onglet="travaux" role="tab" aria-selected="false">Travaux</button></li>
+            <li role="presentation"><button class="fr-tabs__tab fr-icon-upload-2-line fr-tabs__tab--icon-left" data-onglet="import" role="tab" aria-selected="false">Import</button></li>
+            <li role="presentation"><button class="fr-tabs__tab fr-icon-code-s-slash-line fr-tabs__tab--icon-left" data-onglet="scripts" role="tab" aria-selected="false">Scripts</button></li>
+            <li role="presentation"><button class="fr-tabs__tab fr-icon-time-line fr-tabs__tab--icon-left" data-onglet="suivi" role="tab" aria-selected="false">Suivi</button></li>
+            <li role="presentation" id="onglet-nav-administration" hidden><button class="fr-tabs__tab fr-icon-settings-5-line fr-tabs__tab--icon-left" data-onglet="administration" role="tab" aria-selected="false">Administration</button></li>
+        </ul>
+
+        <!-- ============================== ONGLET BASES ============================== -->
+        <div id="panneau-bases" class="fr-tabs__panel fr-tabs__panel--selected" role="tabpanel" tabindex="0">
+            <div class="fr-callout fr-icon-information-line fr-mb-3w" id="rappel-base-selectionnee">
+                <p class="fr-callout__text fr-text--sm">Aucune base sélectionnée. Choisissez une base ci-dessous pour l'utiliser dans les onglets Travaux et Scripts.</p>
+            </div>
+
+            <h2 class="fr-h5">Mes bases</h2>
+            <div id="conteneur-mes-bases"></div>
+
+            <h2 class="fr-h5 fr-mt-4w">Bases partagées avec moi</h2>
+            <div id="conteneur-bases-partagees"></div>
+        </div>
+
+        <!-- ============================== ONGLET TRAVAUX ============================== -->
+        <div id="panneau-travaux" class="fr-tabs__panel" role="tabpanel" tabindex="0" hidden>
+            <p id="travaux-base-active" class="fr-text--bold"></p>
+
+            <div class="fr-input-group">
+                <label class="fr-label" for="champ-sql">Requête SQL</label>
+                <textarea class="fr-input" id="champ-sql" rows="6" placeholder="SELECT * FROM ma_table LIMIT 100"></textarea>
+            </div>
+            <ul class="fr-btns-group fr-btns-group--inline">
+                <li><button class="fr-btn fr-icon-play-circle-line fr-btn--icon-left" onclick="Travaux.executer()">Exécuter</button></li>
+                <li><button class="fr-btn fr-btn--secondary fr-icon-download-line fr-btn--icon-left" onclick="Travaux.exporter()">Exporter en CSV</button></li>
+            </ul>
+
+            <div id="resultat-travaux" class="fr-mt-3w"></div>
+
+            <h3 class="fr-h6 fr-mt-4w">Historique de la session</h3>
+            <ul id="historique-travaux" class="fr-text--sm"></ul>
+        </div>
+
+        <!-- ============================== ONGLET IMPORT ============================== -->
+        <div id="panneau-import" class="fr-tabs__panel" role="tabpanel" tabindex="0" hidden>
+            <div class="fr-upload-group">
+                <label class="fr-label" for="champ-fichier-csv">Fichier CSV à importer</label>
+                <input class="fr-upload" type="file" id="champ-fichier-csv" accept=".csv,.txt">
+            </div>
+            <button class="fr-btn fr-icon-search-line fr-btn--icon-left" onclick="Import.analyser()">Analyser le fichier</button>
+
+            <div id="assistant-import" class="fr-mt-3w" hidden>
+                <p class="fr-text--sm">
+                    Encodage détecté : <strong id="import-encodage"></strong> —
+                    délimiteur détecté : <strong id="import-delimiteur"></strong> —
+                    <span id="import-nb-lignes"></span> ligne(s) au total
+                </p>
+
+                <div class="fr-input-group">
+                    <label class="fr-label" for="import-nom-table">Nom de la table</label>
+                    <input class="fr-input" type="text" id="import-nom-table">
+                </div>
+
+                <div class="fr-input-group">
+                    <label class="fr-label" for="import-valeur-manquante">Représentation des valeurs manquantes</label>
+                    <input class="fr-input" type="text" id="import-valeur-manquante" placeholder="(laisser vide, ou NA, -, ...)">
+                </div>
+
+                <table class="fr-table">
+                    <caption>Colonnes détectées</caption>
+                    <thead><tr><th>Colonne source</th><th>Nom normalisé</th><th>Type</th></tr></thead>
+                    <tbody id="import-colonnes"></tbody>
+                </table>
+
+                <div class="fr-input-group">
+                    <label class="fr-label" for="import-base-cible">Base cible</label>
+                    <select class="fr-select" id="import-base-cible">
+                        <option value="">Ma base personnelle (créée si nécessaire)</option>
+                    </select>
+                </div>
+
+                <button class="fr-btn fr-icon-check-line fr-btn--icon-left" onclick="Import.valider()">Confirmer l'import</button>
+            </div>
+
+            <div id="resultat-import" class="fr-mt-3w"></div>
+        </div>
+
+        <!-- ============================== ONGLET SCRIPTS ============================== -->
+        <div id="panneau-scripts" class="fr-tabs__panel" role="tabpanel" tabindex="0" hidden>
+            <div class="fr-input-group">
+                <label class="fr-label" for="scripts-base-cible">Base cible</label>
+                <select class="fr-select" id="scripts-base-cible"></select>
+            </div>
+            <div class="fr-upload-group">
+                <label class="fr-label" for="champ-fichier-script">Script Python (.py) ou R (.R)</label>
+                <input class="fr-upload" type="file" id="champ-fichier-script" accept=".py,.R,.r">
+            </div>
+            <button class="fr-btn fr-icon-send-plane-line fr-btn--icon-left" onclick="Scripts.deposer()">Lancer le script</button>
+
+            <div id="resultat-scripts" class="fr-mt-3w"></div>
+        </div>
+
+        <!-- ============================== ONGLET SUIVI ============================== -->
+        <div id="panneau-suivi" class="fr-tabs__panel" role="tabpanel" tabindex="0" hidden>
+            <div class="fr-btns-group fr-btns-group--inline fr-mb-2w">
+                <button class="fr-btn fr-btn--secondary fr-icon-refresh-line fr-btn--icon-left" onclick="Suivi.rafraichir()">Rafraîchir</button>
+            </div>
+            <table class="fr-table">
+                <caption>Mes traitements</caption>
+                <thead><tr><th>Type</th><th>Statut</th><th>Créé le</th><th>Détail</th><th>Actions</th></tr></thead>
+                <tbody id="table-suivi"></tbody>
+            </table>
+        </div>
+
+        <!-- ============================== ONGLET ADMINISTRATION ============================== -->
+        <div id="panneau-administration" class="fr-tabs__panel" role="tabpanel" tabindex="0" hidden>
+            <h2 class="fr-h5">Comptes utilisateurs</h2>
+            <form id="formulaire-creation-utilisateur" class="fr-grid-row fr-grid-row--gutters fr-mb-3w" onsubmit="Administration.creerUtilisateur(event)">
+                <div class="fr-col-12 fr-col-md-4">
+                    <label class="fr-label" for="admin-nouvel-email">Email</label>
+                    <input class="fr-input" type="email" id="admin-nouvel-email" required>
+                </div>
+                <div class="fr-col-12 fr-col-md-3">
+                    <label class="fr-label" for="admin-nouveau-nom">Nom complet</label>
+                    <input class="fr-input" type="text" id="admin-nouveau-nom" required>
+                </div>
+                <div class="fr-col-12 fr-col-md-2">
+                    <label class="fr-label" for="admin-nouveau-profil">Profil</label>
+                    <select class="fr-select" id="admin-nouveau-profil">
+                        <option value="lecteur">Lecteur</option>
+                        <option value="agent">Agent</option>
+                        <option value="administrateur">Administrateur</option>
+                    </select>
+                </div>
+                <div class="fr-col-12 fr-col-md-2">
+                    <label class="fr-label" for="admin-nouveau-mdp">Mot de passe initial</label>
+                    <input class="fr-input" type="text" id="admin-nouveau-mdp" required minlength="12">
+                </div>
+                <div class="fr-col-12 fr-col-md-1 fr-mt-1w">
+                    <button class="fr-btn" type="submit" style="margin-top:1.5rem;">Créer</button>
+                </div>
+            </form>
+
+            <table class="fr-table">
+                <caption>Comptes existants</caption>
+                <thead><tr><th>Email</th><th>Nom</th><th>Profil</th><th>Actif</th><th>Actions</th></tr></thead>
+                <tbody id="table-utilisateurs"></tbody>
+            </table>
+
+            <h2 class="fr-h5 fr-mt-4w">Quotas</h2>
+            <div id="conteneur-quotas"></div>
+
+            <h2 class="fr-h5 fr-mt-4w">Journal d'audit (50 dernières actions)</h2>
+            <table class="fr-table">
+                <caption>Audit</caption>
+                <thead><tr><th>Date</th><th>Utilisateur</th><th>Action</th><th>Cible</th></tr></thead>
+                <tbody id="table-audit"></tbody>
+            </table>
+        </div>
+    </nav>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

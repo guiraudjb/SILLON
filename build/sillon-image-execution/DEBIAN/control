@@ -1,0 +1,10 @@
+Package: sillon-image-execution
+Version: 0.1.0
+Architecture: amd64
+Maintainer: Administrateur SILLON <admin@sillon.local>
+Depends: sillon-worker
+Section: web
+Priority: optional
+Description: SILLON - Image d'execution des scripts.
+ Image de base figee (Python/R) utilisee par sillon-worker pour executer
+ les scripts deposes par les utilisateurs. Voir cahier des charges §8.7.

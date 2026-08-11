@@ -1,0 +1,14 @@
+[Unit]
+Description=SILLON - API de requetage (PostgREST)
+After=postgresql.service
+Requires=postgresql.service
+
+[Service]
+# Binaire vendorisé sous /usr/lib/sillon/ (pas /usr/local/, reserve a
+# l'administrateur local par la Debian Policy §9.1.2 - voir build.sh).
+ExecStart=/usr/lib/sillon/postgrest /etc/sillon-api.conf
+Restart=on-failure
+User=www-data
+
+[Install]
+WantedBy=multi-user.target

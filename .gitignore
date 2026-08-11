@@ -1,0 +1,26 @@
+# Environnements Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Paquets Debian construits
+*.deb
+
+# Artefacts vendorisés par build/build.sh (téléchargés/construits, pas du code source)
+build/sillon-server/usr/lib/sillon/postgrest
+build/sillon-image-execution/usr/lib/sillon/image-execution.tar
+
+# Jeux de données de test (volumineux, non versionnés)
+données pour test/
+
+# Secrets locaux (ne jamais versionner)
+*.env
+secrets/
+
+# Fichiers temporaires
+*.tmp
+*.log
+
+# Paramètres locaux d'outils (non liés au projet)
+.claude/

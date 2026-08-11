@@ -1,0 +1,11 @@
+Package: sillon-orchestrateur
+Version: 0.1.0
+Architecture: all
+Maintainer: Administrateur SILLON <admin@sillon.local>
+Depends: sillon-server, python3-flask, python3-psycopg2, python3-jwt, gunicorn
+Section: web
+Priority: optional
+Description: SILLON - Orchestrateur applicatif.
+ Creation/suppression des bases utilisateurs, execution des requetes SQL
+ libres, gestion de la file d'attente, envoi des notifications. Voir
+ cahier des charges §12.2.

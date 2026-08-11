@@ -1,0 +1,13 @@
+#!/bin/bash
+set -e
+
+# Appelé par dpkg AVANT la suppression des fichiers du paquet. Sur mise à
+# jour ("upgrade"), ne rien arrêter : dpkg installe aussitôt la nouvelle
+# version et son postinst relance le service (§12.4) - seul un retrait
+# effectif ("remove") justifie d'arrêter sillon-api ici.
+if [ "$1" = "remove" ]; then
+    systemctl stop sillon-api 2>/dev/null || true
+    systemctl disable sillon-api 2>/dev/null || true
+fi
+
+exit 0

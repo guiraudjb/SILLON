@@ -1,0 +1,175 @@
+#!/bin/bash
+set -e
+
+echo "=== Installation de SILLON (sillon-worker) ==="
+
+SECRETS_FILE="/etc/sillon/secrets.env"
+# Partagé avec sillon-image-execution (postinst/postrm) : www-data n'a pas
+# de $HOME exploitable (/var/www, non accessible en écriture par ce compte
+# - §8.7). Podman en mode rootless exige pourtant un $HOME/XDG inscriptible
+# pour son stockage (~/.local/share/containers) et sa configuration
+# (~/.config/containers) : ce répertoire dédié en tient lieu.
+PODMAN_HOME="/var/lib/sillon/podman-home"
+
+# =====================================================================
+# 1. PREREQUIS (§4.4, §12.1)
+# =====================================================================
+if [ ! -f "$SECRETS_FILE" ]; then
+    echo "ERREUR : $SECRETS_FILE introuvable." >&2
+    echo "Le paquet sillon-server doit être installé et configuré avant sillon-worker." >&2
+    exit 1
+fi
+
+if ! command -v podman >/dev/null 2>&1; then
+    echo "ERREUR : podman introuvable (dépendance déclarée dans DEBIAN/control)." >&2
+    exit 1
+fi
+
+# =====================================================================
+# 2. PODMAN ROOTLESS POUR www-data (§7.7, §8.7)
+# =====================================================================
+# sillon-worker.service tourne en www-data, pas root (moindre privilège du
+# processus hôte - le sandboxing des scripts eux-mêmes reste porté par les
+# options du conteneur : --user 1000:1000, --read-only, --network interne,
+# quotas cgroups). Or Podman rootless exige :
+#  - un $HOME inscriptible (créé ci-dessous, jamais /var/www - non
+#    accessible en écriture par www-data) ;
+#  - une plage subuid/subgid allouée à ce compte, pour l'espace de noms
+#    utilisateur du conteneur.
+# Sans les deux, tout "podman run" par www-data échoue immédiatement
+# ("stat $HOME/.config: no such file or directory") - constaté lors d'un
+# déploiement réel sur VM : le premier script déposé par un agent échouait
+# systématiquement en erreur.
+install -d -o www-data -g www-data -m 700 "$PODMAN_HOME"
+
+# Gestionnaire de cgroups "cgroupfs" plutôt que le "systemd" par défaut de
+# Podman rootless : ce dernier a besoin d'une session D-Bus utilisateur
+# (user@<uid>.service, via "loginctl enable-linger"), qui n'existe pas pour
+# www-data - compte système sans session interactive ni lingering. Sans ce
+# réglage, tout conteneur réellement lancé (build comme run) échoue avec
+# "sd-bus call: Interactive authentication required." (constaté lors d'un
+# déploiement réel sur VM). Les quotas restent appliqués : --cpus/--memory/
+# --pids-limit passent directement au runtime (crun) sans dépendre du
+# gestionnaire de cgroups choisi ici.
+install -d -o www-data -g www-data -m 700 "$PODMAN_HOME/.config/containers"
+cat << 'EOF' > "$PODMAN_HOME/.config/containers/containers.conf"
+[engine]
+cgroup_manager = "cgroupfs"
+EOF
+chown www-data:www-data "$PODMAN_HOME/.config/containers/containers.conf"
+chmod 600 "$PODMAN_HOME/.config/containers/containers.conf"
+
+if ! grep -q '^www-data:' /etc/subuid 2>/dev/null; then
+    usermod --add-subuids 100000-165535 --add-subgids 100000-165535 www-data
+fi
+
+# Lingering (§7.7, §8.7) : même en cgroupfs, le réseau rootless de Podman
+# (netavark + pasta, backend par défaut depuis Podman 5) a lui aussi besoin
+# d'une session D-Bus utilisateur pour démarrer - contrairement au
+# gestionnaire de cgroups, ce point n'est pas contournable par
+# configuration. Sans "enable-linger", tout "podman run" avec mise en
+# réseau (donc tout script réellement exécuté) échoue avec "failed to
+# connect to user scope bus" (constaté lors d'un déploiement réel sur VM,
+# après correction du seul gestionnaire de cgroups). "enable-linger" est
+# idempotent : sans effet si déjà activé lors d'une réinstallation.
+loginctl enable-linger www-data
+
+# Attente bornée de la session utilisateur (§7.7) : "enable-linger" démarre
+# user@<uid>.service de façon asynchrone : les commandes podman qui suivent
+# immédiatement dans ce script échoueraient si elles s'exécutaient avant
+# que /run/user/<uid> (et le bus qui s'y trouve) ne soit prêt.
+UID_WWW_DATA=$(id -u www-data)
+COMPTEUR=0
+while [ ! -S "/run/user/${UID_WWW_DATA}/bus" ] && [ "$COMPTEUR" -lt 20 ]; do
+    sleep 0.5
+    COMPTEUR=$((COMPTEUR + 1))
+done
+if [ ! -S "/run/user/${UID_WWW_DATA}/bus" ]; then
+    echo "AVERTISSEMENT : session D-Bus de www-data non détectée après 10s." >&2
+    echo "Les conteneurs de script pourraient échouer à démarrer (§7.7) ; à vérifier avec :" >&2
+    echo "  systemctl status user@${UID_WWW_DATA}.service" >&2
+fi
+
+# =====================================================================
+# 3. AUTORISATION RESEAU POSTGRESQL DEPUIS UN CONTENEUR DE SCRIPT (§7.7)
+# =====================================================================
+# Point de vigilance §15.2, tranché par un déploiement réel : ni un réseau
+# bridge "--internal" personnalisé (inexistant sur la pile réseau de
+# l'hôte en rootless - seulement dans l'espace réseau privé de www-data),
+# ni l'alias "host.containers.internal" routé à travers un tel bridge ne
+# fonctionnent. Le réseau rootless par défaut de Podman (pasta), lui,
+# route nativement cet alias vers l'hôte réel - mais en ré-émettant la
+# connexion avec l'adresse IP propre de l'hôte comme source (constaté en
+# pratique via les journaux PostgreSQL : la connexion apparaît venir de
+# l'adresse LAN de l'hôte lui-même, pas de 127.0.0.1). C'est donc cette
+# adresse, et non un sous-réseau de conteneurs, qu'il faut autoriser.
+PG_VERSION=$(pg_lsclusters -h 2>/dev/null | awk 'NR==1{print $1}')
+PG_CONF_DIR="/etc/postgresql/${PG_VERSION:-17}/main"
+
+# Adresse source réellement utilisée par pasta pour joindre l'hôte :
+# celle de l'interface par laquelle l'hôte lui-même sortirait (route par
+# défaut), pas nécessairement une IP fixe - à redétecter à chaque
+# installation plutôt que supposée stable.
+ADRESSE_HOTE=$(ip -4 route get 1.1.1.1 2>/dev/null | grep -oP 'src \K\S+' | head -1)
+if [ -z "$ADRESSE_HOTE" ]; then
+    ADRESSE_HOTE=$(hostname -I 2>/dev/null | awk '{print $1}')
+fi
+
+if [ -z "$ADRESSE_HOTE" ]; then
+    echo "AVERTISSEMENT : adresse IP de l'hôte introuvable." >&2
+    echo "Les scripts ne pourront pas atteindre PostgreSQL : à corriger manuellement" >&2
+    echo "dans $PG_CONF_DIR/pg_hba.conf (voir §7.7 du cahier des charges)." >&2
+elif [ -f "$PG_CONF_DIR/pg_hba.conf" ]; then
+    if ! grep -qF "$ADRESSE_HOTE" "$PG_CONF_DIR/pg_hba.conf"; then
+        {
+            echo ""
+            echo "# SILLON : conteneurs d'exécution de script (sillon-worker, §7.7)"
+            echo "host    all             all             ${ADRESSE_HOTE}/32            scram-sha-256"
+        } >> "$PG_CONF_DIR/pg_hba.conf"
+    fi
+
+    # Le filtrage réel est porté par pg_hba.conf ci-dessus (restreint à
+    # cette seule adresse) et par le statut LOGIN éphémère des rôles
+    # personnels (§7.7) : élargir listen_addresses ne relâche rien à lui
+    # seul, il rend seulement PostgreSQL joignable sur cette interface.
+    LISTEN_ADDRESSES_MODIFIE=0
+    if ! sudo -u postgres psql -tAc "SHOW listen_addresses" 2>/dev/null | grep -q '\*'; then
+        sed -i "s/^#\?listen_addresses.*/listen_addresses = '*'/" "$PG_CONF_DIR/postgresql.conf" 2>/dev/null || true
+        LISTEN_ADDRESSES_MODIFIE=1
+    fi
+
+    # "listen_addresses" est à contexte "postmaster" (documentation
+    # PostgreSQL) : contrairement à pg_hba.conf, un simple reload (SIGHUP)
+    # ne suffit pas à le prendre en compte, seul un redémarrage rouvre les
+    # sockets d'écoute. Un reload rechargeait silencieusement l'ancienne
+    # valeur ("localhost") malgré un postgresql.conf déjà correct - constaté
+    # lors d'un déploiement réel (scripts systématiquement en "Connection
+    # refused" malgré une configuration en apparence correcte). Le
+    # redémarrage n'est déclenché que lorsque cette valeur vient réellement
+    # de changer, pour ne pas interrompre PostgreSQL à chaque réinstallation.
+    if [ "$LISTEN_ADDRESSES_MODIFIE" -eq 1 ]; then
+        systemctl restart postgresql 2>/dev/null || pg_ctlcluster "${PG_VERSION:-17}" main restart 2>/dev/null || true
+    else
+        systemctl reload postgresql 2>/dev/null || pg_ctlcluster "${PG_VERSION:-17}" main reload 2>/dev/null || true
+    fi
+fi
+
+# =====================================================================
+# 4. DROITS SUR LE REPERTOIRE APPLICATIF (§4.2)
+# =====================================================================
+chown -R www-data:www-data /opt/sillon-worker
+chmod 750 /opt/sillon-worker
+
+# =====================================================================
+# 5. ACTIVATION DU SERVICE (§9)
+# =====================================================================
+systemctl daemon-reload
+systemctl enable sillon-worker
+
+if ! systemctl restart sillon-worker; then
+    echo "AVERTISSEMENT : le service sillon-worker ne démarre pas." >&2
+    echo "Consultez 'journalctl -u sillon-worker' pour le diagnostic." >&2
+fi
+
+echo "=== Installation de SILLON (sillon-worker) terminée ==="
+exit 0

@@ -1,0 +1,44 @@
+[Unit]
+Description=SILLON - Travailleur de la file d'attente
+# user@33.service (www-data) : démarré par systemd-logind grâce au
+# lingering activé par le postinst de ce paquet (§7.7) - le réseau
+# rootless de Podman (netavark/pasta) a besoin de sa session D-Bus pour
+# tout "podman run" avec mise en réseau. Sans cette dépendance explicite,
+# rien ne garantit l'ordre au démarrage d'un serveur redémarré (le
+# postinst, lui, attend déjà cette session lors de l'installation - cf.
+# postinst, mais un redémarrage ultérieur ne repasse pas par lui). UID 33 :
+# convention Debian stable pour www-data (base-passwd).
+After=network.target postgresql.service sillon-orchestrateur.service user@33.service
+Requires=postgresql.service
+
+[Service]
+WorkingDirectory=/opt/sillon-worker
+
+# Secret partagé (§4.4) : SILLON_ORCHESTRATEUR_PASS pour la connexion au
+# catalogue avec le rôle sillon_orchestrateur. Fichier généré par le
+# postinst de sillon-server, chmod 600 root:root.
+EnvironmentFile=/etc/sillon/secrets.env
+Environment=SILLON_DB_HOST=localhost
+Environment=SILLON_DB_NAME=sillon_catalog
+# www-data n'a pas de $HOME exploitable (/var/www, non inscriptible par ce
+# compte) : Podman rootless a pourtant besoin d'un $HOME/XDG inscriptible
+# pour son stockage - répertoire créé par le postinst de ce paquet, dont
+# worker.py doit se servir exactement comme les invocations podman de ce
+# même postinst (§8.7).
+Environment=HOME=/var/lib/sillon/podman-home
+# systemd ne fait pas passer un service par une session PAM comme le
+# ferait "runuser" : sans ceci, worker.py ne trouve pas la session D-Bus
+# de www-data (même raison que ci-dessus), alors que les invocations
+# podman du postinst la trouvent bien via runuser+PAM (§7.7).
+Environment=XDG_RUNTIME_DIR=/run/user/33
+
+ExecStart=/usr/bin/python3 worker.py
+# Laisse le temps à worker.py d'intercepter SIGTERM, d'arrêter proprement
+# son conteneur en cours (podman stop --time 10, cf. prerm) puis de
+# remettre son job en attente avant que systemd ne passe au SIGKILL.
+TimeoutStopSec=30
+Restart=on-failure
+User=www-data
+
+[Install]
+WantedBy=multi-user.target

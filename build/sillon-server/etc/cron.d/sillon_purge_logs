@@ -1,0 +1,6 @@
+# Purge quotidienne du journal d'audit SILLON (§8.12 du cahier des charges)
+# Retention par defaut : 12 mois (valeur provisoire, cf. point de vigilance
+# §15.2 du cahier des charges - a confirmer avant mise en production).
+# Execute en tant que role systeme "postgres", seul autorise a supprimer des
+# lignes de audit_logs (trigger d'immuabilite, §8.12 du schema.sql).
+0 0 * * * postgres /usr/bin/psql -d sillon_catalog -c "DELETE FROM public.audit_logs WHERE date_action < CURRENT_DATE - INTERVAL '12 months';"

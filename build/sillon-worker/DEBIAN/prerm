@@ -1,0 +1,14 @@
+#!/bin/bash
+set -e
+
+if [ "$1" = "remove" ]; then
+    # "systemctl stop" envoie SIGTERM : le contrat attendu de worker.py
+    # est d'intercepter ce signal pour arrêter proprement son conteneur en
+    # cours avant de quitter (§8.7). Ce script se contente d'engager cet
+    # arrêt ; le filet de sécurité contre un conteneur qui n'aurait pas
+    # été libéré à temps est dans postrm.
+    systemctl stop sillon-worker 2>/dev/null || true
+    systemctl disable sillon-worker 2>/dev/null || true
+fi
+
+exit 0
