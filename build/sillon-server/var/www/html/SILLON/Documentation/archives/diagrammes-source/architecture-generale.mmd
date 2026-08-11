@@ -1,0 +1,12 @@
+flowchart TB
+    U["Data analyste - navigateur"] -->|HTTPS| N["Nginx - TLS, rate limit login"]
+    N -->|"/api/*"| PR["API de requetage - auth JWT, CRUD catalogue"]
+    N -->|"/orchestrateur/*"| OR["Orchestrateur - service applicatif"]
+    PR -->|"SET ROLE selon le jeton"| PG[("PostgreSQL 17 - catalogue + bases utilisateurs")]
+    OR -->|"role de service, membre de tous les roles personnels"| PG
+    OR -->|"file d'attente"| JQ[("Table jobs - LISTEN/NOTIFY")]
+    JQ -.->|notifie| WK["Travailleurs asynchrones"]
+    WK -->|"lance, quotas cgroups v2"| DK["Conteneurs ephemeres - Python / R"]
+    DK -->|"connexion scopee a une base"| PG
+    WK -->|"SMTP"| PF["Relais mail"]
+    PF -->|"mail avec lien de suivi"| U

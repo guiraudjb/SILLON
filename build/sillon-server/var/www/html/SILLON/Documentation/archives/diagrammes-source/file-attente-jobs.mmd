@@ -1,0 +1,10 @@
+stateDiagram-v2
+    [*] --> EnAttente : creation du job
+    EnAttente --> EnCours : travailleur disponible
+    EnCours --> Termine : succes
+    EnCours --> Erreur : echec ou depassement du delai
+    EnAttente --> Annule : annulation par l'utilisateur
+    EnCours --> Annule : annulation par l'utilisateur
+    Termine --> [*] : mail envoye, lien de suivi
+    Erreur --> [*] : mail envoye, message d'erreur
+    Annule --> [*]
