@@ -97,7 +97,13 @@ CREATE TABLE public.jobs (
     utilisateur_id  INTEGER NOT NULL REFERENCES public.utilisateurs(id),
     type            public.type_job NOT NULL,
     statut          public.statut_job NOT NULL DEFAULT 'en_attente',
-    base_id         INTEGER REFERENCES public.bases(id),
+    -- ON DELETE SET NULL (constaté en pratique, §5.2/§9) : sans ça, la
+    -- suppression d'une base échoue systématiquement dès qu'un job lui a
+    -- fait référence (import, requête longue, ou la suppression elle-même
+    -- une fois en cours) - retirer_base() ne peut alors jamais aboutir.
+    -- L'historique du job (§5.5, §8.12) est conservé, seule la référence
+    -- à une base désormais inexistante est effacée.
+    base_id         INTEGER REFERENCES public.bases(id) ON DELETE SET NULL,
     payload         JSONB NOT NULL DEFAULT '{}'::jsonb,
     chemin_resultat TEXT,
     date_creation   TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -442,6 +448,17 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+-- REVOKE FROM PUBLIC (constaté en pratique, §8.4) : PostgreSQL accorde
+-- EXECUTE à PUBLIC par défaut à la création d'une fonction - sans ce
+-- REVOKE explicite, le GRANT ci-dessous ne restreint rien du tout, malgré
+-- les apparences. Manquait sur toutes les fonctions de cette section
+-- (§4.4, §5.2, §9) jusqu'à ce que ce soit vérifié en conditions réelles :
+-- un compte lecteur pouvait alors appeler enregistrer_base/retirer_base/
+-- maj_statut_job directement (aucune ne vérifie l'appelant en interne,
+-- contrairement à partager_base/revoquer_partage), au point de pouvoir
+-- pointer le chemin_resultat de n'importe quel job vers un fichier
+-- arbitraire du serveur puis le récupérer via /jobs/<id>/telecharger.
+REVOKE EXECUTE ON FUNCTION public.partager_base(integer, text, boolean) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.partager_base(integer, text, boolean) TO agent;
 
 
@@ -464,6 +481,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+REVOKE EXECUTE ON FUNCTION public.revoquer_partage(integer, text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.revoquer_partage(integer, text) TO agent;
 
 
@@ -479,6 +497,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+REVOKE EXECUTE ON FUNCTION public.enregistrer_base(text, integer) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.enregistrer_base(text, integer) TO sillon_orchestrateur;
 
 
@@ -488,6 +507,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+REVOKE EXECUTE ON FUNCTION public.retirer_base(integer) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.retirer_base(integer) TO sillon_orchestrateur;
 
 
@@ -497,7 +517,99 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+REVOKE EXECUTE ON FUNCTION public.maj_taille_base(integer, numeric) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.maj_taille_base(integer, numeric) TO sillon_orchestrateur;
+
+-- -----------------------------------------------------------------------------
+-- 7bis. HISTORIQUE ET REQUETES ENREGISTREES (§5.3)
+-- -----------------------------------------------------------------------------
+-- Distinct des jobs (§9) : une requête exécutée depuis l'onglet Travaux
+-- s'exécute de façon synchrone (ou, pour les plus longues, comme job
+-- "requete_sql" - cf. plus bas), mais dans les deux cas son historique est
+-- propre à ce module, pas mélangé à la file d'attente des imports/scripts.
+
+CREATE TABLE public.requetes_historique (
+    id             SERIAL PRIMARY KEY,
+    utilisateur_id INTEGER NOT NULL REFERENCES public.utilisateurs(id),
+    base_id        INTEGER REFERENCES public.bases(id) ON DELETE SET NULL,
+    requete        TEXT NOT NULL,
+    type           TEXT NOT NULL,
+    succes         BOOLEAN NOT NULL,
+    duree_ms       INTEGER,
+    message_erreur TEXT,
+    date_execution TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_requetes_historique_utilisateur ON public.requetes_historique(utilisateur_id, date_execution DESC);
+
+CREATE OR REPLACE VIEW public.vue_mon_historique AS
+SELECT id, base_id, requete, type, succes, duree_ms, message_erreur, date_execution
+FROM public.requetes_historique
+WHERE utilisateur_id = public._id_courant()
+ORDER BY date_execution DESC
+LIMIT 200;
+
+GRANT SELECT ON public.vue_mon_historique TO agent, lecteur;
+
+
+CREATE OR REPLACE FUNCTION public.enregistrer_historique(
+    _base_id INTEGER, _requete TEXT, _type TEXT, _succes BOOLEAN, _duree_ms INTEGER, _message_erreur TEXT DEFAULT NULL
+) RETURNS void AS $$
+BEGIN
+    INSERT INTO public.requetes_historique (utilisateur_id, base_id, requete, type, succes, duree_ms, message_erreur)
+    VALUES (public._id_courant(), _base_id, _requete, _type, _succes, _duree_ms, _message_erreur);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+REVOKE EXECUTE ON FUNCTION public.enregistrer_historique(integer, text, text, boolean, integer, text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.enregistrer_historique(integer, text, text, boolean, integer, text) TO agent, lecteur;
+
+
+CREATE TABLE public.requetes_enregistrees (
+    id             SERIAL PRIMARY KEY,
+    utilisateur_id INTEGER NOT NULL REFERENCES public.utilisateurs(id),
+    nom            TEXT NOT NULL,
+    requete        TEXT NOT NULL,
+    date_creation  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (utilisateur_id, nom)
+);
+
+CREATE OR REPLACE VIEW public.vue_mes_requetes_enregistrees AS
+SELECT id, nom, requete, date_creation
+FROM public.requetes_enregistrees
+WHERE utilisateur_id = public._id_courant()
+ORDER BY nom;
+
+GRANT SELECT ON public.vue_mes_requetes_enregistrees TO agent, lecteur;
+
+
+-- ON CONFLICT ... DO UPDATE (plutôt qu'un simple INSERT) : enregistrer sous
+-- un nom déjà utilisé remplace la requête associée, cohérent avec l'usage
+-- attendu d'un "favori" nommé (§5.3) plutôt que de forcer l'utilisateur à
+-- supprimer l'ancienne version avant d'en écrire une nouvelle du même nom.
+CREATE OR REPLACE FUNCTION public.enregistrer_requete(_nom TEXT, _requete TEXT) RETURNS INTEGER AS $$
+DECLARE
+    _id INTEGER;
+BEGIN
+    INSERT INTO public.requetes_enregistrees (utilisateur_id, nom, requete)
+    VALUES (public._id_courant(), _nom, _requete)
+    ON CONFLICT (utilisateur_id, nom) DO UPDATE SET requete = EXCLUDED.requete
+    RETURNING id INTO _id;
+    RETURN _id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+REVOKE EXECUTE ON FUNCTION public.enregistrer_requete(text, text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.enregistrer_requete(text, text) TO agent, lecteur;
+
+
+CREATE OR REPLACE FUNCTION public.supprimer_requete_enregistree(_id INTEGER) RETURNS void AS $$
+BEGIN
+    DELETE FROM public.requetes_enregistrees WHERE id = _id AND utilisateur_id = public._id_courant();
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+REVOKE EXECUTE ON FUNCTION public.supprimer_requete_enregistree(integer) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.supprimer_requete_enregistree(integer) TO agent, lecteur;
 
 -- -----------------------------------------------------------------------------
 -- 8. FILE D'ATTENTE (§9, §5.5)
@@ -537,7 +649,19 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
-GRANT EXECUTE ON FUNCTION public.creer_job(public.type_job, integer, jsonb) TO agent, lecteur;
+-- Agent uniquement (§3) : creer_job porte tous les traitements réservés à
+-- l'agent (import CSV, création/suppression de base, scripts) - un lecteur
+-- n'a légitimement besoin d'aucun d'entre eux, seulement d'interroger les
+-- bases qui lui sont accessibles (via l'API de requêtage, pas cette
+-- fonction). Un GRANT incluant "lecteur" ici viderait de son sens toute
+-- restriction "Propriétaire uniquement" du §5.2 : un compte lecteur
+-- pourrait alors devenir propriétaire d'une base en appelant directement
+-- /orchestrateur/import/valider, malgré l'interdiction explicite du §3.
+-- Le REVOKE FROM PUBLIC est indispensable (cf. note détaillée plus haut,
+-- au premier REVOKE de cette section) : sans lui, ce GRANT ne restreint
+-- rien du tout.
+REVOKE EXECUTE ON FUNCTION public.creer_job(public.type_job, integer, jsonb) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.creer_job(public.type_job, integer, jsonb) TO agent;
 
 
 CREATE OR REPLACE FUNCTION public.annuler_job(_id_job INTEGER) RETURNS void AS $$
@@ -547,6 +671,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+REVOKE EXECUTE ON FUNCTION public.annuler_job(integer) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.annuler_job(integer) TO agent, lecteur;
 
 
@@ -563,6 +688,11 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+-- Le REVOKE FROM PUBLIC est particulièrement critique ici (§8.10) : sans
+-- lui, n'importe quel compte authentifié peut faire pointer
+-- chemin_resultat d'un job vers un chemin arbitraire du serveur, puis le
+-- récupérer via /jobs/<id>/telecharger - démontré en conditions réelles.
+REVOKE EXECUTE ON FUNCTION public.maj_statut_job(integer, public.statut_job, text, text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.maj_statut_job(integer, public.statut_job, text, text) TO sillon_orchestrateur;
 
 -- -----------------------------------------------------------------------------
@@ -639,6 +769,25 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 CREATE TRIGGER trig_audit_utilisateurs AFTER INSERT OR UPDATE OR DELETE ON public.utilisateurs FOR EACH ROW EXECUTE FUNCTION public.journaliser_action();
 CREATE TRIGGER trig_audit_bases        AFTER INSERT OR UPDATE OR DELETE ON public.bases        FOR EACH ROW EXECUTE FUNCTION public.journaliser_action();
 CREATE TRIGGER trig_audit_partages     AFTER INSERT OR UPDATE OR DELETE ON public.partages     FOR EACH ROW EXECUTE FUNCTION public.journaliser_action();
+
+-- Journalisation manuelle (§8.12) : la création/suppression d'une table
+-- (§5.2) se produit dans la base physique de l'agent, jamais dans
+-- sillon_catalog - aucun trigger sur une table système ne peut donc la
+-- capturer comme le fait journaliser_action() pour utilisateurs/bases/
+-- partages. L'orchestrateur appelle cette fonction explicitement après
+-- coup, une fois l'opération elle-même confirmée réussie.
+CREATE OR REPLACE FUNCTION public.consigner_audit(_action TEXT, _cible TEXT, _details TEXT) RETURNS void AS $$
+DECLARE
+    _utilisateur TEXT;
+BEGIN
+    _utilisateur := current_setting('request.jwt.claims', true)::json ->> 'email';
+    IF _utilisateur IS NULL THEN _utilisateur := 'Systeme'; END IF;
+    INSERT INTO public.audit_logs (utilisateur, action, cible, details) VALUES (_utilisateur, _action, _cible, _details);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+REVOKE EXECUTE ON FUNCTION public.consigner_audit(text, text, text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.consigner_audit(text, text, text) TO agent;
 
 -- -----------------------------------------------------------------------------
 -- 10. DROITS D'ACCES AU CATALOGUE (§8.3, §8.4, §8.9)

@@ -1,2 +1,3 @@
 /etc/nginx/sites-available/sillon
 /etc/cron.d/sillon_purge_logs
+/etc/cron.d/sillon_purge_resultats

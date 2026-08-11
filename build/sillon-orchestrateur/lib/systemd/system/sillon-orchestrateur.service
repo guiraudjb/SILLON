@@ -15,7 +15,15 @@ EnvironmentFile=/etc/sillon/secrets.env
 Environment=SILLON_DB_HOST=localhost
 Environment=SILLON_DB_NAME=sillon_catalog
 
-ExecStart=/usr/bin/gunicorn --bind 127.0.0.1:5000 --workers 2 orchestrateur:app
+# --timeout : le défaut de Gunicorn (30 s) tue silencieusement le worker
+# bien avant "duree_max_job_minutes" (30 min par défaut, modifiable par
+# l'admin - §11) pour toute requête SQL synchrone de l'onglet Travaux
+# (§5.3) qui dépasse 30 s - constaté en pratique (502 renvoyé par Nginx à
+# la place du message clair de dépassement de délai). Porté à une valeur
+# généreuse, cohérente avec proxy_read_timeout côté Nginx (§4, sillon-server) :
+# c'est le statement_timeout PostgreSQL, pas Gunicorn, qui doit rester la
+# limite réellement observée par l'utilisateur.
+ExecStart=/usr/bin/gunicorn --bind 127.0.0.1:5000 --workers 2 --timeout 2100 orchestrateur:app
 Restart=on-failure
 User=www-data
 

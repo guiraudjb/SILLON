@@ -13,6 +13,12 @@ FROM debian:13-slim
 # pip/CRAN a la volee dans le conteneur (§7.7) - toute evolution de cette
 # liste passe par une reconstruction de l'image, pas par une installation
 # utilisateur.
+#
+# Cette liste est aussi affichee cote utilisateur avant le depot d'un
+# script (§5.4) via build/sillon-server/var/www/html/SILLON/
+# librairies-scripts.json, tenu a jour manuellement en miroir de celle-ci
+# (pas d'extraction automatique au build : deux listes courtes et stables,
+# une dependance de build supplementaire pour si peu de valeur).
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install --no-install-recommends -y \
         python3 \
         python3-pandas \

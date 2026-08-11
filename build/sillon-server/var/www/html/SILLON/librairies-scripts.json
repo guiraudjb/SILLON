@@ -1,0 +1,14 @@
+{
+    "python": [
+        { "module": "pandas", "paquet_debian": "python3-pandas" },
+        { "module": "numpy", "paquet_debian": "python3-numpy" },
+        { "module": "matplotlib", "paquet_debian": "python3-matplotlib" },
+        { "module": "psycopg2", "paquet_debian": "python3-psycopg2" },
+        { "module": "openpyxl", "paquet_debian": "python3-openpyxl" }
+    ],
+    "r": [
+        { "module": "tidyverse (ggplot2, dplyr, tidyr, readr, purrr, tibble, stringr, forcats)", "paquet_debian": "r-cran-tidyverse" },
+        { "module": "DBI", "paquet_debian": "r-cran-dbi" },
+        { "module": "RPostgreSQL", "paquet_debian": "r-cran-rpostgresql" }
+    ]
+}

@@ -76,5 +76,19 @@ server {
         proxy_set_header Host $host;
         proxy_hide_header X-Powered-By;
         server_tokens off;
+
+        # Sans ceci, le défaut Nginx (60 s) coupe la connexion en 502 bien
+        # avant le statement_timeout réellement configuré ("duree_max_job_
+        # minutes", 30 min par défaut, modifiable par l'admin - §11) pour
+        # une requête SQL synchrone de l'onglet Travaux (§5.3) : constaté en
+        # pratique avec un "SELECT pg_sleep(70)" et un délai réduit à 1 min,
+        # qui aurait dû renvoyer le message clair de dépassement de délai
+        # mais renvoyait un 502 générique à la place. Fixé à une valeur
+        # généreuse plutôt qu'asservi dynamiquement au paramètre (stocké en
+        # base, pas lisible par Nginx) : un administrateur qui porterait
+        # "duree_max_job_minutes" au-delà de cette valeur devra relever
+        # celle-ci en conséquence.
+        proxy_read_timeout 35m;
+        proxy_send_timeout 35m;
     }
 }

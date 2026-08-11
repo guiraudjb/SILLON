@@ -11,6 +11,8 @@ const Etat = {
     bases: [],
     baseSelectionnee: null,
     dernierApercu: null,
+    derniereVerification: null,
+    dernieresLignesExclues: [],
 };
 
 // =============================================================================
@@ -51,6 +53,18 @@ function echapper(texte) {
     const div = document.createElement("div");
     div.textContent = texte == null ? "" : String(texte);
     return div.innerHTML;
+}
+
+function formaterTaille(octets) {
+    if (octets == null) return "—";
+    const unites = ["o", "Ko", "Mo", "Go", "To"];
+    let taille = octets, i = 0;
+    while (taille >= 1024 && i < unites.length - 1) { taille /= 1024; i++; }
+    return `${taille.toFixed(i === 0 ? 0 : 1)} ${unites[i]}`;
+}
+
+function tronquer(texte, longueurMax) {
+    return texte.length > longueurMax ? `${texte.slice(0, longueurMax)}…` : texte;
 }
 
 // =============================================================================
@@ -102,6 +116,8 @@ const Auth = {
         Etat.bases = [];
         Etat.baseSelectionnee = null;
         Etat.dernierApercu = null;
+        Etat.derniereVerification = null;
+        Etat.dernieresLignesExclues = [];
         document.getElementById("rappel-base-selectionnee").querySelector("p").textContent =
             "Aucune base sélectionnée. Choisissez une base ci-dessous pour l'utiliser dans les onglets Travaux et Scripts.";
         document.getElementById("travaux-base-active").textContent = "";
@@ -151,7 +167,23 @@ function basculerOnglet(nomOnglet) {
     });
     if (nomOnglet === "suivi") Suivi.rafraichir();
     if (nomOnglet === "administration") Administration.charger();
-    if (nomOnglet === "scripts") Scripts.remplirSelecteurBase();
+    if (nomOnglet === "scripts") {
+        Scripts.remplirSelecteurBase();
+        Scripts.afficherLibrairies();
+    }
+    if (nomOnglet === "travaux") {
+        // Initialisation différée au premier passage sur l'onglet plutôt
+        // qu'au chargement de la page : CodeMirror mesure la largeur des
+        // caractères à l'initialisation et se retrouve mal dimensionné
+        // s'il est créé pendant que son panneau est encore [hidden]
+        // (display:none) - le panneau est déjà visible à ce stade de
+        // basculerOnglet(), la boucle de bascule ci-dessus s'exécutant
+        // avant ce bloc.
+        if (!Travaux.editeur) Travaux.initEditeur();
+        Travaux.chargerSchema();
+        Travaux.rafraichirHistorique();
+        Travaux.rafraichirRequetesEnregistrees();
+    }
 }
 
 // =============================================================================
@@ -198,6 +230,7 @@ document.addEventListener("DOMContentLoaded", () => {
         bouton.addEventListener("click", () => basculerOnglet(bouton.dataset.onglet));
     });
     Modales.init();
+    Import.initGlisserDeposer();
     Auth.chargerSession();
 });
 
@@ -240,9 +273,12 @@ const Bases = {
                 <td>${Bases.badgeAcces(b, proprietaire)}</td>
                 <td>
                     <button class="fr-btn fr-btn--sm fr-btn--tertiary-no-outline fr-icon-checkbox-circle-line bouton-selectionner" data-id="${b.id}">Sélectionner</button>
+                    <button class="fr-btn fr-btn--sm fr-btn--tertiary-no-outline fr-icon-table-line bouton-tables" data-id="${b.id}">Tables</button>
                     ${proprietaire ? `<button class="fr-btn fr-btn--sm fr-btn--tertiary-no-outline fr-icon-share-line bouton-partager" data-id="${b.id}">Partager</button>` : ""}
+                    ${proprietaire ? `<button class="fr-btn fr-btn--sm fr-btn--tertiary-no-outline fr-icon-delete-bin-line" onclick="Bases.supprimerBase(${b.id}, '${b.nom_pg}')">Supprimer la base</button>` : ""}
                 </td>
             </tr>
+            <tr class="ligne-tables" id="tables-${b.id}" hidden><td colspan="5"></td></tr>
             ${proprietaire ? `<tr class="ligne-partage" id="partage-${b.id}" hidden><td colspan="5"></td></tr>` : ""}
         `).join("");
 
@@ -268,6 +304,9 @@ const Bases = {
         document.querySelectorAll(".bouton-selectionner").forEach((bouton) => {
             bouton.addEventListener("click", () => Bases.selectionner(Number(bouton.dataset.id)));
         });
+        document.querySelectorAll(".bouton-tables").forEach((bouton) => {
+            bouton.addEventListener("click", () => Bases.afficherTables(Number(bouton.dataset.id)));
+        });
         document.querySelectorAll(".bouton-partager").forEach((bouton) => {
             bouton.addEventListener("click", () => Bases.afficherPartage(Number(bouton.dataset.id)));
         });
@@ -278,6 +317,7 @@ const Bases = {
         const rappel = document.getElementById("rappel-base-selectionnee");
         rappel.querySelector("p").textContent = `Base active : ${Etat.baseSelectionnee.nom_pg}`;
         document.getElementById("travaux-base-active").textContent = `Base active : ${Etat.baseSelectionnee.nom_pg}`;
+        Travaux.chargerSchema();
     },
 
     async afficherPartage(idBase) {
@@ -342,18 +382,177 @@ const Bases = {
             alert(erreur.message);
         }
     },
+
+    // Liste des tables d'une base (§5.2) : accessible aussi bien au
+    // propriétaire qu'à un bénéficiaire de partage, le bouton "Supprimer"
+    // par table n'apparaissant que pour le premier.
+    async afficherTables(idBase) {
+        const ligne = document.getElementById(`tables-${idBase}`);
+        const cellule = ligne.querySelector("td");
+        ligne.hidden = !ligne.hidden;
+        if (ligne.hidden) return;
+
+        cellule.innerHTML = "Chargement…";
+        const base = Etat.bases.find((b) => b.id === idBase);
+        let tables = [];
+        try {
+            tables = await appelJson(`/orchestrateur/bases/${idBase}/tables`);
+        } catch (erreur) {
+            cellule.innerHTML = `<div class="fr-alert fr-alert--error fr-alert--sm">${echapper(erreur.message)}</div>`;
+            return;
+        }
+
+        // Nom de table retrouvé via un index numérique (data-index), jamais
+        // interpolé tel quel dans le HTML : un identifiant Postgres entre
+        // guillemets peut contenir n'importe quel caractère, y compris des
+        // guillemets doubles - une table créée via l'onglet Travaux (§5.3,
+        // requête libre) n'est pas soumise à la même normalisation que
+        // celles créées par l'assistant d'import (§5.1), et echapper() ne
+        // protège que du contenu texte, pas d'un attribut HTML.
+        const lignesTables = tables.map((t, i) => `
+            <tr>
+                <td>${echapper(t.nom_table)}</td>
+                <td>${t.nb_lignes}</td>
+                <td>${formaterTaille(t.taille_octets)}</td>
+                <td>${t.date_dernier_import ? new Date(t.date_dernier_import).toLocaleString("fr-FR") : "—"}</td>
+                <td>
+                    <button class="fr-btn fr-btn--sm fr-btn--tertiary-no-outline fr-icon-eye-line bouton-fiche-table" data-index="${i}">Voir la fiche</button>
+                    ${base.je_suis_proprietaire ? `<button class="fr-btn fr-btn--sm fr-btn--tertiary-no-outline fr-icon-delete-bin-line bouton-supprimer-table" data-index="${i}">Supprimer</button>` : ""}
+                </td>
+            </tr>`).join("");
+
+        cellule.innerHTML = `
+            <div class="fr-p-2w" style="background:var(--background-alt-grey);">
+                <table class="fr-table fr-table--sm"><caption class="fr-sr-only">Tables de la base</caption>
+                    <thead><tr><th>Table</th><th>Lignes</th><th>Taille</th><th>Dernier import</th><th>Actions</th></tr></thead>
+                    <tbody>${lignesTables || `<tr><td colspan="5">Aucune table pour l'instant.</td></tr>`}</tbody>
+                </table>
+                <div id="fiche-table-${idBase}"></div>
+            </div>`;
+
+        cellule.querySelectorAll(".bouton-fiche-table").forEach((bouton) => {
+            bouton.addEventListener("click", () => Bases.afficherFicheTable(idBase, tables[Number(bouton.dataset.index)].nom_table));
+        });
+        cellule.querySelectorAll(".bouton-supprimer-table").forEach((bouton) => {
+            const t = tables[Number(bouton.dataset.index)];
+            bouton.addEventListener("click", () => Bases.supprimerTable(idBase, t.nom_table, t.nb_lignes));
+        });
+    },
+
+    // Fiche d'une table (§5.2) : colonnes/types, aperçu, date et taille du
+    // dernier import (absente pour une table créée par requête SQL directe
+    // dans l'onglet Travaux plutôt que par l'assistant d'import).
+    async afficherFicheTable(idBase, nomTable) {
+        const conteneur = document.getElementById(`fiche-table-${idBase}`);
+        conteneur.innerHTML = "Chargement de la fiche…";
+        let fiche;
+        try {
+            fiche = await appelJson(`/orchestrateur/bases/${idBase}/tables/${encodeURIComponent(nomTable)}`);
+        } catch (erreur) {
+            conteneur.innerHTML = `<div class="fr-alert fr-alert--error fr-alert--sm">${echapper(erreur.message)}</div>`;
+            return;
+        }
+
+        const lignesColonnes = fiche.colonnes.map((c) => `<tr><td>${echapper(c.nom)}</td><td>${echapper(c.type)}</td></tr>`).join("");
+        const entetesApercu = fiche.apercu_entetes.map((c) => `<th>${echapper(c)}</th>`).join("");
+        const lignesApercu = fiche.apercu_lignes.map((l) => `<tr>${l.map((v) => `<td>${echapper(v)}</td>`).join("")}</tr>`).join("");
+
+        conteneur.innerHTML = `
+            <div class="fr-mt-2w fr-p-2w" style="border:1px solid var(--border-default-grey);">
+                <p class="fr-text--bold">Fiche « ${echapper(fiche.nom_table)} »</p>
+                <p class="fr-text--sm">
+                    ${fiche.nb_lignes} ligne(s) — ${formaterTaille(fiche.taille_octets)}
+                    — dernier import : ${fiche.date_dernier_import ? new Date(fiche.date_dernier_import).toLocaleString("fr-FR") : "aucun (table créée par requête SQL)"}
+                </p>
+
+                <table class="fr-table fr-table--sm"><caption>Colonnes</caption>
+                    <thead><tr><th>Nom</th><th>Type</th></tr></thead>
+                    <tbody>${lignesColonnes}</tbody>
+                </table>
+
+                <p class="fr-text--bold fr-mt-2w">Aperçu</p>
+                <div style="overflow-x:auto;">
+                    <table class="fr-table fr-table--sm"><caption class="fr-sr-only">Aperçu des données</caption>
+                        <thead><tr>${entetesApercu}</tr></thead>
+                        <tbody>${lignesApercu}</tbody>
+                    </table>
+                </div>
+            </div>`;
+    },
+
+    async supprimerTable(idBase, nomTable, nbLignes) {
+        if (!confirm(`Supprimer la table « ${nomTable} » et ses ${nbLignes} ligne(s) ? Cette action est irréversible.`)) return;
+        try {
+            await appelJson(`/orchestrateur/bases/${idBase}/tables/${encodeURIComponent(nomTable)}`, { method: "DELETE" });
+            await Bases.afficherTables(idBase);
+            await Bases.afficherTables(idBase);
+        } catch (erreur) {
+            alert(erreur.message);
+        }
+    },
+
+    // Suppression d'une base entière (§5.2) : confirmation renforcée par
+    // saisie du nom exact, en plus de la vérification de propriété faite
+    // côté serveur - la suppression physique est différée en job (§9),
+    // suivie comme les autres traitements dans l'onglet Suivi.
+    async supprimerBase(idBase, nomBase) {
+        const saisie = prompt(`Action irréversible. Pour confirmer la suppression de la base, saisissez son nom exact :\n${nomBase}`);
+        if (saisie === null) return;
+        if (saisie !== nomBase) return alert("Nom incorrect, suppression annulée.");
+
+        try {
+            const resultat = await appelJson(`/orchestrateur/bases/${idBase}/supprimer`, { method: "POST" });
+            if (Etat.baseSelectionnee && Etat.baseSelectionnee.id === idBase) {
+                Etat.baseSelectionnee = null;
+                document.getElementById("rappel-base-selectionnee").querySelector("p").textContent =
+                    "Aucune base sélectionnée. Choisissez une base ci-dessous pour l'utiliser dans les onglets Travaux et Scripts.";
+                document.getElementById("travaux-base-active").textContent = "";
+            }
+            alert(`Suppression de la base en cours (job n°${resultat.id_job}), suivez sa progression dans l'onglet Suivi.`);
+            await Bases.charger();
+        } catch (erreur) {
+            alert(erreur.message);
+        }
+    },
 };
 
 // =============================================================================
 // ONGLET TRAVAUX (§5.3)
 // =============================================================================
 const Travaux = {
-    historique: [],
+    editeur: null,
+    _historiqueCache: [],
+    _requetesEnregistreesCache: [],
+
+    // CodeMirror.fromTextArea masque le <textarea> d'origine et le
+    // synchronise automatiquement (utile si un jour un <form> le soumet
+    // directement) - toute lecture/écriture de la requête doit passer par
+    // Travaux.editeur, plus par document.getElementById("champ-sql").
+    initEditeur() {
+        Travaux.editeur = CodeMirror.fromTextArea(document.getElementById("champ-sql"), {
+            mode: "text/x-sql",
+            lineNumbers: true,
+            lineWrapping: true,
+            extraKeys: { "Ctrl-Space": "autocomplete" },
+            hintOptions: { tables: {} },
+        });
+    },
+
+    // Rafraîchit l'auto-complétion des noms de tables/colonnes (§5.3) sur
+    // la base actuellement sélectionnée - appelé à chaque changement de
+    // base (Bases.selectionner), pas seulement à l'ouverture de l'onglet.
+    async chargerSchema() {
+        if (!Etat.baseSelectionnee || !Travaux.editeur) return;
+        try {
+            const schema = await appelJson(`/orchestrateur/bases/${Etat.baseSelectionnee.id}/schema`);
+            Travaux.editeur.setOption("hintOptions", { tables: schema });
+        } catch (erreur) { /* auto-complétion simplement indisponible */ }
+    },
 
     async executer() {
         const conteneur = document.getElementById("resultat-travaux");
         if (!Etat.baseSelectionnee) return afficherErreur(conteneur, new Error("Sélectionnez d'abord une base dans l'onglet Bases."));
-        const requete = document.getElementById("champ-sql").value.trim();
+        const requete = Travaux.editeur.getValue().trim();
         if (!requete) return;
 
         const estEcriture = /^\s*(insert|update|delete|create|drop|alter|truncate|grant|revoke)\b/i.test(requete);
@@ -361,13 +560,48 @@ const Travaux = {
 
         conteneur.innerHTML = "Exécution…";
         try {
-            const resultat = await appelJson("/orchestrateur/sql", {
+            // appel() plutôt qu'appelJson() : un dépassement de délai (409
+            // ci-dessous, "delai_depasse") appelle une réponse différente
+            // d'une erreur SQL ordinaire (§5.3, §11), à distinguer avant
+            // d'afficher quoi que ce soit.
+            const reponse = await appel("/orchestrateur/sql", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ base_id: Etat.baseSelectionnee.id, requete }),
+            });
+            const resultat = await reponse.json().catch(() => ({}));
+            if (!reponse.ok) {
+                if (resultat.delai_depasse) return Travaux.afficherDelaiDepasse();
+                throw new Error(resultat.erreur || `Erreur HTTP ${reponse.status}`);
+            }
+            Travaux.afficherResultat(resultat);
+            Travaux.rafraichirHistorique();
+        } catch (erreur) {
+            afficherErreur(conteneur, erreur);
+        }
+    },
+
+    afficherDelaiDepasse() {
+        document.getElementById("resultat-travaux").innerHTML = `
+            <div class="fr-alert fr-alert--warning fr-alert--sm">
+                <p>Délai maximal dépassé : la requête a été interrompue avant de se terminer.</p>
+                <ul class="fr-btns-group fr-btns-group--inline fr-mt-1w">
+                    <li><button class="fr-btn fr-btn--sm" onclick="Travaux.executerEnTacheDeFond()">Exécuter en tâche de fond</button></li>
+                </ul>
+            </div>`;
+    },
+
+    async executerEnTacheDeFond() {
+        const conteneur = document.getElementById("resultat-travaux");
+        const requete = Travaux.editeur.getValue().trim();
+        if (!Etat.baseSelectionnee || !requete) return;
+        conteneur.innerHTML = "Mise en file d'attente…";
+        try {
+            const resultat = await appelJson("/orchestrateur/sql/job", {
                 method: "POST",
                 body: JSON.stringify({ base_id: Etat.baseSelectionnee.id, requete }),
             });
-            Travaux.afficherResultat(resultat);
-            Travaux.historique.unshift({ requete, date: new Date() });
-            Travaux.rendreHistorique();
+            conteneur.innerHTML = `<div class="fr-alert fr-alert--info fr-alert--sm">Requête mise en file d'attente (job n°${resultat.id_job}) : suivez sa progression dans l'onglet Suivi, vous serez notifié par mail à la fin.</div>`;
         } catch (erreur) {
             afficherErreur(conteneur, erreur);
         }
@@ -388,7 +622,7 @@ const Travaux = {
 
     async exporter() {
         if (!Etat.baseSelectionnee) return alert("Sélectionnez d'abord une base.");
-        const requete = document.getElementById("champ-sql").value.trim();
+        const requete = Travaux.editeur.getValue().trim();
         if (!requete) return;
         const reponse = await appel("/orchestrateur/sql/export", {
             method: "POST",
@@ -407,11 +641,85 @@ const Travaux = {
         URL.revokeObjectURL(lien.href);
     },
 
-    rendreHistorique() {
-        document.getElementById("historique-travaux").innerHTML = Travaux.historique
-            .slice(0, 10)
-            .map((h) => `<li><code>${echapper(h.requete)}</code> — ${h.date.toLocaleTimeString("fr-FR")}</li>`)
-            .join("");
+    // Historique persistant (§5.3) : lu directement via l'API de requêtage
+    // (vue_mon_historique se filtre déjà elle-même sur l'appelant, §8.4) -
+    // écrit, lui, par l'orchestrateur à chaque exécution (§sql, §9).
+    async rafraichirHistorique() {
+        let historique = [];
+        try {
+            historique = await appelJson("/api/vue_mon_historique");
+        } catch (erreur) { /* liste vide en cas d'échec */ }
+        Travaux._historiqueCache = historique;
+
+        document.getElementById("historique-travaux").innerHTML = historique.slice(0, 20).map((h, i) => `
+            <li class="fr-mb-2w">
+                <span class="fr-badge fr-badge--sm ${h.succes ? "fr-badge--success" : "fr-badge--error"}">${h.succes ? "OK" : "échec"}</span>
+                <code>${echapper(tronquer(h.requete, 80))}</code><br>
+                <span class="fr-text--xs">
+                    ${new Date(h.date_execution).toLocaleString("fr-FR")} — ${h.duree_ms != null ? h.duree_ms + " ms" : "—"}
+                    <button class="fr-btn fr-btn--sm fr-btn--tertiary-no-outline fr-icon-refresh-line" onclick="Travaux.reexecuterHistorique(${i})">Réexécuter</button>
+                </span>
+            </li>`).join("") || `<li class="fr-text--sm">Aucune requête exécutée pour l'instant.</li>`;
+    },
+
+    // "Relecture" (§5.3) : la requête est déjà lisible dans la liste elle-même
+    // ; "réexécution" charge dans l'éditeur puis relance immédiatement.
+    async reexecuterHistorique(index) {
+        const h = Travaux._historiqueCache[index];
+        if (!h) return;
+        Travaux.editeur.setValue(h.requete);
+        await Travaux.executer();
+    },
+
+    // Requêtes enregistrées (§5.3) : distinct de l'historique - un favori
+    // nommé par l'utilisateur, jamais généré automatiquement.
+    async rafraichirRequetesEnregistrees() {
+        let requetes = [];
+        try {
+            requetes = await appelJson("/api/vue_mes_requetes_enregistrees");
+        } catch (erreur) { /* liste vide en cas d'échec */ }
+        Travaux._requetesEnregistreesCache = requetes;
+
+        document.getElementById("requetes-enregistrees").innerHTML = requetes.map((r) => `
+            <li class="fr-mb-1w">
+                <strong>${echapper(r.nom)}</strong>
+                <button class="fr-btn fr-btn--sm fr-btn--tertiary-no-outline fr-icon-file-text-line" onclick="Travaux.chargerRequeteEnregistree(${r.id})">Charger</button>
+                <button class="fr-btn fr-btn--sm fr-btn--tertiary-no-outline fr-icon-delete-bin-line" onclick="Travaux.supprimerRequeteEnregistree(${r.id})">Supprimer</button>
+            </li>`).join("") || `<li class="fr-text--sm">Aucune requête enregistrée.</li>`;
+    },
+
+    chargerRequeteEnregistree(id) {
+        const r = Travaux._requetesEnregistreesCache.find((r) => r.id === id);
+        if (r) Travaux.editeur.setValue(r.requete);
+    },
+
+    async enregistrerRequete() {
+        const requete = Travaux.editeur.getValue().trim();
+        if (!requete) return;
+        const nom = prompt("Nom de la requête enregistrée :");
+        if (!nom) return;
+        try {
+            await appelJson("/api/rpc/enregistrer_requete", {
+                method: "POST",
+                body: JSON.stringify({ _nom: nom, _requete: requete }),
+            });
+            await Travaux.rafraichirRequetesEnregistrees();
+        } catch (erreur) {
+            alert(erreur.message);
+        }
+    },
+
+    async supprimerRequeteEnregistree(id) {
+        if (!confirm("Supprimer cette requête enregistrée ?")) return;
+        try {
+            await appelJson("/api/rpc/supprimer_requete_enregistree", {
+                method: "POST",
+                body: JSON.stringify({ _id: id }),
+            });
+            await Travaux.rafraichirRequetesEnregistrees();
+        } catch (erreur) {
+            alert(erreur.message);
+        }
     },
 };
 
@@ -419,6 +727,34 @@ const Travaux = {
 // ONGLET IMPORT (§5.1)
 // =============================================================================
 const Import = {
+    // Glisser-déposer (§5.1, étape 1), en complément de la sélection
+    // classique par clic déjà portée par <input type="file">. preventDefault
+    // sur dragover est indispensable : sans lui, le navigateur refuse
+    // silencieusement l'événement "drop" et ouvre le fichier dans un nouvel
+    // onglet à la place (comportement par défaut de tout élément non-cible
+    // de dépôt).
+    initGlisserDeposer() {
+        const zone = document.getElementById("zone-depot-csv");
+        ["dragenter", "dragover"].forEach((evenement) => {
+            zone.addEventListener(evenement, (e) => {
+                e.preventDefault();
+                zone.classList.add("zone-glisser-survolee");
+            });
+        });
+        ["dragleave", "drop"].forEach((evenement) => {
+            zone.addEventListener(evenement, (e) => {
+                e.preventDefault();
+                zone.classList.remove("zone-glisser-survolee");
+            });
+        });
+        zone.addEventListener("drop", (e) => {
+            const fichier = e.dataTransfer.files[0];
+            if (!fichier) return;
+            document.getElementById("champ-fichier-csv").files = e.dataTransfer.files;
+            Import.analyser();
+        });
+    },
+
     async analyser() {
         const fichier = document.getElementById("champ-fichier-csv").files[0];
         const conteneur = document.getElementById("resultat-import");
@@ -426,6 +762,7 @@ const Import = {
 
         const donnees = new FormData();
         donnees.append("fichier", fichier);
+        donnees.append("avec_entete", document.getElementById("import-avec-entete").checked);
         conteneur.innerHTML = "Analyse en cours…";
         try {
             const apercu = await appelJson("/orchestrateur/import/apercu", { method: "POST", body: donnees });
@@ -465,33 +802,121 @@ const Import = {
             mesBases.map((b) => `<option value="${b.id}">${echapper(b.nom_pg)}</option>`).join("");
     },
 
+    // remplacer=true seulement lors du second appel, après confirmation
+    // explicite de l'utilisateur suite à une collision (§5.1, étape 6).
+    colonnesSaisies() {
+        return Etat.dernierApercu.colonnes.map((_, i) => ({
+            nom_normalise: document.getElementById(`import-col-nom-${i}`).value.trim(),
+            type: document.getElementById(`import-col-type-${i}`).value,
+        }));
+    },
+
+    // Point d'entrée du bouton « Confirmer l'import » : contrôle de
+    // cohérence sur tout le fichier avant tout chargement (§5.1, étape 4),
+    // pas seulement sur les 50 lignes de l'aperçu.
     async valider() {
         const conteneur = document.getElementById("resultat-import");
         const apercu = Etat.dernierApercu;
         if (!apercu) return;
 
-        const colonnes = apercu.colonnes.map((_, i) => ({
-            nom_normalise: document.getElementById(`import-col-nom-${i}`).value.trim(),
-            type: document.getElementById(`import-col-type-${i}`).value,
-        }));
+        conteneur.innerHTML = "Contrôle de cohérence en cours…";
+        try {
+            const verification = await appelJson("/orchestrateur/import/verifier", {
+                method: "POST",
+                body: JSON.stringify({
+                    jeton: apercu.jeton,
+                    colonnes: Import.colonnesSaisies(),
+                    encodage: apercu.encodage_detecte,
+                    delimiteur: apercu.delimiteur_detecte,
+                    valeur_manquante: document.getElementById("import-valeur-manquante").value,
+                    avec_entete: apercu.avec_entete,
+                }),
+            });
+            if (verification.nb_lignes_anomalies > 0) {
+                Import.afficherAnomalies(verification);
+                return;
+            }
+        } catch (erreur) {
+            return afficherErreur(conteneur, erreur);
+        }
+
+        Import.executerImport(false, []);
+    },
+
+    afficherAnomalies(verification) {
+        const conteneur = document.getElementById("resultat-import");
+        const lignesDetail = verification.anomalies.map((a) =>
+            `<li>Ligne ${a.ligne}, colonne « ${echapper(a.colonne)} » : valeur « ${echapper(a.valeur)} » incompatible avec le type choisi.</li>`
+        ).join("");
+        const troncature = verification.nb_lignes_anomalies > verification.anomalies.length
+            ? `<p class="fr-text--sm">… et ${verification.nb_lignes_anomalies - verification.anomalies.length} autre(s) ligne(s) en anomalie non détaillée(s) ici.</p>`
+            : "";
+
+        conteneur.innerHTML = `
+            <div class="fr-alert fr-alert--warning fr-alert--sm">
+                <p><strong>${verification.nb_lignes_anomalies}</strong> ligne(s) sur ${verification.nb_lignes_totales} ne correspondent pas au type choisi pour au moins une colonne :</p>
+                <ul class="fr-text--sm">${lignesDetail}</ul>
+                ${troncature}
+                <ul class="fr-btns-group fr-btns-group--inline fr-mt-2w">
+                    <li><button class="fr-btn fr-btn--sm fr-btn--secondary" onclick="Import.confirmerExclusion()">Exclure ces lignes et importer le reste</button></li>
+                    <li><button class="fr-btn fr-btn--sm fr-btn--tertiary" onclick="document.getElementById('resultat-import').innerHTML=''">Corriger le typage ci-dessus</button></li>
+                    <li><button class="fr-btn fr-btn--sm fr-btn--tertiary-no-outline" onclick="Import.annuler()">Annuler l'import</button></li>
+                </ul>
+            </div>`;
+        Etat.derniereVerification = verification;
+    },
+
+    confirmerExclusion() {
+        const lignes = Etat.derniereVerification.lignes_anomalies;
+        if (!confirm(`${lignes.length} ligne(s) seront définitivement exclues de l'import. Continuer ?`)) return;
+        Import.executerImport(false, lignes);
+    },
+
+    annuler() {
+        document.getElementById("assistant-import").hidden = true;
+        document.getElementById("resultat-import").innerHTML = "";
+        Etat.dernierApercu = null;
+        Etat.derniereVerification = null;
+    },
+
+    async executerImport(remplacer, exclureLignes) {
+        const conteneur = document.getElementById("resultat-import");
+        const apercu = Etat.dernierApercu;
         const baseId = document.getElementById("import-base-cible").value || null;
 
         conteneur.innerHTML = "Import en cours…";
         try {
-            const resultat = await appelJson("/orchestrateur/import/valider", {
+            // appel() plutôt qu'appelJson() : la réponse 409 « collision »
+            // n'est pas une erreur à afficher telle quelle, mais un choix à
+            // proposer à l'utilisateur (renommer ou remplacer), donc le
+            // statut HTTP doit être inspecté avant de décider quoi faire.
+            const reponse = await appel("/orchestrateur/import/valider", {
                 method: "POST",
+                headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     jeton: apercu.jeton,
                     base_id: baseId ? Number(baseId) : null,
                     nom_table: document.getElementById("import-nom-table").value.trim(),
-                    colonnes,
+                    colonnes: Import.colonnesSaisies(),
                     encodage: apercu.encodage_detecte,
                     delimiteur: apercu.delimiteur_detecte,
                     valeur_manquante: document.getElementById("import-valeur-manquante").value,
+                    avec_entete: apercu.avec_entete,
+                    remplacer,
+                    exclure_lignes: exclureLignes,
                 }),
             });
+            const resultat = await reponse.json().catch(() => ({}));
+
+            if (reponse.status === 409 && resultat.statut === "collision") {
+                Import.afficherCollision(resultat.table, exclureLignes);
+                return;
+            }
+            if (!reponse.ok) throw new Error(resultat.erreur || `Erreur HTTP ${reponse.status}`);
+
+            const suffixeExclusion = exclureLignes.length ? ` (${exclureLignes.length} ligne(s) exclue(s))` : "";
             conteneur.innerHTML = resultat.statut === "termine"
-                ? `<div class="fr-alert fr-alert--success fr-alert--sm">Table « ${echapper(resultat.table)} » créée avec succès.</div>`
+                ? `<div class="fr-alert fr-alert--success fr-alert--sm">Table « ${echapper(resultat.table)} » créée avec succès${suffixeExclusion}.</div>`
                 : `<div class="fr-alert fr-alert--info fr-alert--sm">Fichier volumineux : import mis en file d'attente (job n°${resultat.id_job}), suivez sa progression dans l'onglet Suivi.</div>`;
             document.getElementById("assistant-import").hidden = true;
             await Bases.charger();
@@ -499,12 +924,55 @@ const Import = {
             afficherErreur(conteneur, erreur);
         }
     },
+
+    afficherCollision(nomTable, exclureLignes) {
+        const conteneur = document.getElementById("resultat-import");
+        conteneur.innerHTML = `
+            <div class="fr-alert fr-alert--warning fr-alert--sm">
+                <p>Une table « ${echapper(nomTable)} » existe déjà dans cette base.</p>
+                <ul class="fr-btns-group fr-btns-group--inline fr-mt-1w">
+                    <li><button class="fr-btn fr-btn--sm fr-btn--secondary" onclick="Import.confirmerRemplacement()">Remplacer son contenu</button></li>
+                </ul>
+                <p class="fr-text--sm fr-mt-1w">Ou modifiez le nom de la table ci-dessus puis validez à nouveau pour créer une table distincte.</p>
+            </div>`;
+        Etat.dernieresLignesExclues = exclureLignes;
+    },
+
+    confirmerRemplacement() {
+        if (!confirm("Le contenu actuel de cette table sera définitivement supprimé et remplacé par le nouveau fichier. Continuer ?")) return;
+        Import.executerImport(true, Etat.dernieresLignesExclues || []);
+    },
 };
 
 // =============================================================================
 // ONGLET SCRIPTS (§5.4)
 // =============================================================================
 const Scripts = {
+    _librairiesChargees: false,
+
+    // Liste statique (§5.4) : fichier JSON servi directement par Nginx,
+    // pas un appel à l'orchestrateur - reflet de ce qui est réellement
+    // installé dans l'image d'exécution vendorisée (§7.7), figé au
+    // moment de sa construction plutôt que découvert dynamiquement.
+    async afficherLibrairies() {
+        if (Scripts._librairiesChargees) return;
+        const conteneur = document.getElementById("scripts-librairies");
+        try {
+            const reponse = await fetch("librairies-scripts.json");
+            const librairies = await reponse.json();
+            const ligne = (l) => `<code>${echapper(l.module)}</code>`;
+            conteneur.innerHTML = `
+                <p class="fr-callout__text fr-text--sm">
+                    <strong>Librairies disponibles dans l'environnement d'exécution</strong><br>
+                    Python : ${librairies.python.map(ligne).join(", ")}<br>
+                    R : ${librairies.r.map(ligne).join(", ")}
+                </p>`;
+            Scripts._librairiesChargees = true;
+        } catch (erreur) {
+            conteneur.innerHTML = `<p class="fr-callout__text fr-text--sm">Liste des librairies indisponible pour l'instant.</p>`;
+        }
+    },
+
     remplirSelecteurBase() {
         const selecteur = document.getElementById("scripts-base-cible");
         if (!selecteur) return;
@@ -537,13 +1005,23 @@ const Scripts = {
 // ONGLET SUIVI (§5.5)
 // =============================================================================
 const Suivi = {
+    _intervallesJournal: {},
+
     async rafraichir() {
+        // Un rafraîchissement (manuel ou périodique) reconstruit toute la
+        // table : un intervalle de journal pointant vers une ligne que ce
+        // rendu vient de recréer (hidden par défaut) tournerait pour rien
+        // sans jamais s'arrêter de lui-même.
+        Object.values(Suivi._intervallesJournal).forEach(clearInterval);
+        Suivi._intervallesJournal = {};
+
         let jobs = [];
         try {
             jobs = await appelJson("/api/vue_mes_jobs?order=date_creation.desc");
         } catch (erreur) { /* tableau vide en cas d'échec */ }
 
         const badges = { en_attente: "fr-badge--info", en_cours: "fr-badge--info", termine: "fr-badge--success", erreur: "fr-badge--error", annule: "" };
+        const estScript = (type) => type === "script_python" || type === "script_r";
 
         document.getElementById("table-suivi").innerHTML = jobs.map((job) => `
             <tr>
@@ -553,14 +1031,51 @@ const Suivi = {
                 <td>${echapper(job.message_erreur || "")}</td>
                 <td>
                     ${["en_attente", "en_cours"].includes(job.statut) ? `<button class="fr-btn fr-btn--sm fr-btn--tertiary-no-outline fr-icon-close-line" onclick="Suivi.annuler(${job.id})">Annuler</button>` : ""}
+                    ${estScript(job.type) && job.statut !== "annule" ? `<button class="fr-btn fr-btn--sm fr-btn--tertiary-no-outline fr-icon-file-text-line" onclick="Suivi.afficherJournal(${job.id})">Journal</button>` : ""}
                     ${job.statut === "termine" && job.chemin_resultat ? `<a class="fr-btn fr-btn--sm fr-btn--tertiary-no-outline fr-icon-download-line" href="/orchestrateur/jobs/${job.id}/telecharger">Télécharger</a>` : ""}
                 </td>
-            </tr>`).join("") || `<tr><td colspan="5">Aucun traitement pour l'instant.</td></tr>`;
+            </tr>
+            ${estScript(job.type) ? `<tr class="ligne-journal" id="journal-${job.id}" hidden><td colspan="5"></td></tr>` : ""}`).join("")
+            || `<tr><td colspan="5">Aucun traitement pour l'instant.</td></tr>`;
     },
 
     async annuler(idJob) {
         await appelJson("/api/rpc/annuler_job", { method: "POST", body: JSON.stringify({ _id_job: idJob }) });
         Suivi.rafraichir();
+    },
+
+    // Journal consultable pendant l'exécution, pas seulement une fois le
+    // job terminé (§5.4) : rafraîchi périodiquement tant que le job est
+    // en_attente/en_cours, arrêté de lui-même dès qu'il ne l'est plus.
+    async afficherJournal(idJob) {
+        const ligne = document.getElementById(`journal-${idJob}`);
+        ligne.hidden = !ligne.hidden;
+        if (ligne.hidden) {
+            clearInterval(Suivi._intervallesJournal[idJob]);
+            delete Suivi._intervallesJournal[idJob];
+            return;
+        }
+        await Suivi.rafraichirJournal(idJob);
+        Suivi._intervallesJournal[idJob] = setInterval(() => Suivi.rafraichirJournal(idJob), 3000);
+    },
+
+    async rafraichirJournal(idJob) {
+        const cellule = document.querySelector(`#journal-${idJob} td`);
+        if (!cellule) return;
+        try {
+            const resultat = await appelJson(`/orchestrateur/jobs/${idJob}/journal`);
+            cellule.innerHTML = `
+                <pre class="fr-p-2w" style="background:var(--background-alt-grey); max-height:300px; overflow:auto; white-space:pre-wrap;">${echapper(resultat.journal) || "(journal vide pour l'instant)"}</pre>
+                ${resultat.tronque ? `<p class="fr-text--xs">Journal tronqué à l'affichage (le fichier complet est inclus dans l'archive téléchargeable une fois le job terminé).</p>` : ""}`;
+            if (resultat.statut !== "en_attente" && resultat.statut !== "en_cours") {
+                clearInterval(Suivi._intervallesJournal[idJob]);
+                delete Suivi._intervallesJournal[idJob];
+            }
+        } catch (erreur) {
+            cellule.innerHTML = `<div class="fr-alert fr-alert--error fr-alert--sm">${echapper(erreur.message)}</div>`;
+            clearInterval(Suivi._intervallesJournal[idJob]);
+            delete Suivi._intervallesJournal[idJob];
+        }
     },
 };
 

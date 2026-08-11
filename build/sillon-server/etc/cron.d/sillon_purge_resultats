@@ -1,0 +1,12 @@
+# Purge quotidienne des resultats de jobs SILLON (§8.9, §5.4 du cahier des
+# charges) : exports SQL (§5.3), archives de scripts (§5.4). Retention par
+# defaut : 90 jours (valeur provisoire, cf. point de vigilance §15.2 -
+# a confirmer avant mise en production, comme la retention de audit_logs
+# dans sillon_purge_logs).
+#
+# root (pas www-data) : les fichiers sous /var/lib/sillon/resultats/<id_job>/
+# appartiennent a l'UID remappe du conteneur ayant produit le resultat
+# (§7.7), pas a www-data - seul root peut les supprimer sans dependre de
+# ce mappage. Un lien de telechargement vers un fichier ainsi purge echoue
+# proprement en 404 (cf. /jobs/<id>/telecharger, deja pense pour ce cas).
+0 3 * * * root find /var/lib/sillon/resultats -mindepth 1 -maxdepth 1 -mtime +90 -exec rm -rf {} +

@@ -58,6 +58,19 @@ except OSError:
     STAGING_DIR = os.path.join(tempfile.gettempdir(), "sillon-staging")
     os.makedirs(STAGING_DIR, exist_ok=True)
 
+# Même répertoire et même convention de repli que sillon-worker (§5.4) : les
+# résultats de job, quel que soit le processus qui les produit, sont tous
+# servis par le même endpoint /jobs/<id>/telecharger (§8.10), qui ne
+# s'intéresse qu'au chemin enregistré en base.
+RESULTATS_DIR = os.environ.get("SILLON_RESULTATS_DIR", "/var/lib/sillon/resultats")
+try:
+    os.makedirs(RESULTATS_DIR, exist_ok=True)
+except OSError:
+    import tempfile
+
+    RESULTATS_DIR = os.path.join(tempfile.gettempdir(), "sillon-resultats")
+    os.makedirs(RESULTATS_DIR, exist_ok=True)
+
 TYPES_SQL = {
     "Texte": "TEXT",
     "Entier": "BIGINT",
@@ -191,6 +204,19 @@ def base_accessible(claims, base_id, exiger_script=False):
     return nom_pg
 
 
+def base_dont_je_suis_proprietaire(claims, base_id):
+    """Comme base_accessible, mais réservé aux actions du §5.2 marquées
+    « Propriétaire uniquement » (partage, suppression de table ou de
+    base) : un accès en lecture seule ne suffit pas."""
+    with connexion_catalogue(claims=claims) as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT nom_pg FROM public.vue_mes_bases WHERE id = %s AND je_suis_proprietaire",
+            (base_id,),
+        )
+        ligne = cur.fetchone()
+    return ligne[0] if ligne else None
+
+
 # =============================================================================
 # ENDPOINT : REQUETES SQL LIBRES (§5.3, §8.8)
 # =============================================================================
@@ -201,6 +227,21 @@ def _serialiser(valeur):
     if isinstance(valeur, (datetime, date)):
         return valeur.isoformat()
     return valeur
+
+
+def enregistrer_historique(claims, base_id, requete, type_requete, succes, duree_ms, message_erreur=None):
+    """Historique persistant des requêtes (§5.3) : ne doit jamais faire
+    échouer l'exécution elle-même si l'écriture de l'historique échoue -
+    d'où le try/except centralisé ici plutôt que répété à chaque appelant."""
+    try:
+        with connexion_catalogue(claims=claims) as conn, conn.cursor() as cur:
+            cur.execute(
+                "SELECT public.enregistrer_historique(%s, %s, %s, %s, %s, %s)",
+                (base_id, requete, type_requete, succes, duree_ms, message_erreur),
+            )
+            conn.commit()
+    except psycopg2.Error:
+        pass
 
 
 @app.route("/sql", methods=["POST"])
@@ -217,6 +258,7 @@ def executer_sql():
 
     delai_minutes = int(lire_parametre("duree_max_job_minutes", "30"))
     lecture = est_requete_lecture(requete_utilisateur)
+    type_requete = "lecture" if lecture else "ecriture"
     debut = time.monotonic()
 
     try:
@@ -259,12 +301,54 @@ def executer_sql():
                     "lignes_affectees": lignes_affectees,
                     "duree_ms": round((time.monotonic() - debut) * 1000),
                 }
+        enregistrer_historique(g.claims, base_id, requete_utilisateur, type_requete, True, resultat["duree_ms"])
         return jsonify(resultat)
     except psycopg2.Error as exc:
         conn.rollback()
+        duree_ms = round((time.monotonic() - debut) * 1000)
+        enregistrer_historique(g.claims, base_id, requete_utilisateur, type_requete, False, duree_ms, str(exc))
+        # 57014 = query_canceled (SQLSTATE) : le cas précis du statement_timeout
+        # ci-dessus, à distinguer d'une erreur SQL ordinaire pour orienter
+        # l'utilisateur vers l'exécution en tâche de fond (§5.3, §11).
+        if exc.pgcode == "57014":
+            return jsonify(
+                erreur=f"Requête interrompue : délai maximal dépassé ({delai_minutes} min).",
+                delai_depasse=True,
+            ), 400
         return jsonify(erreur=str(exc)), 400
     finally:
         conn.close()
+
+
+@app.route("/sql/job", methods=["POST"])
+def executer_sql_en_tache_de_fond():
+    """Bascule d'une exécution longue en job asynchrone (§5.3, §11) : même
+    requête, même délai maximal (duree_max_job_minutes), mais exécutée en
+    fond avec notification par mail plutôt que de bloquer la requête HTTP
+    synchrone (et le navigateur avec elle) jusqu'à 30 minutes."""
+    donnees = request.get_json(force=True)
+    base_id = donnees.get("base_id")
+    requete_utilisateur = (donnees.get("requete") or "").strip()
+    if not requete_utilisateur:
+        return jsonify(erreur="Requête vide"), 400
+
+    nom_pg = base_accessible(g.claims, base_id)
+    if not nom_pg:
+        return jsonify(erreur="Base introuvable ou inaccessible"), 404
+
+    with connexion_catalogue(claims=g.claims) as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT public.creer_job('requete_sql', %s, %s::jsonb)",
+            (base_id, psycopg2.extras.Json({
+                "requete": requete_utilisateur,
+                "role_pg": g.claims["role"],
+                "nom_pg": nom_pg,
+            })),
+        )
+        id_job = cur.fetchone()[0]
+        conn.commit()
+
+    return jsonify(statut="en_attente", id_job=id_job)
 
 
 @app.route("/sql/export", methods=["POST"])
@@ -397,6 +481,108 @@ def suggerer_type(valeurs):
     return "Texte"
 
 
+# Mêmes formats acceptés que suggerer_type() ci-dessus (booléens, dates), mais
+# ici pour valider une valeur contre un type déjà choisi par l'utilisateur,
+# pas pour en deviner un - Date/Heure et JSON n'apparaissent donc que dans
+# cette fonction, jamais suggérés automatiquement.
+def valeur_valide_pour_type(valeur, type_col, valeur_manquante):
+    if valeur == valeur_manquante:
+        return True  # converti en NULL à l'import (§5.1 étape 5) : jamais une anomalie de type
+    if type_col == "Texte":
+        return True
+    if type_col == "Entier":
+        try:
+            int(valeur)
+            return True
+        except ValueError:
+            return False
+    if type_col == "Décimal":
+        try:
+            float(valeur.replace(",", "."))
+            return True
+        except ValueError:
+            return False
+    if type_col == "Booléen":
+        return valeur.lower() in ("vrai", "faux", "true", "false", "0", "1")
+    if type_col in ("Date", "Date/Heure"):
+        motifs = ("%Y-%m-%d", "%d/%m/%Y") if type_col == "Date" \
+            else ("%Y-%m-%d %H:%M:%S", "%d/%m/%Y %H:%M:%S", "%Y-%m-%dT%H:%M:%S")
+        return any(_motif_correspond(valeur, motif) for motif in motifs)
+    if type_col == "JSON":
+        try:
+            json.loads(valeur)
+            return True
+        except ValueError:
+            return False
+    return True
+
+
+def _motif_correspond(valeur, motif):
+    try:
+        datetime.strptime(valeur, motif)
+        return True
+    except ValueError:
+        return False
+
+
+# =============================================================================
+# ENDPOINT : CONTROLE DE COHERENCE AVANT VALIDATION (§5.1, étape 4)
+# =============================================================================
+# Nombre d'anomalies détaillées renvoyées au client : un fichier massivement
+# mal typé pourrait sinon produire une réponse JSON disproportionnée (§13).
+# lignes_anomalies (les seuls numéros, pas le détail) reste lui complet :
+# nécessaire à l'exclusion demandée à l'étape suivante, qui doit pouvoir
+# écarter CHAQUE ligne en anomalie, pas seulement les premières affichées.
+ANOMALIES_DETAIL_MAX = 200
+
+
+@app.route("/import/verifier", methods=["POST"])
+def verifier_import():
+    donnees = request.get_json(force=True)
+    jeton = donnees.get("jeton")
+    colonnes = donnees.get("colonnes") or []
+    encodage = donnees.get("encodage") or "utf-8"
+    delimiteur = donnees.get("delimiteur") or ";"
+    valeur_manquante = donnees.get("valeur_manquante") or ""
+    avec_entete = bool(donnees.get("avec_entete", True))
+
+    chemin_fichier = os.path.join(STAGING_DIR, f"{jeton}.csv")
+    if not jeton or not os.path.isfile(chemin_fichier):
+        return jsonify(erreur="Fichier en attente introuvable ou expiré"), 404
+    for c in colonnes:
+        if c.get("type") not in TYPES_SQL:
+            return jsonify(erreur=f"Type de colonne invalide : {c.get('type')}"), 400
+
+    anomalies_detail = []
+    lignes_anomalies = []
+    nb_lignes_totales = 0
+    with open(chemin_fichier, "r", encoding=encodage, newline="", errors="replace") as f:
+        lecteur = csv.reader(f, delimiter=delimiteur)
+        if avec_entete:
+            next(lecteur, None)
+        for numero_ligne, ligne in enumerate(lecteur, start=1):
+            nb_lignes_totales += 1
+            ligne_en_anomalie = False
+            for i, c in enumerate(colonnes):
+                if i >= len(ligne):
+                    continue
+                if not valeur_valide_pour_type(ligne[i], c["type"], valeur_manquante):
+                    ligne_en_anomalie = True
+                    if len(anomalies_detail) < ANOMALIES_DETAIL_MAX:
+                        anomalies_detail.append({
+                            "ligne": numero_ligne, "colonne": c["nom_normalise"], "valeur": ligne[i],
+                        })
+            if ligne_en_anomalie:
+                lignes_anomalies.append(numero_ligne)
+
+    return jsonify({
+        "nb_lignes_totales": nb_lignes_totales,
+        "nb_lignes_anomalies": len(lignes_anomalies),
+        "anomalies": anomalies_detail,
+        "lignes_anomalies": lignes_anomalies,
+    })
+
+
 # =============================================================================
 # ENDPOINT : APERCU D'IMPORT (§5.1, étapes 1 à 3)
 # =============================================================================
@@ -425,6 +611,12 @@ def apercu_import():
     encodage = detecter_encodage(echantillon_brut)
     delimiteur = detecter_delimiteur(echantillon_brut.decode(encodage, errors="replace")[:10_000])
 
+    # Ligne d'en-tête desactivable (§5.1, étape 2) : sans elle, la première
+    # ligne est une ligne de données comme les autres, et les colonnes
+    # reçoivent des noms génériques (mêmes conventions que le repli déjà
+    # utilisé ci-dessous pour un en-tête vide).
+    avec_entete = request.form.get("avec_entete", "true").lower() != "false"
+
     # Un seul passage en flux : compte le nombre réel de lignes tout en
     # conservant seulement les 50 premières pour l'aperçu, sans jamais
     # matérialiser le fichier entier en mémoire.
@@ -432,10 +624,12 @@ def apercu_import():
     echantillon = []
     nb_lignes = 0
     with open(chemin_stage, "r", encoding=encodage, newline="", errors="replace") as f:
-        for i, ligne in enumerate(csv.reader(f, delimiter=delimiteur)):
-            if i == 0:
-                entetes = ligne
-                continue
+        lecteur = csv.reader(f, delimiter=delimiteur)
+        if avec_entete:
+            entetes = next(lecteur, None)
+        for ligne in lecteur:
+            if entetes is None:
+                entetes = [f"colonne_{i+1}" for i in range(len(ligne))]
             nb_lignes += 1
             if len(echantillon) < 50:
                 echantillon.append(ligne)
@@ -457,6 +651,7 @@ def apercu_import():
         "jeton": jeton,
         "encodage_detecte": encodage,
         "delimiteur_detecte": delimiteur,
+        "avec_entete": avec_entete,
         "nb_lignes_totales": nb_lignes,
         "colonnes": colonnes,
         "apercu": echantillon,
@@ -476,7 +671,7 @@ class FluxCSVNormalise:
     aucune conversion de ce type lui-même et échouerait sinon sur un jeu
     de données français typique (ex. Valeurs Foncières / DGFiP)."""
 
-    def __init__(self, chemin_fichier, encodage, delimiteur, colonnes):
+    def __init__(self, chemin_fichier, encodage, delimiteur, colonnes, avec_entete=True, lignes_exclues=None):
         self._source = open(chemin_fichier, "r", encoding=encodage, newline="")
         self._delimiteur = delimiteur
         self._lecteur = csv.reader(self._source, delimiter=delimiteur)
@@ -484,6 +679,15 @@ class FluxCSVNormalise:
         self._tampon = io.StringIO()
         self._ecrivain = csv.writer(self._tampon, delimiter=delimiteur)
         self._epuise = False
+        # La ligne d'en-tête, si elle existe, est transmise telle quelle -
+        # c'est le HEADER de la commande COPY elle-même qui la traite côté
+        # serveur (§5.1 étape 2) - mais ne doit jamais compter comme une
+        # ligne de données pour l'exclusion ci-dessous, sous peine de
+        # décaler tous les numéros de ligne d'un cran par rapport à
+        # /import/verifier (qui ne compte, lui, que les lignes de données).
+        self._entete_a_transmettre = avec_entete
+        self._numero_ligne = 0
+        self._lignes_exclues = lignes_exclues or set()
 
     def read(self, taille=65536):
         while self._tampon.tell() < taille and not self._epuise:
@@ -493,6 +697,13 @@ class FluxCSVNormalise:
                 self._epuise = True
                 self._source.close()
                 break
+            if self._entete_a_transmettre:
+                self._entete_a_transmettre = False
+                self._ecrivain.writerow(ligne)
+                continue
+            self._numero_ligne += 1
+            if self._numero_ligne in self._lignes_exclues:
+                continue
             for i in self._indices_decimaux:
                 if i < len(ligne) and ligne[i]:
                     ligne[i] = ligne[i].replace(",", ".")
@@ -503,7 +714,48 @@ class FluxCSVNormalise:
         return valeur
 
 
-def creer_table_et_charger(conn, nom_table, colonnes, chemin_fichier, encodage, delimiteur, valeur_manquante):
+def rafraichir_taille_base(base_id, nom_pg):
+    """Met à jour bases.taille_estimee_mo (§5.2, « Mes bases » : sa taille) -
+    jamais tenu à jour ailleurs, sans quoi chaque base afficherait
+    éternellement 0 Mo. pg_database_size() est un catalogue global : il se
+    lit depuis la connexion au catalogue, sans avoir à se connecter à la
+    base cible elle-même. Appelé après import et après suppression de
+    table (les deux opérations qui font varier la taille physique) - pas
+    après chaque écriture libre de l'onglet Travaux, dont le volume ne
+    justifie pas ce coût à chaque requête (§7, profil analytique)."""
+    with connexion_catalogue() as conn, conn.cursor() as cur:
+        cur.execute("SELECT pg_database_size(%s)", (nom_pg,))
+        taille_octets = cur.fetchone()[0]
+        cur.execute("SELECT public.maj_taille_base(%s, %s)", (base_id, taille_octets / (1024 * 1024)))
+        conn.commit()
+
+
+def consigner_audit(claims, action, cible, details):
+    """Journalise une création/suppression de table (§8.12, §5.2) : ces
+    opérations ont lieu dans la base physique de l'agent, jamais dans
+    sillon_catalog, donc aucun trigger de table (contrairement à
+    utilisateurs/bases/partages) ne peut les capturer automatiquement.
+    L'identité de l'auteur est dérivée par consigner_audit() lui-même à
+    partir de "request.jwt.claims" (posé par le SET ROLE ci-dessous) plutôt
+    que passée en paramètre texte, pour ne jamais dépendre d'une valeur que
+    l'appelant pourrait falsifier - la valeur probante du journal (§8.12)
+    en dépend."""
+    with connexion_catalogue(claims=claims) as conn, conn.cursor() as cur:
+        cur.execute("SELECT public.consigner_audit(%s, %s, %s)", (action, cible, details))
+        conn.commit()
+
+
+def table_existe(conn, nom_table):
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace "
+            "WHERE n.nspname = 'public' AND c.relname = %s AND c.relkind = 'r'",
+            (nom_table,),
+        )
+        return cur.fetchone() is not None
+
+
+def creer_table_et_charger(conn, nom_table, colonnes, chemin_fichier, encodage, delimiteur, valeur_manquante, remplacer=False, avec_entete=True, lignes_exclues=None):
     with conn.cursor() as cur:
         # 0. suggerer_type() reconnaît le format "%d/%m/%Y" (jour/mois/année,
         #    usuel dans les exports administratifs français) : sans ce
@@ -511,6 +763,14 @@ def creer_table_et_charger(conn, nom_table, colonnes, chemin_fichier, encodage, 
         #    date où le jour dépasse 12, ex. "13/01/2025" - constaté en
         #    pratique sur le jeu de données DVF.
         cur.execute("SET datestyle = 'ISO, DMY'")
+
+        # 0bis. Remplacement explicite (§5.1, gestion de collision) : la
+        # détection de la collision elle-même a déjà eu lieu avant l'appel
+        # (valider_import), pour pouvoir la signaler au client avant tout
+        # chargement - ce DROP n'est atteint que si l'utilisateur a
+        # confirmé vouloir remplacer le contenu existant.
+        if remplacer:
+            cur.execute(sql.SQL("DROP TABLE IF EXISTS {}").format(sql.Identifier(nom_table)))
 
         # 1. Table + clé primaire technique (§7.4).
         colonnes_sql = [sql.SQL("id BIGSERIAL PRIMARY KEY")]
@@ -523,20 +783,25 @@ def creer_table_et_charger(conn, nom_table, colonnes, chemin_fichier, encodage, 
         ))
 
         # 2. Chargement en masse SANS index intermédiaire (§7.4), en flux
-        #    (§13), avec normalisation des décimaux à la volée.
+        #    (§13), avec normalisation des décimaux à la volée. HEADER
+        #    reflète avec_entete (§5.1, étape 2) : sans ligne d'en-tête, la
+        #    première ligne du fichier est une ligne de données comme les
+        #    autres, à charger elle aussi.
+        entete_sql = sql.SQL("true" if avec_entete else "false")
         noms_colonnes = sql.SQL(", ").join(sql.Identifier(c["nom_normalise"]) for c in colonnes)
         requete_copy = sql.SQL(
-            "COPY {} ({}) FROM STDIN WITH (FORMAT csv, HEADER true, NULL {}, ENCODING 'UTF8')"
-        ).format(sql.Identifier(nom_table), noms_colonnes, sql.Literal(valeur_manquante))
+            "COPY {} ({}) FROM STDIN WITH (FORMAT csv, HEADER {}, NULL {}, ENCODING 'UTF8')"
+        ).format(sql.Identifier(nom_table), noms_colonnes, entete_sql, sql.Literal(valeur_manquante))
         if delimiteur != ",":
             # copy_expert n'accepte pas de DELIMITER autre que le format CSV
             # standard sans le préciser explicitement ; on le fait ici.
             requete_copy = sql.SQL(
-                "COPY {} ({}) FROM STDIN WITH (FORMAT csv, HEADER true, DELIMITER {}, NULL {}, ENCODING 'UTF8')"
-            ).format(sql.Identifier(nom_table), noms_colonnes, sql.Literal(delimiteur), sql.Literal(valeur_manquante))
+                "COPY {} ({}) FROM STDIN WITH (FORMAT csv, HEADER {}, DELIMITER {}, NULL {}, ENCODING 'UTF8')"
+            ).format(sql.Identifier(nom_table), noms_colonnes, entete_sql, sql.Literal(delimiteur), sql.Literal(valeur_manquante))
 
-        flux = FluxCSVNormalise(chemin_fichier, encodage, delimiteur, colonnes)
+        flux = FluxCSVNormalise(chemin_fichier, encodage, delimiteur, colonnes, avec_entete, lignes_exclues)
         cur.copy_expert(requete_copy.as_string(conn), flux)
+        nb_lignes_chargees = cur.rowcount
 
         # 3. Index proposés selon le type (§7.4) - créés après coup.
         for c in colonnes:
@@ -552,7 +817,25 @@ def creer_table_et_charger(conn, nom_table, colonnes, chemin_fichier, encodage, 
         # 4. Statistiques de planification (§7.4).
         cur.execute(sql.SQL("ANALYZE {}").format(sql.Identifier(nom_table)))
 
+        # 5. Date et taille du dernier import (§5.2, fiche d'une table) :
+        # public._sillon_imports est créée pour chaque base au moment de sa
+        # création (cf. _traiter_job, branche "creation_base") - jamais ici,
+        # pour ne pas exiger de privilège CREATE supplémentaire d'un
+        # bénéficiaire de partage qui importerait dans une base qui n'est
+        # pas la sienne (cas exclu en pratique par les GRANT du §5.2, mais
+        # cette fonction ne doit pas en dépendre pour rester correcte).
+        cur.execute(
+            """
+            INSERT INTO public._sillon_imports (nom_table, nb_lignes, taille_octets)
+            VALUES (%s, %s, pg_total_relation_size(%s))
+            ON CONFLICT (nom_table) DO UPDATE SET
+                date_import = now(), nb_lignes = EXCLUDED.nb_lignes, taille_octets = EXCLUDED.taille_octets
+            """,
+            (nom_table, nb_lignes_chargees, nom_table),
+        )
+
     conn.commit()
+    return nb_lignes_chargees
 
 
 @app.route("/import/valider", methods=["POST"])
@@ -565,6 +848,11 @@ def valider_import():
     encodage = donnees.get("encodage") or "utf-8"
     delimiteur = donnees.get("delimiteur") or ";"
     valeur_manquante = donnees.get("valeur_manquante") or ""
+    avec_entete = bool(donnees.get("avec_entete", True))
+    # Lignes écartées après confirmation explicite du contrôle de cohérence
+    # (§5.1 étape 4) : numérotées comme /import/verifier, 1-based sur les
+    # seules lignes de données.
+    lignes_exclues = set(donnees.get("exclure_lignes") or [])
 
     chemin_fichier = os.path.join(STAGING_DIR, f"{jeton}.csv")
     if not jeton or not os.path.isfile(chemin_fichier):
@@ -579,10 +867,16 @@ def valider_import():
     # avec une courte attente active puisqu'une base neuve est rapide à
     # créer - cf. note de conception en fin de fichier.
     if not base_id:
-        with connexion_catalogue(claims=claims) as conn, conn.cursor() as cur:
-            cur.execute("SELECT public.creer_job('creation_base', NULL, '{}'::jsonb)")
-            id_job = cur.fetchone()[0]
-            conn.commit()
+        try:
+            with connexion_catalogue(claims=claims) as conn, conn.cursor() as cur:
+                cur.execute("SELECT public.creer_job('creation_base', NULL, '{}'::jsonb)")
+                id_job = cur.fetchone()[0]
+                conn.commit()
+        except psycopg2.Error:
+            # Profil sans droit d'import (§3, lecteur) : creer_job refuse
+            # l'appel côté PostgreSQL (droit_refuse) - message clair plutôt
+            # que de laisser remonter une erreur SQL brute en 500.
+            return jsonify(erreur="Votre profil n'autorise pas l'import de fichiers CSV"), 403
 
         base_id = _attendre_job_termine(id_job, timeout_s=15)
         if base_id is None:
@@ -592,6 +886,24 @@ def valider_import():
     if not nom_pg:
         return jsonify(erreur="Base introuvable ou inaccessible"), 404
 
+    # Collision de nom de table (§5.1, étape 6) : vérifiée avant tout
+    # chargement, pas seulement laissée à un CREATE TABLE qui échouerait
+    # avec une erreur Postgres brute - le fichier reste en attente (jeton
+    # toujours valide) pour permettre à l'utilisateur de renommer ou de
+    # confirmer explicitement le remplacement sans avoir à re-déposer.
+    remplacer = bool(donnees.get("remplacer", False))
+    if not remplacer:
+        try:
+            conn_verif = connexion_base(nom_pg, claims["role"])
+            try:
+                collision = table_existe(conn_verif, nom_table)
+            finally:
+                conn_verif.close()
+        except psycopg2.Error as exc:
+            return jsonify(erreur=str(exc)), 400
+        if collision:
+            return jsonify(statut="collision", table=nom_table), 409
+
     taille_octets = os.path.getsize(chemin_fichier)
     seuil_sync_mo = int(lire_parametre("seuil_import_synchrone_mo", "10"))
 
@@ -599,33 +911,51 @@ def valider_import():
         try:
             conn = connexion_base(nom_pg, claims["role"])
             try:
-                creer_table_et_charger(conn, nom_table, colonnes, chemin_fichier, encodage, delimiteur, valeur_manquante)
+                nb_lignes = creer_table_et_charger(conn, nom_table, colonnes, chemin_fichier, encodage, delimiteur, valeur_manquante, remplacer, avec_entete, lignes_exclues)
             finally:
                 conn.close()
         except psycopg2.Error as exc:
+            # Import échoué (§5.1 étape 9, §8.12) : journalisé au même titre
+            # qu'un import réussi, avec le motif plutôt qu'un nombre de
+            # lignes puisqu'aucune n'a été retenue (COPY entièrement annulé
+            # avec le reste de la transaction). Un échec de la journalisation
+            # elle-même ne doit pas remplacer la réponse 400 attendue par un
+            # 500 non lié à l'erreur d'import initiale.
+            try:
+                consigner_audit(claims, "ERREUR", nom_table, f"import échoué (base #{base_id}) : {exc}")
+            except psycopg2.Error:
+                pass
             return jsonify(erreur=str(exc)), 400
         finally:
             os.remove(chemin_fichier)
+        rafraichir_taille_base(base_id, nom_pg)
+        consigner_audit(claims, "CREATION", nom_table, f"table : CREATION (base #{base_id}), {nb_lignes} ligne(s) importée(s)")
         return jsonify(statut="termine", table=nom_table)
 
     # Fichier volumineux : traitement différé par le consommateur de jobs
     # (§5.1, étape 7 ; §9).
-    with connexion_catalogue(claims=claims) as conn, conn.cursor() as cur:
-        cur.execute(
-            "SELECT public.creer_job('import_csv', %s, %s::jsonb)",
-            (base_id, psycopg2.extras.Json({
-                "chemin_fichier": chemin_fichier,
-                "nom_table": nom_table,
-                "colonnes": colonnes,
-                "encodage": encodage,
-                "delimiteur": delimiteur,
-                "valeur_manquante": valeur_manquante,
-                "role_pg": claims["role"],
-                "nom_pg": nom_pg,
-            })),
-        )
-        id_job = cur.fetchone()[0]
-        conn.commit()
+    try:
+        with connexion_catalogue(claims=claims) as conn, conn.cursor() as cur:
+            cur.execute(
+                "SELECT public.creer_job('import_csv', %s, %s::jsonb)",
+                (base_id, psycopg2.extras.Json({
+                    "chemin_fichier": chemin_fichier,
+                    "nom_table": nom_table,
+                    "colonnes": colonnes,
+                    "encodage": encodage,
+                    "delimiteur": delimiteur,
+                    "valeur_manquante": valeur_manquante,
+                    "role_pg": claims["role"],
+                    "nom_pg": nom_pg,
+                    "remplacer": remplacer,
+                    "avec_entete": avec_entete,
+                    "lignes_exclues": list(lignes_exclues),
+                })),
+            )
+            id_job = cur.fetchone()[0]
+            conn.commit()
+    except psycopg2.Error:
+        return jsonify(erreur="Votre profil n'autorise pas l'import de fichiers CSV"), 403
 
     return jsonify(statut="en_attente", id_job=id_job)
 
@@ -800,6 +1130,177 @@ def revoquer_partage(base_id):
 
 
 # =============================================================================
+# ENDPOINT : SCHEMA D'UNE BASE (§5.3 - auto-complétion de l'éditeur SQL)
+# =============================================================================
+@app.route("/bases/<int:base_id>/schema", methods=["GET"])
+def schema_base(base_id):
+    nom_pg = base_accessible(g.claims, base_id)
+    if not nom_pg:
+        return jsonify(erreur="Base introuvable ou inaccessible"), 404
+
+    try:
+        conn = connexion_base(nom_pg, g.claims["role"])
+    except psycopg2.Error as exc:
+        return jsonify(erreur=f"Connexion refusée : {exc}"), 403
+    try:
+        with conn.cursor() as cur:
+            # information_schema.columns ne liste déjà que les colonnes sur
+            # lesquelles l'appelant a un privilège (même filtrage implicite
+            # que dans fiche_table, §5.2) : rien à ajouter pour respecter
+            # l'isolation des bases (§8.4).
+            cur.execute(
+                "SELECT table_name, column_name FROM information_schema.columns "
+                "WHERE table_schema = 'public' AND table_name <> '_sillon_imports' "
+                "ORDER BY table_name, ordinal_position"
+            )
+            lignes = cur.fetchall()
+        conn.rollback()
+    except psycopg2.Error as exc:
+        return jsonify(erreur=str(exc)), 400
+    finally:
+        conn.close()
+
+    tables = {}
+    for nom_table, nom_colonne in lignes:
+        tables.setdefault(nom_table, []).append(nom_colonne)
+    return jsonify(tables)
+
+
+# =============================================================================
+# ENDPOINTS : TABLES D'UNE BASE (§5.2 - fiche d'une table, suppression)
+# =============================================================================
+# nb_lignes est estime via pg_class.reltuples (mis a jour par l'ANALYZE de fin
+# d'import, §7.4) plutot que compte exactement : un COUNT(*) sur une table de
+# plusieurs millions de lignes contredirait le profil de charge analytique
+# vise par le reglage du moteur (§7). public._sillon_imports.nb_lignes, quand
+# disponible, est exact puisqu'il vient du COPY qui a cree la table - dans ce
+# cas prefere a l'estimation.
+_REQUETE_TABLES = """
+    SELECT c.relname,
+           COALESCE(i.nb_lignes, GREATEST(c.reltuples, 0)::bigint) AS nb_lignes,
+           pg_total_relation_size(c.oid) AS taille_octets,
+           i.date_import
+    FROM pg_class c
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    LEFT JOIN public._sillon_imports i ON i.nom_table = c.relname
+    WHERE n.nspname = 'public' AND c.relkind = 'r' AND c.relname <> '_sillon_imports'
+      AND has_table_privilege(c.oid, 'SELECT')
+"""
+
+
+@app.route("/bases/<int:base_id>/tables", methods=["GET"])
+def lister_tables(base_id):
+    nom_pg = base_accessible(g.claims, base_id)
+    if not nom_pg:
+        return jsonify(erreur="Base introuvable ou inaccessible"), 404
+
+    try:
+        conn = connexion_base(nom_pg, g.claims["role"])
+    except psycopg2.Error as exc:
+        return jsonify(erreur=f"Connexion refusée : {exc}"), 403
+    try:
+        with conn.cursor() as cur:
+            cur.execute(_REQUETE_TABLES + " ORDER BY c.relname")
+            lignes = cur.fetchall()
+        conn.rollback()
+    except psycopg2.Error as exc:
+        return jsonify(erreur=str(exc)), 400
+    finally:
+        conn.close()
+
+    return jsonify([
+        {"nom_table": nom, "nb_lignes": nb_lignes, "taille_octets": taille, "date_dernier_import": _serialiser(date_import)}
+        for nom, nb_lignes, taille, date_import in lignes
+    ])
+
+
+@app.route("/bases/<int:base_id>/tables/<nom_table>", methods=["GET"])
+def fiche_table(base_id, nom_table):
+    nom_pg = base_accessible(g.claims, base_id)
+    if not nom_pg:
+        return jsonify(erreur="Base introuvable ou inaccessible"), 404
+
+    try:
+        conn = connexion_base(nom_pg, g.claims["role"])
+    except psycopg2.Error as exc:
+        return jsonify(erreur=f"Connexion refusée : {exc}"), 403
+    try:
+        with conn.cursor() as cur:
+            cur.execute(_REQUETE_TABLES + " AND c.relname = %s", (nom_table,))
+            ligne = cur.fetchone()
+            if not ligne:
+                return jsonify(erreur="Table introuvable ou inaccessible"), 404
+            _, nb_lignes, taille_octets, date_import = ligne
+
+            cur.execute(
+                "SELECT column_name, data_type FROM information_schema.columns "
+                "WHERE table_schema = 'public' AND table_name = %s ORDER BY ordinal_position",
+                (nom_table,),
+            )
+            colonnes = [{"nom": nom, "type": type_} for nom, type_ in cur.fetchall()]
+
+            cur.execute(sql.SQL("SELECT * FROM {} LIMIT 20").format(sql.Identifier(nom_table)))
+            entetes_apercu = [d.name for d in cur.description]
+            lignes_apercu = [[_serialiser(v) for v in ligne] for ligne in cur.fetchall()]
+        conn.rollback()
+    except psycopg2.Error as exc:
+        return jsonify(erreur=str(exc)), 400
+    finally:
+        conn.close()
+
+    return jsonify({
+        "nom_table": nom_table,
+        "nb_lignes": nb_lignes,
+        "taille_octets": taille_octets,
+        "date_dernier_import": _serialiser(date_import),
+        "colonnes": colonnes,
+        "apercu_entetes": entetes_apercu,
+        "apercu_lignes": lignes_apercu,
+    })
+
+
+@app.route("/bases/<int:base_id>/tables/<nom_table>", methods=["DELETE"])
+def supprimer_table(base_id, nom_table):
+    nom_pg = base_dont_je_suis_proprietaire(g.claims, base_id)
+    if not nom_pg:
+        return jsonify(erreur="Base introuvable ou vous n'en êtes pas propriétaire"), 404
+
+    try:
+        conn = connexion_base(nom_pg, g.claims["role"])
+        with conn.cursor() as cur:
+            cur.execute(sql.SQL("DROP TABLE {}").format(sql.Identifier(nom_table)))
+            cur.execute("DELETE FROM public._sillon_imports WHERE nom_table = %s", (nom_table,))
+        conn.commit()
+    except psycopg2.Error as exc:
+        return jsonify(erreur=str(exc)), 400
+    finally:
+        conn.close()
+
+    rafraichir_taille_base(base_id, nom_pg)
+    consigner_audit(g.claims, "SUPPRESSION", nom_table, f"table : SUPPRESSION (base #{base_id})")
+    return jsonify(statut="ok")
+
+
+# =============================================================================
+# ENDPOINT : SUPPRESSION D'UNE BASE (§5.2, §9)
+# =============================================================================
+@app.route("/bases/<int:base_id>/supprimer", methods=["POST"])
+def supprimer_base(base_id):
+    # Action irreversible (§5.2) : la confirmation renforcee (saisie du nom
+    # de la base) est portee par l'interface, pas par cet endpoint - mais la
+    # verification de propriete, elle, ne peut reposer que sur le serveur.
+    if not base_dont_je_suis_proprietaire(g.claims, base_id):
+        return jsonify(erreur="Base introuvable ou vous n'en êtes pas propriétaire"), 404
+
+    with connexion_catalogue(claims=g.claims) as conn, conn.cursor() as cur:
+        cur.execute("SELECT public.creer_job('suppression_base', %s, '{}'::jsonb)", (base_id,))
+        id_job = cur.fetchone()[0]
+        conn.commit()
+
+    return jsonify(statut="en_attente", id_job=id_job)
+
+
+# =============================================================================
 # ENDPOINT : TELECHARGEMENT DU RESULTAT D'UN JOB (§5.5, §8.10)
 # =============================================================================
 @app.route("/jobs/<int:id_job>/telecharger", methods=["GET"])
@@ -825,6 +1326,40 @@ def telecharger_resultat(id_job):
 
 
 # =============================================================================
+# ENDPOINT : JOURNAL D'UN SCRIPT EN COURS (§5.4, §5.5)
+# =============================================================================
+# journal.log vit dans RESULTATS_DIR/<id_job>/ (sillon-worker,
+# executer_conteneur) tant que le job n'est pas terminé - une fois
+# empaqueter_resultats() passé, il n'existe plus qu'à l'intérieur de
+# l'archive zip renvoyée par /telecharger. Cet endpoint ne sert donc que
+# la fenêtre "en_cours", ce que demande le §5.4 ("pas seulement disponibles
+# une fois le job terminé").
+TAILLE_JOURNAL_MAX = 100_000  # derniers octets renvoyés, pas le fichier entier (§13)
+
+
+@app.route("/jobs/<int:id_job>/journal", methods=["GET"])
+def journal_job(id_job):
+    with connexion_catalogue(claims=g.claims) as conn, conn.cursor() as cur:
+        cur.execute("SELECT statut FROM public.vue_mes_jobs WHERE id = %s", (id_job,))
+        ligne = cur.fetchone()
+    if not ligne:
+        return jsonify(erreur="Job introuvable ou inaccessible"), 404
+    statut = ligne[0]
+
+    chemin_journal = os.path.join(RESULTATS_DIR, str(id_job), "journal.log")
+    if not os.path.isfile(chemin_journal):
+        return jsonify(statut=statut, journal="")
+
+    taille = os.path.getsize(chemin_journal)
+    with open(chemin_journal, "rb") as f:
+        if taille > TAILLE_JOURNAL_MAX:
+            f.seek(taille - TAILLE_JOURNAL_MAX)
+        contenu = f.read().decode("utf-8", errors="replace")
+
+    return jsonify(statut=statut, journal=contenu, tronque=taille > TAILLE_JOURNAL_MAX)
+
+
+# =============================================================================
 # NOTIFICATIONS PAR MAIL (§9, §10)
 # =============================================================================
 def envoyer_notification(email_destinataire, sujet, corps):
@@ -845,7 +1380,7 @@ def envoyer_notification(email_destinataire, sujet, corps):
 # =============================================================================
 # Types de jobs traités par l'orchestrateur ; script_python/script_r sont du
 # ressort exclusif de sillon-worker (isolation par conteneur, §8.7).
-TYPES_GERES = ("creation_base", "suppression_base", "import_csv")
+TYPES_GERES = ("creation_base", "suppression_base", "import_csv", "requete_sql")
 
 
 def _prochain_job(conn):
@@ -874,6 +1409,7 @@ def _traiter_job(conn, id_job, type_job, utilisateur_id, base_id, payload):
         email_utilisateur, role_pg = cur.fetchone()
 
     try:
+        debut = time.monotonic()  # utilisé par la branche "requete_sql", y compris dans le except ci-dessous
         if type_job == "creation_base":
             nom_base_pg = f"sillon_{role_pg}"
             conn_admin = psycopg2.connect(host=DB_HOST, port=DB_PORT, dbname="postgres", user=DB_USER, password=DB_PASSWORD)
@@ -895,6 +1431,30 @@ def _traiter_job(conn, id_job, type_job, utilisateur_id, base_id, payload):
             try:
                 with conn_neuve.cursor() as cur:
                     cur.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm;")
+                    # Catalogue local de date/taille du dernier import par
+                    # table (§5.2, fiche d'une table) : distinct du
+                    # catalogue applicatif sillon_catalog, qui ne connaît
+                    # que les bases, jamais leurs tables individuelles (§6).
+                    # "SET ROLE" avant le CREATE TABLE (constaté en pratique
+                    # sur la VM de test) : sillon_orchestrateur a bien le
+                    # droit de créer la table sans bascule de rôle, en
+                    # héritant des privilèges de role_pg dont il est membre
+                    # (§4.4), mais l'objet créé appartiendrait alors à
+                    # sillon_orchestrateur lui-même, pas à role_pg - le
+                    # propriétaire d'une table est toujours le rôle courant
+                    # au moment du CREATE, jamais un rôle dont les
+                    # privilèges sont seulement hérités. Sans ce SET ROLE,
+                    # creer_table_et_charger (exécuté avec le rôle personnel
+                    # de l'agent, §4.4) se voit ensuite refuser l'INSERT.
+                    cur.execute(sql.SQL("SET ROLE {}").format(sql.Identifier(role_pg)))
+                    cur.execute("""
+                        CREATE TABLE public._sillon_imports (
+                            nom_table     TEXT PRIMARY KEY,
+                            date_import   TIMESTAMPTZ NOT NULL DEFAULT now(),
+                            nb_lignes     BIGINT NOT NULL,
+                            taille_octets BIGINT NOT NULL
+                        )
+                    """)
             finally:
                 conn_neuve.close()
 
@@ -930,18 +1490,72 @@ def _traiter_job(conn, id_job, type_job, utilisateur_id, base_id, payload):
         elif type_job == "import_csv":
             conn_cible = connexion_base(payload["nom_pg"], payload["role_pg"])
             try:
-                creer_table_et_charger(
+                nb_lignes = creer_table_et_charger(
                     conn_cible, payload["nom_table"], payload["colonnes"],
                     payload["chemin_fichier"], payload["encodage"],
                     payload["delimiteur"], payload["valeur_manquante"],
+                    payload.get("remplacer", False), payload.get("avec_entete", True),
+                    set(payload.get("lignes_exclues") or []),
                 )
             finally:
                 conn_cible.close()
             if os.path.exists(payload["chemin_fichier"]):
                 os.remove(payload["chemin_fichier"])
+            rafraichir_taille_base(base_id, payload["nom_pg"])
+            # Hors contexte HTTP ici (consommateur de fond, §9) : pas de
+            # g.claims. role_pg/email_utilisateur, déjà résolus plus haut
+            # pour ce job, suffisent à simuler les claims nécessaires à
+            # consigner_audit() pour qu'il attribue l'entrée au bon agent.
+            consigner_audit(
+                {"role": role_pg, "email": email_utilisateur}, "CREATION",
+                payload["nom_table"], f"table : CREATION (base #{base_id}), {nb_lignes} ligne(s) importée(s)",
+            )
 
             with conn.cursor() as cur:
                 cur.execute("SELECT public.maj_statut_job(%s, 'termine')", (id_job,))
+            conn.commit()
+
+        elif type_job == "requete_sql":
+            lecture = est_requete_lecture(payload["requete"])
+            delai_minutes = int(lire_parametre("duree_max_job_minutes", "30"))
+            conn_cible = connexion_base(payload["nom_pg"], payload["role_pg"])
+            try:
+                with conn_cible.cursor() as cur:
+                    cur.execute(sql.SQL("SET LOCAL statement_timeout = {}").format(sql.Literal(f"{delai_minutes}min")))
+                    if lecture:
+                        # Export complet en flux (§5.3 : même principe que
+                        # /sql/export - jamais matérialiser le résultat
+                        # entier en mémoire, §13), mais vers un fichier
+                        # plutôt qu'un flux HTTP puisqu'il n'y a ici aucune
+                        # requête HTTP à qui répondre en direct.
+                        chemin_resultat = os.path.join(RESULTATS_DIR, f"{id_job}.csv")
+                        requete_copy = sql.SQL(
+                            "COPY ({}) TO STDOUT WITH (FORMAT csv, HEADER true, ENCODING 'UTF8')"
+                        ).format(sql.SQL(payload["requete"]))
+                        with open(chemin_resultat, "wb") as f:
+                            cur.copy_expert(requete_copy.as_string(conn_cible), f)
+                        conn_cible.commit()
+                        detail = "Résultat exporté en CSV, disponible au téléchargement."
+                    else:
+                        cur.execute(payload["requete"])
+                        detail = f"{cur.rowcount} ligne(s) affectée(s)."
+                        chemin_resultat = None
+                        conn_cible.commit()
+            finally:
+                conn_cible.close()
+            duree_ms = round((time.monotonic() - debut) * 1000)
+            # user_id indispensable ici (contrairement à consigner_audit
+            # ci-dessus, qui ne lit que l'email) : enregistrer_historique()
+            # insère via _id_courant(), qui a besoin de "user_id" dans les
+            # claims pour ne pas violer la contrainte NOT NULL de
+            # requetes_historique.utilisateur_id - constaté en pratique.
+            enregistrer_historique(
+                {"role": payload["role_pg"], "email": email_utilisateur, "user_id": utilisateur_id},
+                base_id, payload["requete"], "lecture" if lecture else "ecriture", True, duree_ms,
+            )
+
+            with conn.cursor() as cur:
+                cur.execute("SELECT public.maj_statut_job(%s, 'termine', %s, %s)", (id_job, chemin_resultat, detail))
             conn.commit()
 
         if email_utilisateur:
@@ -957,6 +1571,29 @@ def _traiter_job(conn, id_job, type_job, utilisateur_id, base_id, payload):
         with conn.cursor() as cur:
             cur.execute("SELECT public.maj_statut_job(%s, 'erreur', NULL, %s)", (id_job, str(exc)))
         conn.commit()
+        if type_job == "import_csv":
+            # Import différé échoué (§5.1 étape 9, §8.12) : symétrique à la
+            # journalisation du chemin synchrone dans valider_import().
+            # try/except dédié : cette branche est déjà le gestionnaire
+            # d'erreur du job (cf. note ci-dessus) - un échec de la
+            # journalisation elle-même ne doit pas se propager plus loin.
+            try:
+                consigner_audit(
+                    {"role": role_pg, "email": email_utilisateur}, "ERREUR",
+                    payload.get("nom_table"), f"import échoué (base #{base_id}) : {exc}",
+                )
+            except psycopg2.Error:
+                pass
+        elif type_job == "requete_sql":
+            # enregistrer_historique() a déjà sa propre protection interne
+            # (cf. sa docstring) : pas besoin d'un try/except supplémentaire
+            # ici, contrairement à consigner_audit() ci-dessus.
+            enregistrer_historique(
+                {"role": payload.get("role_pg"), "email": email_utilisateur, "user_id": utilisateur_id},
+                base_id, payload.get("requete"),
+                "lecture" if est_requete_lecture(payload.get("requete") or "") else "ecriture",
+                False, round((time.monotonic() - debut) * 1000), str(exc),
+            )
         if email_utilisateur:
             envoyer_notification(
                 email_utilisateur,
@@ -1016,3 +1653,8 @@ if __name__ == "__main__":
 #   schema.sql déjà déployé : à ajouter à la table parametres (§11) avant
 #   la mise en production, faute de quoi lire_parametre() retombera sur sa
 #   valeur par défaut (10 Mo) sans erreur.
+# - public._sillon_imports (§5.2, fiche d'une table) est créée par
+#   _traiter_job à la création de chaque nouvelle base : les bases déjà
+#   présentes sur la VM de test (créées avant l'ajout de cette table) n'en
+#   disposent pas encore et feront échouer /bases/<id>/tables avec "relation
+#   _sillon_imports does not exist" tant qu'elles ne sont pas recréées.

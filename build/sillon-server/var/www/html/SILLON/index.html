@@ -10,6 +10,8 @@
     <link rel="manifest" href="./dsfr-v1.14.3/dist/favicon/manifest.webmanifest" crossorigin="use-credentials">
     <link rel="stylesheet" href="./dsfr-v1.14.3/dist/dsfr.min.css">
     <link rel="stylesheet" href="./dsfr-v1.14.3/dist/utility/icons/icons.min.css">
+    <link rel="stylesheet" href="./codemirror-5.65.21/lib/codemirror.css">
+    <link rel="stylesheet" href="./codemirror-5.65.21/addon/hint/show-hint.css">
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -103,23 +105,37 @@
             <div class="fr-input-group">
                 <label class="fr-label" for="champ-sql">Requête SQL</label>
                 <textarea class="fr-input" id="champ-sql" rows="6" placeholder="SELECT * FROM ma_table LIMIT 100"></textarea>
+                <p class="fr-hint-text">Ctrl+Espace pour l'auto-complétion des tables et colonnes.</p>
             </div>
             <ul class="fr-btns-group fr-btns-group--inline">
                 <li><button class="fr-btn fr-icon-play-circle-line fr-btn--icon-left" onclick="Travaux.executer()">Exécuter</button></li>
                 <li><button class="fr-btn fr-btn--secondary fr-icon-download-line fr-btn--icon-left" onclick="Travaux.exporter()">Exporter en CSV</button></li>
+                <li><button class="fr-btn fr-btn--secondary fr-icon-save-line fr-btn--icon-left" onclick="Travaux.enregistrerRequete()">Enregistrer sous…</button></li>
             </ul>
 
             <div id="resultat-travaux" class="fr-mt-3w"></div>
 
-            <h3 class="fr-h6 fr-mt-4w">Historique de la session</h3>
-            <ul id="historique-travaux" class="fr-text--sm"></ul>
+            <div class="fr-grid-row fr-grid-row--gutters fr-mt-4w">
+                <div class="fr-col-12 fr-col-md-6">
+                    <h3 class="fr-h6">Requêtes enregistrées</h3>
+                    <ul id="requetes-enregistrees" class="fr-text--sm"></ul>
+                </div>
+                <div class="fr-col-12 fr-col-md-6">
+                    <h3 class="fr-h6">Historique</h3>
+                    <ul id="historique-travaux" class="fr-text--sm"></ul>
+                </div>
+            </div>
         </div>
 
         <!-- ============================== ONGLET IMPORT ============================== -->
         <div id="panneau-import" class="fr-tabs__panel" role="tabpanel" tabindex="0" hidden>
-            <div class="fr-upload-group">
-                <label class="fr-label" for="champ-fichier-csv">Fichier CSV à importer</label>
+            <div class="fr-upload-group" id="zone-depot-csv">
+                <label class="fr-label" for="champ-fichier-csv">Fichier CSV à importer (glisser-déposer possible)</label>
                 <input class="fr-upload" type="file" id="champ-fichier-csv" accept=".csv,.txt">
+            </div>
+            <div class="fr-checkbox-group fr-mb-2w">
+                <input type="checkbox" id="import-avec-entete" checked>
+                <label class="fr-label" for="import-avec-entete">Le fichier contient une ligne d'en-tête</label>
             </div>
             <button class="fr-btn fr-icon-search-line fr-btn--icon-left" onclick="Import.analyser()">Analyser le fichier</button>
 
@@ -161,6 +177,10 @@
 
         <!-- ============================== ONGLET SCRIPTS ============================== -->
         <div id="panneau-scripts" class="fr-tabs__panel" role="tabpanel" tabindex="0" hidden>
+            <div class="fr-callout fr-icon-information-line fr-mb-3w" id="scripts-librairies">
+                <p class="fr-callout__text fr-text--sm">Chargement des librairies disponibles…</p>
+            </div>
+
             <div class="fr-input-group">
                 <label class="fr-label" for="scripts-base-cible">Base cible</label>
                 <select class="fr-select" id="scripts-base-cible"></select>
@@ -270,6 +290,10 @@
     </div>
 </dialog>
 
+<script src="./codemirror-5.65.21/lib/codemirror.js"></script>
+<script src="./codemirror-5.65.21/mode/sql/sql.js"></script>
+<script src="./codemirror-5.65.21/addon/hint/show-hint.js"></script>
+<script src="./codemirror-5.65.21/addon/hint/sql-hint.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

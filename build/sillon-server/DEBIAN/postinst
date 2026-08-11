@@ -171,6 +171,12 @@ chown root:root /etc/cron.d/sillon_purge_logs
 chmod 644 /etc/cron.d/sillon_purge_logs
 
 # =====================================================================
+# 6bis. PURGE AUTOMATIQUE DES RESULTATS DE JOBS (§8.9, §5.4)
+# =====================================================================
+chown root:root /etc/cron.d/sillon_purge_resultats
+chmod 644 /etc/cron.d/sillon_purge_resultats
+
+# =====================================================================
 # 7. REPERTOIRE DE DEPOT TEMPORAIRE DES IMPORTS CSV (§5.1)
 # =====================================================================
 # Utilisé par l'orchestrateur entre /import/apercu et /import/valider
@@ -178,8 +184,13 @@ chmod 644 /etc/cron.d/sillon_purge_logs
 # bons droits, le service retombe sur /tmp au démarrage, ce qui fonctionne
 # mais sort du périmètre géré par le paquet.
 mkdir -p /var/lib/sillon/staging
+# Résultats de jobs (RESULTATS_DIR, partagé par orchestrateur.py et
+# sillon-worker : exports SQL différés §5.3, archives de scripts §5.4) -
+# même repli sur /tmp sinon, et purgé par sillon_purge_resultats ci-dessus.
+mkdir -p /var/lib/sillon/resultats
 chown -R www-data:www-data /var/lib/sillon
 chmod 750 /var/lib/sillon/staging
+chmod 750 /var/lib/sillon/resultats
 # Point de vigilance non traité ici : un fichier déposé via /import/apercu
 # et jamais validé reste indéfiniment dans ce répertoire (§15.2, à traiter
 # avec une purge périodique le jour où ça devient nécessaire).

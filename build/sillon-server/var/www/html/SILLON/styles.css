@@ -56,3 +56,10 @@ code {
     padding: 0.1rem 0.3rem;
     border-radius: 2px;
 }
+
+/* Retour visuel pendant le survol d'un glisser-déposer (§5.1, étape 1) :
+   la zone de dépôt DSFR n'a par défaut aucun état "dragover". */
+#zone-depot-csv.zone-glisser-survolee {
+    outline: 2px dashed var(--sillon-accent);
+    outline-offset: 4px;
+}
