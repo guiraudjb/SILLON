@@ -40,6 +40,15 @@ fi
 # ("stat $HOME/.config: no such file or directory") - constaté lors d'un
 # déploiement réel sur VM : le premier script déposé par un agent échouait
 # systématiquement en erreur.
+# Chaque niveau est créé par un "install -d" séparé et non par un seul
+# appel sur le chemin complet : "install -d -o -g" n'applique le
+# propriétaire/mode qu'au DERNIER composant du chemin - les répertoires
+# intermédiaires qu'il crée au passage héritent du mode par défaut et
+# restent root:root. Un seul appel sur "$PODMAN_HOME/.config/containers"
+# laissait ainsi ".config" appartenir à root, que Podman refuse ensuite
+# ("path .../podman-home/.config exists and it is not owned by the
+# current user") - constaté lors d'un déploiement réel sur VM, y compris
+# sur une installation neuve (pas seulement après contamination manuelle).
 install -d -o www-data -g www-data -m 700 "$PODMAN_HOME"
 
 # Gestionnaire de cgroups "cgroupfs" plutôt que le "systemd" par défaut de
@@ -51,6 +60,7 @@ install -d -o www-data -g www-data -m 700 "$PODMAN_HOME"
 # déploiement réel sur VM). Les quotas restent appliqués : --cpus/--memory/
 # --pids-limit passent directement au runtime (crun) sans dépendre du
 # gestionnaire de cgroups choisi ici.
+install -d -o www-data -g www-data -m 700 "$PODMAN_HOME/.config"
 install -d -o www-data -g www-data -m 700 "$PODMAN_HOME/.config/containers"
 cat << 'EOF' > "$PODMAN_HOME/.config/containers/containers.conf"
 [engine]

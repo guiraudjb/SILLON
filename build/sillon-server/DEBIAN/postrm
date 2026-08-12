@@ -1,6 +1,8 @@
 #!/bin/bash
 set -e
 
+DB_NAME="sillon_catalog"
+
 # =====================================================================
 # NETTOYAGE DES ARTEFACTS GENERES PAR LE POSTINST (§12.6)
 # =====================================================================
@@ -33,22 +35,59 @@ case "$1" in
     purge)
         nettoyer_artefacts_runtime
 
-        echo "Suppression de la configuration SILLON..." >&2
+        # Purge complète du catalogue applicatif et des rôles PostgreSQL
+        # qu'il porte (§12.6 révisé) : "purge" retrouve la sémantique
+        # standard dpkg - suppression totale, sans reste - afin qu'un cycle
+        # purge+réinstallation soit idempotent. Auparavant, la base et ses
+        # rôles survivaient volontairement au purge ; un rôle personnel au
+        # nom déterministe (auth.nom_role_personnel, dérivé de l'e-mail
+        # admin fixe "admin@sillon.local") restait alors en collision avec
+        # celui qu'une réinstallation tentait de recréer ("role already
+        # exists"), constaté lors d'un déploiement réel sur VM.
+        #
+        # Portée volontairement limitée au catalogue lui-même : les bases
+        # de travail créées par les agents (§4.4, CREATE DATABASE distinct
+        # de $DB_NAME) ne sont jamais touchées ici, ce ne sont pas des
+        # artefacts d'installation de ce paquet.
+        if command -v psql >/dev/null 2>&1 \
+            && sudo -u postgres psql -tAc \
+                "SELECT 1 FROM pg_database WHERE datname = '$DB_NAME'" 2>/dev/null | grep -q 1; then
+            echo "Suppression du catalogue applicatif ($DB_NAME) et des rôles associés..." >&2
+
+            # Les rôles personnels (u_...) sont lus dans le catalogue avant
+            # sa suppression : leur nom n'est pas déterminable autrement
+            # une fois la base disparue.
+            ROLES_PERSONNELS=$(sudo -u postgres psql -tAc \
+                "SELECT role_pg FROM public.utilisateurs" -d "$DB_NAME" 2>/dev/null || true)
+
+            # "|| true" : une connexion résiduelle échappant à l'arrêt des
+            # services en prerm ne doit pas faire échouer toute la purge
+            # (config, secrets, /var/lib/sillon resteraient sinon en place
+            # malgré un "purge" en apparence terminé) - message affiché
+            # plutôt qu'étouffé.
+            sudo -u postgres dropdb --if-exists "$DB_NAME" \
+                || echo "AVERTISSEMENT : suppression de $DB_NAME échouée (connexion active ?) - à retirer manuellement avant réinstallation : sudo -u postgres dropdb $DB_NAME" >&2
+
+            # "|| true" par rôle : un rôle encore titulaire d'un privilège
+            # sur une base de travail (§4.4, hors périmètre de ce paquet)
+            # ne doit pas interrompre la purge des autres - message affiché
+            # plutôt qu'étouffé, pour rester visible de l'administrateur.
+            for role in $ROLES_PERSONNELS; do
+                sudo -u postgres psql -c "DROP ROLE IF EXISTS \"$role\";" >/dev/null \
+                    || echo "AVERTISSEMENT : rôle PostgreSQL \"$role\" non supprimé (probablement encore titulaire de privilèges sur une base de travail)." >&2
+            done
+            # Rôles "gabarits" et de service, communs à toutes les
+            # installations (créés par schema.sql §4).
+            for role in sillon_service sillon_orchestrateur lecteur agent administrateur; do
+                sudo -u postgres psql -c "DROP ROLE IF EXISTS $role;" >/dev/null \
+                    || echo "AVERTISSEMENT : rôle PostgreSQL $role non supprimé (probablement encore titulaire de privilèges sur une base de travail)." >&2
+            done
+        fi
+
         rm -f /etc/sillon-api.conf
         rm -rf /etc/sillon
         rm -rf /etc/ssl/sillon
         rm -rf /var/lib/sillon
-
-        echo "" >&2
-        echo "=== Les bases de données PostgreSQL n'ont PAS été supprimées ===" >&2
-        echo "SILLON ne supprime jamais de données par effet de bord d'une" >&2
-        echo "désinstallation (§12.6 du cahier des charges) : ni le catalogue" >&2
-        echo "applicatif, ni les bases créées par les agents, ni les rôles" >&2
-        echo "PostgreSQL associés. Pour les retirer manuellement si c'est" >&2
-        echo "réellement souhaité :" >&2
-        echo "  sudo -u postgres psql -c \"\\l\" | grep sillon" >&2
-        echo "  sudo -u postgres psql -c \"\\du\" | grep -E 'u_|sillon_'" >&2
-        echo "  sudo -u postgres dropdb <nom_de_base>" >&2
         ;;
 
     upgrade|failed-upgrade|abort-install|abort-upgrade|disappear)
