@@ -109,7 +109,12 @@ CREATE TABLE public.jobs (
     date_creation   TIMESTAMPTZ NOT NULL DEFAULT now(),
     date_debut      TIMESTAMPTZ,
     date_fin        TIMESTAMPTZ,
-    message_erreur  TEXT
+    -- message_erreur : détail technique brut (exception Postgres, code
+    -- retour...), pour investigation. message_utilisateur : reformulation
+    -- compréhensible affichée en avant côté interface (§5.5) - distincts
+    -- pour ne jamais exposer un message Postgres brut en première lecture.
+    message_erreur     TEXT,
+    message_utilisateur TEXT
 );
 CREATE INDEX idx_jobs_utilisateur ON public.jobs(utilisateur_id);
 CREATE INDEX idx_jobs_statut ON public.jobs(statut);
@@ -615,10 +620,27 @@ GRANT EXECUTE ON FUNCTION public.supprimer_requete_enregistree(integer) TO agent
 -- 8. FILE D'ATTENTE (§9, §5.5)
 -- -----------------------------------------------------------------------------
 
+-- Un seul travailleur à la fois par "groupe de file" (§9 : orchestrateur
+-- pour creation_base/suppression_base/import_csv/requete_sql, sillon-worker
+-- pour script_python/script_r, cf. TYPES_GERES de chacun) : la position
+-- dans la file (§5.5) se compte donc au sein du même groupe uniquement, pas
+-- tous types confondus.
+CREATE OR REPLACE FUNCTION auth.groupe_file(_type public.type_job) RETURNS boolean AS $$
+    SELECT _type = ANY(ARRAY['script_python', 'script_r']::public.type_job[]);
+$$ LANGUAGE sql IMMUTABLE;
+
 CREATE OR REPLACE VIEW public.vue_mes_jobs AS
-SELECT id, type, statut, base_id, date_creation, date_debut, date_fin, message_erreur, chemin_resultat
-FROM public.jobs
-WHERE utilisateur_id = public._id_courant();
+SELECT
+    j.id, j.type, j.statut, j.base_id, j.date_creation, j.date_debut, j.date_fin,
+    j.message_erreur, j.message_utilisateur, j.chemin_resultat,
+    CASE WHEN j.statut = 'en_attente' THEN (
+        SELECT count(*) FROM public.jobs j2
+        WHERE j2.statut IN ('en_attente', 'en_cours')
+          AND auth.groupe_file(j2.type) = auth.groupe_file(j.type)
+          AND j2.date_creation < j.date_creation
+    ) END AS position_file
+FROM public.jobs j
+WHERE j.utilisateur_id = public._id_courant();
 
 GRANT SELECT ON public.vue_mes_jobs TO agent, lecteur, administrateur;
 
@@ -666,7 +688,11 @@ GRANT EXECUTE ON FUNCTION public.creer_job(public.type_job, integer, jsonb) TO a
 
 CREATE OR REPLACE FUNCTION public.annuler_job(_id_job INTEGER) RETURNS void AS $$
 BEGIN
-    UPDATE public.jobs SET statut = 'annule'
+    -- date_fin (constaté en pratique) : "annule" est un statut terminal au
+    -- même titre que "termine"/"erreur" (maj_statut_job le traite ainsi),
+    -- mais ce chemin-ci ne passait pas par maj_statut_job et laissait
+    -- date_fin NULL indéfiniment pour un job annulé.
+    UPDATE public.jobs SET statut = 'annule', date_fin = now()
     WHERE id = _id_job AND utilisateur_id = public._id_courant() AND statut IN ('en_attente', 'en_cours');
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
@@ -675,16 +701,28 @@ REVOKE EXECUTE ON FUNCTION public.annuler_job(integer) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.annuler_job(integer) TO agent, lecteur;
 
 
-CREATE OR REPLACE FUNCTION public.maj_statut_job(_id_job INTEGER, _statut public.statut_job, _chemin_resultat TEXT DEFAULT NULL, _message_erreur TEXT DEFAULT NULL)
+CREATE OR REPLACE FUNCTION public.maj_statut_job(
+    _id_job INTEGER, _statut public.statut_job, _chemin_resultat TEXT DEFAULT NULL,
+    _message_erreur TEXT DEFAULT NULL, _message_utilisateur TEXT DEFAULT NULL
+)
 RETURNS void AS $$
 BEGIN
     UPDATE public.jobs SET
-        statut          = _statut,
-        date_debut      = CASE WHEN _statut = 'en_cours' AND date_debut IS NULL THEN now() ELSE date_debut END,
-        date_fin        = CASE WHEN _statut IN ('termine', 'erreur', 'annule') THEN now() ELSE date_fin END,
-        chemin_resultat = COALESCE(_chemin_resultat, chemin_resultat),
-        message_erreur  = COALESCE(_message_erreur, message_erreur)
-    WHERE id = _id_job;
+        statut              = _statut,
+        date_debut          = CASE WHEN _statut = 'en_cours' AND date_debut IS NULL THEN now() ELSE date_debut END,
+        date_fin            = CASE WHEN _statut IN ('termine', 'erreur', 'annule') THEN now() ELSE date_fin END,
+        chemin_resultat     = COALESCE(_chemin_resultat, chemin_resultat),
+        message_erreur      = COALESCE(_message_erreur, message_erreur),
+        message_utilisateur = COALESCE(_message_utilisateur, message_utilisateur)
+    -- "AND statut <> 'annule'" (§5.5) : une annulation posée par
+    -- l'utilisateur pendant qu'un job est "en_cours" (§9, traitement déjà
+    -- entamé côté orchestrateur/worker) doit rester définitive - sans
+    -- cette garde, la mise à jour finale du traitement en cours (déclenchée
+    -- par le code qui ne sait pas encore que l'annulation a eu lieu)
+    -- écrasait silencieusement "annule" par "termine"/"erreur", contraire
+    -- au §5.5 ("annulation possible tant que le job est en attente ou en
+    -- cours").
+    WHERE id = _id_job AND statut <> 'annule';
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
@@ -692,8 +730,8 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 -- lui, n'importe quel compte authentifié peut faire pointer
 -- chemin_resultat d'un job vers un chemin arbitraire du serveur, puis le
 -- récupérer via /jobs/<id>/telecharger - démontré en conditions réelles.
-REVOKE EXECUTE ON FUNCTION public.maj_statut_job(integer, public.statut_job, text, text) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.maj_statut_job(integer, public.statut_job, text, text) TO sillon_orchestrateur;
+REVOKE EXECUTE ON FUNCTION public.maj_statut_job(integer, public.statut_job, text, text, text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.maj_statut_job(integer, public.statut_job, text, text, text) TO sillon_orchestrateur;
 
 -- -----------------------------------------------------------------------------
 -- 9. JOURNALISATION IMMUABLE (§8.12)

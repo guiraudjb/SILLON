@@ -336,15 +336,22 @@ def executer_sql_en_tache_de_fond():
     if not nom_pg:
         return jsonify(erreur="Base introuvable ou inaccessible"), 404
 
+    # try/except (constaté en pratique) : sans lui, un quota de jobs
+    # simultanés déjà atteint (creer_job, §11) ou tout autre refus
+    # PostgreSQL remontait en 500 générique non intercepté au lieu d'un
+    # message clair - même garde que /scripts/deposer pour le même appel.
     with connexion_catalogue(claims=g.claims) as conn, conn.cursor() as cur:
-        cur.execute(
-            "SELECT public.creer_job('requete_sql', %s, %s::jsonb)",
-            (base_id, psycopg2.extras.Json({
-                "requete": requete_utilisateur,
-                "role_pg": g.claims["role"],
-                "nom_pg": nom_pg,
-            })),
-        )
+        try:
+            cur.execute(
+                "SELECT public.creer_job('requete_sql', %s, %s::jsonb)",
+                (base_id, psycopg2.extras.Json({
+                    "requete": requete_utilisateur,
+                    "role_pg": g.claims["role"],
+                    "nom_pg": nom_pg,
+                })),
+            )
+        except psycopg2.Error as exc:
+            return jsonify(erreur=str(exc)), 400
         id_job = cur.fetchone()[0]
         conn.commit()
 
@@ -1293,7 +1300,10 @@ def supprimer_base(base_id):
         return jsonify(erreur="Base introuvable ou vous n'en êtes pas propriétaire"), 404
 
     with connexion_catalogue(claims=g.claims) as conn, conn.cursor() as cur:
-        cur.execute("SELECT public.creer_job('suppression_base', %s, '{}'::jsonb)", (base_id,))
+        try:
+            cur.execute("SELECT public.creer_job('suppression_base', %s, '{}'::jsonb)", (base_id,))
+        except psycopg2.Error as exc:
+            return jsonify(erreur=str(exc)), 400
         id_job = cur.fetchone()[0]
         conn.commit()
 
@@ -1381,6 +1391,28 @@ def envoyer_notification(email_destinataire, sujet, corps):
 # Types de jobs traités par l'orchestrateur ; script_python/script_r sont du
 # ressort exclusif de sillon-worker (isolation par conteneur, §8.7).
 TYPES_GERES = ("creation_base", "suppression_base", "import_csv", "requete_sql")
+
+# Reformulation du message technique (§5.5 : "un message technique (pour
+# investigation) et un message utilisateur reformulé de façon
+# compréhensible") - couvre les codes SQLSTATE rencontrés en pratique sur ce
+# projet, pas l'ensemble du référentiel Postgres : le repli générique reste
+# volontairement honnête plutôt que de prétendre reconnaître des cas non
+# couverts.
+_MESSAGES_PGCODE = {
+    "57014": "Délai maximal dépassé : le traitement a été interrompu avant de se terminer.",
+    "42501": "Vous n'avez pas les droits nécessaires pour cette opération.",
+    "23505": "Une donnée en conflit avec une autre déjà existante a empêché l'opération.",
+    "42P01": "Une table référencée par ce traitement est introuvable (a-t-elle été supprimée entre-temps ?).",
+    "53100": "Espace disque insuffisant côté serveur pour terminer l'opération.",
+    "53200": "Mémoire insuffisante côté serveur pour terminer l'opération.",
+    "53300": "Trop de connexions simultanées côté serveur, réessayez plus tard.",
+}
+_MESSAGE_PGCODE_GENERIQUE = "Une erreur technique est survenue pendant le traitement ; voir le message technique pour le détail."
+
+
+def reformuler_erreur(exc):
+    pgcode = getattr(exc, "pgcode", None)
+    return _MESSAGES_PGCODE.get(pgcode, _MESSAGE_PGCODE_GENERIQUE)
 
 
 def _prochain_job(conn):
@@ -1589,7 +1621,10 @@ def _traiter_job(conn, id_job, type_job, utilisateur_id, base_id, payload):
     except Exception as exc:  # noqa: BLE001 - un job en erreur ne doit jamais faire tomber le consommateur
         conn.rollback()
         with conn.cursor() as cur:
-            cur.execute("SELECT public.maj_statut_job(%s, 'erreur', NULL, %s)", (id_job, str(exc)))
+            cur.execute(
+                "SELECT public.maj_statut_job(%s, 'erreur', NULL, %s, %s)",
+                (id_job, str(exc), reformuler_erreur(exc)),
+            )
         conn.commit()
         if type_job == "import_csv":
             # Import différé échoué (§5.1 étape 9, §8.12) : symétrique à la

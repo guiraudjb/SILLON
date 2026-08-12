@@ -1032,7 +1032,12 @@ const Scripts = {
 // =============================================================================
 const Suivi = {
     _intervallesJournal: {},
+    _jobsCache: [],
 
+    // Vue consolidée, tous types confondus (§5.5) : le filtrage par type et
+    // par statut se fait côté client sur ce cache plutôt que par un nouvel
+    // appel serveur à chaque changement de filtre - la liste complète est
+    // déjà rapatriée en un seul appel.
     async rafraichir() {
         // Un rafraîchissement (manuel ou périodique) reconstruit toute la
         // table : un intervalle de journal pointant vers une ligne que ce
@@ -1041,20 +1046,39 @@ const Suivi = {
         Object.values(Suivi._intervallesJournal).forEach(clearInterval);
         Suivi._intervallesJournal = {};
 
-        let jobs = [];
         try {
-            jobs = await appelJson("/api/vue_mes_jobs?order=date_creation.desc");
-        } catch (erreur) { /* tableau vide en cas d'échec */ }
+            Suivi._jobsCache = await appelJson("/api/vue_mes_jobs?order=date_creation.desc");
+        } catch (erreur) {
+            Suivi._jobsCache = [];
+        }
+        Suivi.appliquerFiltres();
+    },
 
+    appliquerFiltres() {
+        const filtreType = document.getElementById("suivi-filtre-type").value;
+        const filtreStatut = document.getElementById("suivi-filtre-statut").value;
+        const jobs = Suivi._jobsCache.filter((job) =>
+            (!filtreType || job.type === filtreType) && (!filtreStatut || job.statut === filtreStatut));
+        Suivi._afficher(jobs);
+    },
+
+    _LIBELLES_STATUT: {
+        en_attente: "En attente", en_cours: "En cours", termine: "Terminé", erreur: "Erreur", annule: "Annulé",
+    },
+
+    _afficher(jobs) {
         const badges = { en_attente: "fr-badge--info", en_cours: "fr-badge--info", termine: "fr-badge--success", erreur: "fr-badge--error", annule: "" };
         const estScript = (type) => type === "script_python" || type === "script_r";
 
         document.getElementById("table-suivi").innerHTML = jobs.map((job) => `
             <tr>
                 <td>${echapper(job.type)}</td>
-                <td><span class="fr-badge fr-badge--sm ${badges[job.statut] || ""}">${echapper(job.statut)}</span></td>
+                <td>
+                    <span class="fr-badge fr-badge--sm ${badges[job.statut] || ""}">${echapper(Suivi._LIBELLES_STATUT[job.statut] || job.statut)}</span>
+                    ${job.statut === "en_attente" && job.position_file != null ? `<br><span class="fr-text--xs">Position dans la file : ${job.position_file + 1}</span>` : ""}
+                </td>
                 <td>${new Date(job.date_creation).toLocaleString("fr-FR")}</td>
-                <td>${echapper(job.message_erreur || "")}</td>
+                <td>${Suivi._celluleDetail(job)}</td>
                 <td>
                     ${["en_attente", "en_cours"].includes(job.statut) ? `<button class="fr-btn fr-btn--sm fr-btn--tertiary-no-outline fr-icon-close-line" onclick="Suivi.annuler(${job.id})">Annuler</button>` : ""}
                     ${estScript(job.type) && job.statut !== "annule" ? `<button class="fr-btn fr-btn--sm fr-btn--tertiary-no-outline fr-icon-file-text-line" onclick="Suivi.afficherJournal(${job.id})">Journal</button>` : ""}
@@ -1063,6 +1087,19 @@ const Suivi = {
             </tr>
             ${estScript(job.type) ? `<tr class="ligne-journal" id="journal-${job.id}" hidden><td colspan="5"></td></tr>` : ""}`).join("")
             || `<tr><td colspan="5">Aucun traitement pour l'instant.</td></tr>`;
+    },
+
+    // Message utilisateur reformulé en avant, détail technique replié
+    // derrière un <details> natif (§5.5 : les deux doivent coexister, le
+    // second "pour investigation" seulement) - jamais un message Postgres
+    // brut affiché en première lecture.
+    _celluleDetail(job) {
+        if (!job.message_erreur && !job.message_utilisateur) return "";
+        const principal = echapper(job.message_utilisateur || job.message_erreur);
+        if (job.message_utilisateur && job.message_erreur && job.message_erreur !== job.message_utilisateur) {
+            return `${principal}<details class="fr-mt-1w"><summary class="fr-text--xs">Détail technique</summary><code class="fr-text--xs">${echapper(job.message_erreur)}</code></details>`;
+        }
+        return principal;
     },
 
     async annuler(idJob) {

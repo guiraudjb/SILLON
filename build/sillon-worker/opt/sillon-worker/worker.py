@@ -88,6 +88,10 @@ class InterruptionService(Exception):
     pass
 
 
+class AnnulationDemandee(Exception):
+    pass
+
+
 # =============================================================================
 # ACCES A LA BASE DE DONNEES (§4.3, §4.4)
 # =============================================================================
@@ -102,19 +106,32 @@ def lire_parametre(cle, defaut=None):
     return ligne[0] if ligne else defaut
 
 
-def marquer_statut(conn, id_job, statut, chemin_resultat=None, message_erreur=None):
+def marquer_statut(conn, id_job, statut, chemin_resultat=None, message_erreur=None, message_utilisateur=None):
     with conn.cursor() as cur:
         cur.execute(
-            "SELECT public.maj_statut_job(%s, %s, %s, %s)",
-            (id_job, statut, chemin_resultat, message_erreur),
+            "SELECT public.maj_statut_job(%s, %s, %s, %s, %s)",
+            (id_job, statut, chemin_resultat, message_erreur, message_utilisateur),
         )
     conn.commit()
+
+
+def _job_annule(conn, id_job):
+    """Annulation demandée depuis l'onglet Suivi (§5.5) pendant que ce job
+    est déjà "en_cours" : contrairement à un job encore "en_attente" (jamais
+    repris par _prochain_job, cf. son WHERE statut = 'en_attente'), rien
+    n'arrête ici de lui-même un conteneur déjà lancé - il faut le
+    surveiller explicitement pendant son exécution (executer_conteneur)."""
+    with conn.cursor() as cur:
+        cur.execute("SELECT statut FROM public.jobs WHERE id = %s", (id_job,))
+        statut = cur.fetchone()[0]
+    conn.rollback()  # lecture seule : referme l'implicite plutôt que de la laisser "idle in transaction"
+    return statut == "annule"
 
 
 # =============================================================================
 # EXECUTION DU CONTENEUR (§7.7, §8.7)
 # =============================================================================
-def executer_conteneur(id_job, type_job, payload, mot_de_passe, repertoire_resultats, chemin_journal):
+def executer_conteneur(conn, id_job, type_job, payload, mot_de_passe, repertoire_resultats, chemin_journal):
     delai_minutes = int(lire_parametre("duree_max_job_minutes", "30"))
     cpu_max = lire_parametre("cpu_max_conteneur_vcpu", "2")
     ram_max_mo = lire_parametre("ram_max_conteneur_mo", "4096")
@@ -173,6 +190,15 @@ def executer_conteneur(id_job, type_job, payload, mot_de_passe, repertoire_resul
             if time.monotonic() > date_limite:
                 _arreter_conteneur(nom_conteneur, processus)
                 raise DepassementDelai()
+            # §5.5 : "annulation possible tant que le job est en attente ou
+            # en cours" - un job "en_attente" n'est simplement jamais repris
+            # (_prochain_job filtre sur ce statut), mais un job déjà lancé
+            # ici doit être activement surveillé et son conteneur tué, sans
+            # quoi l'annulation ne serait qu'un affichage trompeur pendant
+            # que le traitement continuerait réellement en arrière-plan.
+            if _job_annule(conn, id_job):
+                _arreter_conteneur(nom_conteneur, processus)
+                raise AnnulationDemandee()
             time.sleep(1)
         return processus.returncode
 
@@ -254,6 +280,7 @@ def traiter_job(conn, id_job, type_job, utilisateur_id, base_id, payload):
     mot_de_passe = None
     statut_final = "erreur"
     message_erreur = None
+    message_utilisateur = None
     chemin_archive = None
 
     try:
@@ -265,18 +292,20 @@ def traiter_job(conn, id_job, type_job, utilisateur_id, base_id, payload):
             mot_de_passe = cur.fetchone()[0]
         conn.commit()
 
-        code_retour = executer_conteneur(id_job, type_job, payload, mot_de_passe, repertoire_resultats, chemin_journal)
+        code_retour = executer_conteneur(conn, id_job, type_job, payload, mot_de_passe, repertoire_resultats, chemin_journal)
         chemin_archive = empaqueter_resultats(id_job, repertoire_resultats)
 
         if code_retour == 0:
             statut_final = "termine"
         else:
             message_erreur = f"Le script s'est terminé en erreur (code {code_retour}). Voir le journal joint."
+            message_utilisateur = message_erreur  # déjà compréhensible tel quel (§5.5)
 
     except DepassementDelai:
         chemin_archive = empaqueter_resultats(id_job, repertoire_resultats)
         delai = lire_parametre("duree_max_job_minutes", "30")
         message_erreur = f"Délai maximal dépassé ({delai} min) : le script a été interrompu."
+        message_utilisateur = message_erreur  # déjà compréhensible tel quel (§5.5)
 
     except InterruptionService:
         # Arrêt du service en cours (prerm) : le job repasse en attente
@@ -289,8 +318,20 @@ def traiter_job(conn, id_job, type_job, utilisateur_id, base_id, payload):
         shutil.rmtree(repertoire_resultats, ignore_errors=True)
         return
 
+    except AnnulationDemandee:
+        # Le statut est déjà "annule" en base (posé par annuler_job() côté
+        # utilisateur, §5.5) et le garde-fou de maj_statut_job() empêche de
+        # toute façon tout écrasement ultérieur - rien à mettre à jour ici,
+        # seulement nettoyer les résultats partiels et ne pas notifier.
+        shutil.rmtree(repertoire_resultats, ignore_errors=True)
+        return
+
     except Exception as exc:  # noqa: BLE001 - un job en erreur ne doit jamais faire tomber le consommateur
+        # Chemin générique (échec de Podman lui-même, erreur disque...) :
+        # str(exc) reste un message technique brut, contrairement aux deux
+        # cas ci-dessus déjà rédigés pour un lecteur non technicien (§5.5).
         message_erreur = str(exc)
+        message_utilisateur = "Une erreur inattendue est survenue pendant l'exécution du script ; voir le journal joint pour le détail."
 
     finally:
         if mot_de_passe is not None:
@@ -303,7 +344,8 @@ def traiter_job(conn, id_job, type_job, utilisateur_id, base_id, payload):
         if os.path.exists(payload["chemin_script"]):
             os.remove(payload["chemin_script"])
 
-    marquer_statut(conn, id_job, statut_final, chemin_resultat=chemin_archive, message_erreur=message_erreur)
+    marquer_statut(conn, id_job, statut_final, chemin_resultat=chemin_archive,
+                    message_erreur=message_erreur, message_utilisateur=message_utilisateur)
 
     if email_utilisateur:
         if statut_final == "termine":
