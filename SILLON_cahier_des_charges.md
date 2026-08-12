@@ -8,8 +8,8 @@
 
 | Champ | Valeur |
 |---|---|
-| Version | 1.2 |
-| Date | 9 août 2026 |
+| Version | 1.3 |
+| Date | 12 août 2026 |
 | Statut | Avant-projet — en cours de validation |
 | Périmètre | Direction locale — hors lac de données national |
 | Stack technique | PostgreSQL 17, PostgREST, Nginx, DSFR — architecture sans framework applicatif lourd côté front |
@@ -436,6 +436,7 @@ L'application est distribuée sous forme de paquets Debian indépendants, pour p
 | `sillon-orchestrateur` | Composant serveur central | `sillon-server`, `python3`, `python3-venv`, `gunicorn` | Service responsable de la création des bases, de la file d'attente et de l'envoi des notifications |
 | `sillon-worker` | Exécution des jobs | `sillon-orchestrateur`, un moteur de conteneurisation (`podman` ou `docker.io`) | Service consommant la file d'attente, responsable du lancement des conteneurs éphémères et de l'application des quotas cgroups |
 | `sillon-image-execution` | Environnement d'exécution des scripts | `sillon-worker` | Image de base figée contenant l'environnement Python et R validé (§8.7) ; paquet séparé pour permettre sa mise à jour indépendamment du reste de l'application |
+| `sillon-tutoriel` | **Optionnel** — démonstration et formation (§12.7) | `sillon-image-execution` | Compte de démonstration, jeu de données réel, tutoriel PDF et corrigés d'exercices ; jamais installé sur un déploiement de production |
 
 ### 12.3 Comportement d'installation
 
@@ -457,7 +458,16 @@ L'application est distribuée sous forme de paquets Debian indépendants, pour p
 ### 12.6 Désinstallation
 
 - Une désinstallation standard (`apt remove`) arrête les services et retire les binaires, en conservant les bases de données et les fichiers de configuration.
-- Une désinstallation complète (`apt purge`) supprime en plus la configuration, mais ne supprime jamais les bases de données sans confirmation explicite et distincte — la perte de données de la direction ne doit jamais être un effet de bord d'une commande de désinstallation de paquet.
+- Une désinstallation complète (`apt purge`) supprime en plus la configuration, mais ne supprime jamais les bases de travail créées par les agents (§4.4) sans confirmation explicite et distincte — la perte de données de la direction ne doit jamais être un effet de bord d'une commande de désinstallation de paquet.
+- Cas particulier de `sillon-tutoriel` (§12.7) : n'ayant par nature aucune donnée de la direction à protéger, sa désinstallation complète supprime intégralement le compte de démonstration, sa base et les documents publiés — comportement volontairement plus radical que le reste du paquet applicatif.
+
+### 12.7 Compte de démonstration et formation (`sillon-tutoriel`)
+
+- Un paquet séparé et entièrement optionnel — jamais installé automatiquement avec le socle applicatif, jamais destiné à un déploiement de production — outille une VM de démonstration ou de formation.
+- Il crée un compte de démonstration (profil agent, §3) dont le mot de passe est **volontairement fixe et documenté**, seule dérogation assumée à la règle du §12.3 (secrets générés aléatoirement) : justifiée par l'usage pédagogique visé (communication facile d'un identifiant de démonstration), et rendue acceptable par le caractère strictement optionnel et non-production du paquet — jamais de compte à mot de passe connu sur un serveur exposé.
+- Il importe un jeu de données réel et ouvert (communes et départements de France — source data.gouv.fr, INSEE, IGN, Licence Ouverte 2.0), avec des requêtes SQL et des scripts Python/R d'exemple déjà exécutés à l'installation.
+- Il fournit un tutoriel au format PDF (exercices SQL en difficulté croissante, puis formation avancée aux possibilités du contrat d'exécution des scripts §5.4/§8.7 : types de graphiques, tableaux et export Excel, rapports PDF multi-pages, cartographie), ainsi que les corrigés correspondants sous forme de scripts réellement fonctionnels et téléchargeables (pas de simples extraits de code).
+- Le tutoriel et ses corrigés ne sont accessibles, depuis la modale « À propos » de l'application, que lorsque le compte connecté est le compte de démonstration lui-même — jamais pour un compte réel de la direction.
 
 ---
 
@@ -492,6 +502,7 @@ L'application est distribuée sous forme de paquets Debian indépendants, pour p
 - **Partage** : autorisation donnée par un agent à un autre utilisateur d'interroger sa base (lecture seule par défaut, exécution de script en option distincte).
 - **Job** : unité de traitement asynchrone (import, requête longue, script, création/suppression de base) suivie dans la file d'attente.
 - **Orchestrateur** : composant applicatif responsable de la création des bases, de la file d'attente et de l'exécution isolée des scripts.
+- **Compte de démonstration** : compte utilisateur (profil agent) créé par le paquet optionnel `sillon-tutoriel` (§12.7), à mot de passe fixe et documenté, réservé aux VM de démonstration et de formation — jamais présent sur un déploiement de production.
 
 ### 15.2 Points de vigilance à confirmer avant le développement
 
