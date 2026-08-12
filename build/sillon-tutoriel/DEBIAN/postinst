@@ -1,0 +1,77 @@
+#!/bin/bash
+set -e
+
+echo "=== Installation de SILLON (sillon-tutoriel) ==="
+
+DEMO_EMAIL="demo@sillon.local"
+DEMO_PASSWORD="demo"
+DEMO_NOM="Compte de démonstration"
+DB_NAME="sillon_catalog"
+PDF_SOURCE="/usr/share/doc/sillon-tutoriel/Tutoriel SILLON.pdf"
+PDF_CIBLE="/var/www/html/SILLON/Documentation/Tutoriel SILLON.pdf"
+
+if [ ! -f /etc/sillon/secrets.env ]; then
+    echo "ERREUR : sillon-server doit être installé et configuré au préalable." >&2
+    exit 1
+fi
+
+# =====================================================================
+# 1. COMPTE DE DEMONSTRATION (§7.2 du guide d'installation)
+# =====================================================================
+# Mot de passe fixe et documenté, jamais généré aléatoirement contrairement
+# au compte administrateur (§12.3) : c'est précisément pour ça que ce
+# paquet est séparé et optionnel, jamais installé automatiquement avec le
+# socle applicatif.
+DEJA_PRESENT=$(sudo -u postgres psql -d "$DB_NAME" -tAc \
+    "SELECT 1 FROM public.utilisateurs WHERE email = '$DEMO_EMAIL'")
+
+if [ "$DEJA_PRESENT" = "1" ]; then
+    echo "Compte $DEMO_EMAIL déjà présent - réutilisé tel quel."
+else
+    echo "Création du compte $DEMO_EMAIL (profil agent)..."
+    # Connecté en tant que superutilisateur postgres : les vérifications de
+    # droits (REVOKE ... FROM PUBLIC, §8.4) ne s'appliquent jamais à lui,
+    # inutile de faire un "SET ROLE administrateur" au préalable.
+    sudo -u postgres psql -d "$DB_NAME" -c \
+        "SELECT public.creer_utilisateur('$DEMO_EMAIL', '$DEMO_PASSWORD', '$DEMO_NOM', 'agent');" \
+        >/dev/null
+fi
+
+# =====================================================================
+# 2. JETON DU COMPTE DEMO, SANS PASSER PAR /api/rpc/login
+# =====================================================================
+# Ce script tourne en root, sans jamais avoir accès au mot de passe
+# administrateur (généré aléatoirement une seule fois, jamais stocké en
+# clair, §12.3) : impossible de s'authentifier via l'API comme le ferait
+# outils/peupler_demo.py. auth.sign_jwt() est le même mécanisme que
+# public.login() (schema.sql) - un jeton signé directement ici est donc
+# strictement équivalent à celui qu'aurait obtenu un vrai login.
+JETON=$(sudo -u postgres psql -d "$DB_NAME" -tAc "
+    SELECT auth.sign_jwt(
+        json_build_object(
+            'role', u.role_pg, 'profil', u.profil, 'user_id', u.id, 'email', u.email,
+            'exp', extract(epoch from now())::integer + 3600
+        ),
+        (SELECT valeur FROM auth.secrets WHERE cle = 'jwt_secret')
+    )
+    FROM public.utilisateurs u WHERE u.email = '$DEMO_EMAIL';
+")
+
+# =====================================================================
+# 3. IMPORT DU JEU DE DONNEES, REQUETES ET SCRIPTS D'EXEMPLE
+# =====================================================================
+echo "Peuplement du compte de démonstration (import du jeu de données, requêtes, scripts)..."
+python3 /usr/share/sillon-tutoriel/peupler_tutoriel.py --url https://localhost --jeton "$JETON"
+
+# =====================================================================
+# 4. TUTORIEL PDF, PUBLIE AUX COTES DE LA DOCUMENTATION EXISTANTE
+# =====================================================================
+if [ -f "$PDF_SOURCE" ] && [ -d /var/www/html/SILLON/Documentation ]; then
+    install -o root -g www-data -m 644 "$PDF_SOURCE" "$PDF_CIBLE"
+fi
+
+echo ""
+echo "=== Installation de SILLON (sillon-tutoriel) terminée ==="
+echo "Compte de démonstration : $DEMO_EMAIL / $DEMO_PASSWORD"
+echo "Tutoriel PDF disponible dans /usr/share/doc/sillon-tutoriel/ et sur https://<serveur>/Documentation/"
+exit 0

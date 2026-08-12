@@ -1,0 +1,15 @@
+Package: sillon-tutoriel
+Version: 0.1.0
+Architecture: all
+Maintainer: Administrateur SILLON <admin@sillon.local>
+Depends: sillon-server, sillon-orchestrateur, sillon-worker, sillon-image-execution, python3
+Section: web
+Priority: optional
+Description: SILLON - Tutoriel et jeu de donnees de demonstration.
+ Paquet optionnel, a installer uniquement sur une VM de demonstration ou
+ de formation (jamais en production - voir le guide d'installation
+ administrateur, §7.2). Cree un compte "demo" (mot de passe fixe et
+ documente), importe un jeu de donnees reel (communes et regions de
+ France, source data.gouv.fr/INSEE/IGN, Licence Ouverte 2.0), et fournit
+ un tutoriel PDF complet avec exercices SQL progressifs et une formation
+ avancee Python/R sur ce jeu de donnees.

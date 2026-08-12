@@ -1,0 +1,61 @@
+#!/bin/bash
+set -e
+
+DEMO_EMAIL="demo@sillon.local"
+DB_NAME="sillon_catalog"
+PDF_CIBLE="/var/www/html/SILLON/Documentation/Tutoriel SILLON.pdf"
+
+case "$1" in
+    remove)
+        # Le compte demo et ses données restent (cohérent avec le reste de
+        # SILLON, §12.6) : "remove" retire le paquet, jamais les données -
+        # seul "purge" va jusque là.
+        ;;
+
+    purge)
+        rm -f "$PDF_CIBLE"
+
+        if command -v psql >/dev/null 2>&1 && sudo -u postgres psql -tAc \
+            "SELECT 1 FROM pg_database WHERE datname = '$DB_NAME'" 2>/dev/null | grep -q 1; then
+
+            echo "Suppression du compte de démonstration et de sa base..." >&2
+
+            NOM_BASE_PG=$(sudo -u postgres psql -d "$DB_NAME" -tAc \
+                "SELECT b.nom_pg FROM public.bases b JOIN public.utilisateurs u ON u.id = b.proprietaire_id WHERE u.email = '$DEMO_EMAIL'" 2>/dev/null || true)
+            ROLE_PG=$(sudo -u postgres psql -d "$DB_NAME" -tAc \
+                "SELECT role_pg FROM public.utilisateurs WHERE email = '$DEMO_EMAIL'" 2>/dev/null || true)
+
+            # Ordre imposé par les clés étrangères (aucune n'a de ON DELETE
+            # CASCADE vers utilisateurs, volontairement - §8.12, un
+            # historique ne doit jamais disparaître par effet de bord) :
+            # tout ce qui référence le compte demo doit être effacé avant
+            # la ligne utilisateurs elle-même.
+            sudo -u postgres psql -d "$DB_NAME" -v ON_ERROR_STOP=1 >/dev/null <<SQL || \
+                echo "AVERTISSEMENT : nettoyage du catalogue pour $DEMO_EMAIL incomplet." >&2
+BEGIN;
+DELETE FROM public.partages WHERE beneficiaire_id = (SELECT id FROM public.utilisateurs WHERE email = '$DEMO_EMAIL')
+    OR accorde_par_id = (SELECT id FROM public.utilisateurs WHERE email = '$DEMO_EMAIL');
+DELETE FROM public.jobs WHERE utilisateur_id = (SELECT id FROM public.utilisateurs WHERE email = '$DEMO_EMAIL');
+DELETE FROM public.requetes_historique WHERE utilisateur_id = (SELECT id FROM public.utilisateurs WHERE email = '$DEMO_EMAIL');
+DELETE FROM public.requetes_enregistrees WHERE utilisateur_id = (SELECT id FROM public.utilisateurs WHERE email = '$DEMO_EMAIL');
+DELETE FROM public.bases WHERE proprietaire_id = (SELECT id FROM public.utilisateurs WHERE email = '$DEMO_EMAIL');
+DELETE FROM public.utilisateurs WHERE email = '$DEMO_EMAIL';
+COMMIT;
+SQL
+
+            if [ -n "$NOM_BASE_PG" ]; then
+                sudo -u postgres dropdb --if-exists "$NOM_BASE_PG" \
+                    || echo "AVERTISSEMENT : base $NOM_BASE_PG non supprimée." >&2
+            fi
+            if [ -n "$ROLE_PG" ]; then
+                sudo -u postgres psql -c "DROP ROLE IF EXISTS \"$ROLE_PG\";" >/dev/null \
+                    || echo "AVERTISSEMENT : rôle $ROLE_PG non supprimé (probablement encore titulaire de privilèges)." >&2
+            fi
+        fi
+        ;;
+
+    upgrade|failed-upgrade|abort-install|abort-upgrade|disappear)
+        ;;
+esac
+
+exit 0

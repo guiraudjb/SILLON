@@ -1,0 +1,19 @@
+reg_code,reg_nom,chef_lieu_nom,chef_lieu_code_insee
+01,Guadeloupe,Basse-Terre,97105
+02,Martinique,Fort-de-France,97209
+03,Guyane,Cayenne,97302
+04,La Réunion,Saint-Denis,97411
+06,Mayotte,Mamoudzou,97611
+11,Île-de-France,Paris,75056
+24,Centre-Val de Loire,Orléans,45234
+27,Bourgogne-Franche-Comté,Dijon,21231
+28,Normandie,Rouen,76540
+32,Hauts-de-France,Lille,59350
+44,Grand Est,Strasbourg,67482
+52,Pays de la Loire,Nantes,44109
+53,Bretagne,Rennes,35238
+75,Nouvelle-Aquitaine,Bordeaux,33063
+76,Occitanie,Toulouse,31555
+84,Auvergne-Rhône-Alpes,Lyon,69123
+93,Provence-Alpes-Côte d'Azur,Marseille,13055
+94,Corse,Ajaccio,2A004

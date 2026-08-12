@@ -31,6 +31,7 @@ Les dépendances sont déclarées dans chaque paquet SILLON et installées autom
 | `sillon-orchestrateur` | Création/suppression des bases, SQL libre, import CSV, partage, file d'attente | `sillon-server` |
 | `sillon-worker` | Consommation de la file, lancement des conteneurs d'exécution de scripts | `sillon-orchestrateur` |
 | `sillon-image-execution` | Image figée (Python/R) utilisée pour l'exécution des scripts | `sillon-worker` |
+| `sillon-tutoriel` *(optionnel)* | Compte de démonstration, jeu de données réel et tutoriel PDF — VM de démo/formation uniquement, voir §7.2 | `sillon-image-execution` |
 
 **L'ordre d'installation ci-dessus est obligatoire** : chaque paquet vérifie au `postinst` que le précédent est déjà configuré (présence de `/etc/sillon/secrets.env`, service actif) et refuse de s'installer sinon.
 
@@ -40,7 +41,7 @@ Les dépendances sont déclarées dans chaque paquet SILLON et installées autom
 
 Deux cas de figure :
 
-- **Paquets déjà construits** : le dossier `build/` du dépôt contient les `.deb` prêts à l'emploi (`sillon-server_0.1.0_amd64.deb`, `sillon-orchestrateur_0.1.0_all.deb`, `sillon-worker_0.1.0_all.deb`, `sillon-image-execution_0.1.0_amd64.deb`). C'est le cas le plus courant : passer directement à l'étape 4.
+- **Paquets déjà construits** : le dossier `build/` du dépôt contient les `.deb` prêts à l'emploi (`sillon-server_0.1.0_amd64.deb`, `sillon-orchestrateur_0.1.0_all.deb`, `sillon-worker_0.1.0_all.deb`, `sillon-image-execution_0.1.0_amd64.deb`, et `sillon-tutoriel_0.1.0_all.deb` — optionnel, §7.2). C'est le cas le plus courant : passer directement à l'étape 4.
 - **Reconstruction nécessaire** (nouvelle version, modification du code applicatif) : depuis une machine **ayant accès à internet** (le binaire PostgREST et l'image d'exécution sont téléchargés/construits à cette étape, pas sur la cible) :
 
   ```bash
@@ -76,6 +77,12 @@ sudo apt-get install -f    # résout les dépendances manquantes si besoin
 sudo dpkg -i sillon-orchestrateur_0.1.0_all.deb
 sudo dpkg -i sillon-worker_0.1.0_all.deb
 sudo dpkg -i sillon-image-execution_0.1.0_amd64.deb
+```
+
+Sur une VM de démonstration ou de formation uniquement, un cinquième paquet optionnel peut ensuite être installé (§7.2) :
+
+```bash
+sudo dpkg -i sillon-tutoriel_0.1.0_all.deb    # jamais sur un déploiement de production
 ```
 
 ### Ce que fait chaque `postinst`, en résumé
@@ -146,19 +153,19 @@ Environment=SILLON_URL=https://sillon.exemple-direction.fr
 
 Puis `systemctl restart sillon-orchestrateur`. Un échec d'envoi de notification est journalisé (`journalctl -u sillon-orchestrateur`) mais ne bloque jamais le traitement lui-même.
 
-### 7.2 Compte de démonstration
+### 7.2 Compte de démonstration et tutoriel
 
-Pour une VM de démonstration ou de formation, le dépôt fournit un script autonome — `outils/peupler_demo.py`, jamais exécuté par les paquets eux-mêmes — qui crée (ou réutilise s'il existe déjà) un compte `demo@sillon.local` de profil agent, avec :
+Deux façons de peupler un compte de démonstration, **jamais installées automatiquement avec le socle applicatif** — jamais sur un serveur de production :
 
-- sa base personnelle, contenant un jeu de données fictif (`communes_exemple`) déjà importé ;
-- trois requêtes SQL d'exemple, déjà présentes dans son historique ;
-- un script Python et un script R d'exemple, réellement exécutés via la file d'attente — leurs résultats sont déjà téléchargeables dès le premier login du compte demo.
+- **`sillon-tutoriel`** (recommandé pour une VM de démonstration/formation) : cinquième paquet `.deb`, optionnel, à installer après les quatre autres (`sudo dpkg -i sillon-tutoriel_0.1.0_all.deb`). Son `postinst` crée (ou réutilise) le compte `demo@sillon.local` / `demo` (profil agent) et importe un **jeu de données réel** : les 34 868 communes de France et leurs 18 régions (source [data.gouv.fr](https://www.data.gouv.fr/), INSEE/IGN, Licence Ouverte 2.0), avec des requêtes d'exemple déjà dans l'historique et deux scripts Python/R déjà exécutés. Fournit en plus un **tutoriel PDF complet** (exercices SQL en difficulté croissante, puis formation avancée Python et R), installé dans `/usr/share/doc/sillon-tutoriel/` et publié aux côtés de la documentation existante sur `https://<serveur>/Documentation/`. `sudo apt-get purge sillon-tutoriel` supprime intégralement le compte demo, sa base et le PDF publié ; une réinstallation repart proprement à zéro.
 
-```bash
-python3 outils/peupler_demo.py --url https://<adresse-du-serveur> --admin-password '<mot de passe administrateur>'
-```
+- **`outils/peupler_demo.py`** (script autonome, hors paquet) : alternative plus légère pour un jeu de données fictif (`communes_exemple`), sans tutoriel PDF :
 
-Le mot de passe du compte demo est **fixe et documenté** (`demo` par défaut, modifiable avec `--demo-password`) — pratique pour une démonstration, mais à ne jamais laisser sur une VM exposée ou de production : c'est précisément pour cette raison que ce peuplement n'est jamais déclenché automatiquement par un `apt install`, contrairement au compte administrateur (mot de passe généré aléatoirement, §5). Voir `python3 outils/peupler_demo.py --help` pour les options (URL, identifiants, certificat TLS).
+  ```bash
+  python3 outils/peupler_demo.py --url https://<adresse-du-serveur> --admin-password '<mot de passe administrateur>'
+  ```
+
+Dans les deux cas, le mot de passe du compte demo est **fixe et documenté** (`demo`) — pratique pour une démonstration, mais à ne jamais laisser sur une VM exposée ou de production, contrairement au compte administrateur (mot de passe généré aléatoirement, §5).
 
 ### 7.3 Quotas et paramètres applicatifs
 
@@ -205,6 +212,12 @@ Dans les deux cas, **les bases de travail créées par les agents** (§4.4 du ca
 ```bash
 sudo -u postgres psql -c "\l" | grep sillon_
 sudo -u postgres dropdb <nom_de_la_base>
+```
+
+**Cas particulier de `sillon-tutoriel`** : contrairement aux quatre autres paquets, son `purge` supprime intégralement le compte `demo@sillon.local`, sa base et le PDF publié — c'est un compte de démonstration jetable, pas une donnée d'agent réel, la même prudence ne s'applique pas.
+
+```bash
+sudo apt-get purge sillon-tutoriel
 ```
 
 Rappel : aucun mécanisme de sauvegarde n'est porté par l'application — la protection contre la perte de données relève de l'infrastructure d'hébergement de la direction.
