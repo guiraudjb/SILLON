@@ -4,6 +4,23 @@ set -e
 DEMO_EMAIL="demo@sillon.local"
 DB_NAME="sillon_catalog"
 PDF_CIBLE="/var/www/html/SILLON/Documentation/Tutoriel SILLON.pdf"
+CORRIGES_CIBLE="/var/www/html/SILLON/Documentation/corriges-tutoriel.zip"
+
+# Reproduit auth.nom_role_personnel() (schema.sql) sans dépendre de
+# l'existence de sillon_catalog : dpkg ne garantit aucun ordre de purge
+# entre paquets indépendants (seul l'ordre d'*installation* est imposé par
+# Depends) - constaté en pratique, un "apt purge" simultané de tous les
+# paquets SILLON a purgé sillon-server (qui supprime sillon_catalog) avant
+# sillon-tutoriel, empêchant ce dernier de retrouver le rôle/la base du
+# compte demo par une simple requête SQL et laissant un rôle orphelin
+# titulaire de la base physique. Le nom étant entièrement déterministe à
+# partir de l'e-mail fixe du compte demo, il est recalculé ici directement
+# plutôt que lu en base, quel que soit l'état du catalogue au moment du
+# purge.
+PARTIE_LOCALE=$(printf '%s' "${DEMO_EMAIL%@*}" | tr 'A-Z' 'a-z' | sed 's/[^a-z0-9_]/_/g' | cut -c1-40)
+SUFFIXE=$(printf '%s' "$DEMO_EMAIL" | md5sum | cut -c1-6)
+ROLE_PG="u_${PARTIE_LOCALE}_${SUFFIXE}"
+NOM_BASE_PG="sillon_${ROLE_PG}"
 
 case "$1" in
     remove)
@@ -13,25 +30,25 @@ case "$1" in
         ;;
 
     purge)
-        rm -f "$PDF_CIBLE"
+        rm -f "$PDF_CIBLE" "$CORRIGES_CIBLE"
 
-        if command -v psql >/dev/null 2>&1 && sudo -u postgres psql -tAc \
-            "SELECT 1 FROM pg_database WHERE datname = '$DB_NAME'" 2>/dev/null | grep -q 1; then
+        if command -v psql >/dev/null 2>&1; then
+            # Nettoyage des lignes du catalogue (historique, jobs...)
+            # seulement s'il existe encore - s'il a déjà disparu
+            # (sillon-server purgé en premier), il n'y a de toute façon
+            # plus rien à y effacer.
+            if sudo -u postgres psql -tAc \
+                "SELECT 1 FROM pg_database WHERE datname = '$DB_NAME'" 2>/dev/null | grep -q 1; then
 
-            echo "Suppression du compte de démonstration et de sa base..." >&2
+                echo "Suppression du compte de démonstration du catalogue..." >&2
 
-            NOM_BASE_PG=$(sudo -u postgres psql -d "$DB_NAME" -tAc \
-                "SELECT b.nom_pg FROM public.bases b JOIN public.utilisateurs u ON u.id = b.proprietaire_id WHERE u.email = '$DEMO_EMAIL'" 2>/dev/null || true)
-            ROLE_PG=$(sudo -u postgres psql -d "$DB_NAME" -tAc \
-                "SELECT role_pg FROM public.utilisateurs WHERE email = '$DEMO_EMAIL'" 2>/dev/null || true)
-
-            # Ordre imposé par les clés étrangères (aucune n'a de ON DELETE
-            # CASCADE vers utilisateurs, volontairement - §8.12, un
-            # historique ne doit jamais disparaître par effet de bord) :
-            # tout ce qui référence le compte demo doit être effacé avant
-            # la ligne utilisateurs elle-même.
-            sudo -u postgres psql -d "$DB_NAME" -v ON_ERROR_STOP=1 >/dev/null <<SQL || \
-                echo "AVERTISSEMENT : nettoyage du catalogue pour $DEMO_EMAIL incomplet." >&2
+                # Ordre imposé par les clés étrangères (aucune n'a de ON
+                # DELETE CASCADE vers utilisateurs, volontairement - §8.12,
+                # un historique ne doit jamais disparaître par effet de
+                # bord) : tout ce qui référence le compte demo doit être
+                # effacé avant la ligne utilisateurs elle-même.
+                sudo -u postgres psql -d "$DB_NAME" -v ON_ERROR_STOP=1 >/dev/null <<SQL || \
+                    echo "AVERTISSEMENT : nettoyage du catalogue pour $DEMO_EMAIL incomplet." >&2
 BEGIN;
 DELETE FROM public.partages WHERE beneficiaire_id = (SELECT id FROM public.utilisateurs WHERE email = '$DEMO_EMAIL')
     OR accorde_par_id = (SELECT id FROM public.utilisateurs WHERE email = '$DEMO_EMAIL');
@@ -42,15 +59,18 @@ DELETE FROM public.bases WHERE proprietaire_id = (SELECT id FROM public.utilisat
 DELETE FROM public.utilisateurs WHERE email = '$DEMO_EMAIL';
 COMMIT;
 SQL
+            fi
 
-            if [ -n "$NOM_BASE_PG" ]; then
-                sudo -u postgres dropdb --if-exists "$NOM_BASE_PG" \
-                    || echo "AVERTISSEMENT : base $NOM_BASE_PG non supprimée." >&2
-            fi
-            if [ -n "$ROLE_PG" ]; then
-                sudo -u postgres psql -c "DROP ROLE IF EXISTS \"$ROLE_PG\";" >/dev/null \
-                    || echo "AVERTISSEMENT : rôle $ROLE_PG non supprimé (probablement encore titulaire de privilèges)." >&2
-            fi
+            # Base physique et rôle : toujours tentés, que le catalogue
+            # existe encore ou non au moment du purge (cf. note en tête de
+            # fichier) - noms recalculés, jamais lus en base. "|| true"
+            # explicite (dropdb/DROP ROLE ne trouvent simplement rien à
+            # faire si le compte demo n'a jamais été peuplé avec succès).
+            echo "Suppression de la base et du rôle du compte de démonstration..." >&2
+            sudo -u postgres dropdb --if-exists "$NOM_BASE_PG" \
+                || echo "AVERTISSEMENT : base $NOM_BASE_PG non supprimée." >&2
+            sudo -u postgres psql -c "DROP ROLE IF EXISTS \"$ROLE_PG\";" >/dev/null \
+                || echo "AVERTISSEMENT : rôle $ROLE_PG non supprimé (probablement encore titulaire de privilèges)." >&2
         fi
         ;;
 

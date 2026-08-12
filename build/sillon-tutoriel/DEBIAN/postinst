@@ -70,8 +70,30 @@ if [ -f "$PDF_SOURCE" ] && [ -d /var/www/html/SILLON/Documentation ]; then
     install -o root -g www-data -m 644 "$PDF_SOURCE" "$PDF_CIBLE"
 fi
 
+# =====================================================================
+# 5. CORRIGES DES EXERCICES, EMPAQUETES EN ARCHIVE TELECHARGEABLE
+# =====================================================================
+# python3 zipfile plutôt que la commande "zip" (§12 - pas de dépendance
+# supplémentaire à déclarer pour ce seul usage, python3 est déjà requis).
+CORRIGES_SOURCE="/usr/share/sillon-tutoriel/corriges"
+CORRIGES_CIBLE="/var/www/html/SILLON/Documentation/corriges-tutoriel.zip"
+if [ -d "$CORRIGES_SOURCE" ] && [ -d /var/www/html/SILLON/Documentation ]; then
+    python3 -c "
+import zipfile, os
+source = '$CORRIGES_SOURCE'
+with zipfile.ZipFile('$CORRIGES_CIBLE', 'w', zipfile.ZIP_DEFLATED) as archive:
+    for racine, _dirs, fichiers in os.walk(source):
+        for nom in fichiers:
+            chemin = os.path.join(racine, nom)
+            archive.write(chemin, os.path.relpath(chemin, source))
+"
+    chown root:www-data "$CORRIGES_CIBLE"
+    chmod 644 "$CORRIGES_CIBLE"
+fi
+
 echo ""
 echo "=== Installation de SILLON (sillon-tutoriel) terminée ==="
 echo "Compte de démonstration : $DEMO_EMAIL / $DEMO_PASSWORD"
-echo "Tutoriel PDF disponible dans /usr/share/doc/sillon-tutoriel/ et sur https://<serveur>/Documentation/"
+echo "Tutoriel PDF et corrigés disponibles dans /usr/share/sillon-tutoriel/ et sur https://<serveur>/Documentation/"
+echo "(visibles depuis la modale « À propos » uniquement lorsque connecté avec ce compte)"
 exit 0

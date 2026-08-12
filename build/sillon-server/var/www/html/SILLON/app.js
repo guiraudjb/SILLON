@@ -146,6 +146,11 @@ const Auth = {
         document.getElementById("zone-utilisateur").hidden = false;
         document.getElementById("libelle-utilisateur").textContent = `${Etat.utilisateur.email} (${Etat.utilisateur.profil})`;
         document.getElementById("onglet-nav-administration").hidden = Etat.utilisateur.profil !== "administrateur";
+        // Section "Formation" de la modale "À propos" (guide + corrigés) :
+        // uniquement pour le compte de démonstration du paquet optionnel
+        // sillon-tutoriel - ces liens 404 si ce paquet n'est pas installé,
+        // jamais montrés à un compte réel dans ce cas.
+        document.getElementById("modal-about-formation").hidden = Etat.utilisateur.email !== "demo@sillon.local";
 
         Bases.charger();
         Suivi.rafraichir();
