@@ -50,19 +50,38 @@ REQUETES_EXEMPLE = [
     "ORDER BY c.population DESC",
 ]
 
-SCRIPTS_EXEMPLE = ["analyse_demographie.py", "analyse_densite.R"]
+SCRIPTS_EXEMPLE = ["analyse_demographie.py", "analyse_densite.R", "carte_departements.py", "carte_departements.R"]
+
+TABLES = [
+    ("communes_france.csv", "communes_france"),
+    ("regions_france.csv", "regions_france"),
+    # Contours départementaux réels (source IGN ADMIN EXPRESS, Licence
+    # Ouverte 2.0), aplatis en points ordonnés (dep_code, groupe, ordre,
+    # longitude, latitude) : pas de format géospatial (GeoJSON...) en base,
+    # ni Python ni R n'ont de librairie dédiée dans l'image d'exécution
+    # (§7.7) - un simple CSV de points reste lisible en SQL basique et
+    # suffit à reconstituer chaque polygone (cf. carte_departements.py/.R).
+    ("contours_departements.csv", "contours_departements"),
+]
 
 # La détection automatique de type (suggerer_type(), orchestrateur.py)
-# n'échantillonne que les 50 premières lignes de l'aperçu (§5.1) : pour
-# "code_insee", toutes numériques dans cet échantillon (département 01),
-# elle suggère "Entier" - qui échoue plus loin dans le fichier complet, en
-# Corse ("2A001", "2B033"...), constaté en pratique ("syntaxe en entrée
-# invalide pour le type bigint"). Un identifiant reste de toute façon un
-# Texte par nature (un "Entier" perdrait aussi les zéros de tête, ex.
-# "01001" -> 1001) : ces colonnes sont donc forcées, jamais laissées à la
-# suggestion automatique.
+# n'échantillonne que les 50 premières lignes de l'aperçu (§5.1), jamais
+# le fichier entier - deux angles morts constatés en pratique sur ce jeu
+# de données précis :
+#  - "code_insee"/"dep_code" : entièrement numériques dans l'échantillon
+#    (département 01), donc suggérés "Entier" - qui échoue plus loin dans
+#    le fichier complet, en Corse ("2A001", "2B033"...). Un identifiant
+#    reste de toute façon un Texte par nature (un "Entier" perdrait aussi
+#    les zéros de tête, ex. "01001" -> 1001).
+#  - "groupe"/"ordre" (contours_departements) : le premier département
+#    (Ain, un seul anneau, largement plus de 50 points) remplit tout
+#    l'échantillon avec "groupe" = "1" - qui coche la case "ressemble à
+#    un booléen" du détecteur (valeurs dans vrai/faux/true/false/0/1),
+#    avant même que "Entier" ne soit envisagé.
+# Aucune de ces colonnes n'est donc laissée à la suggestion automatique.
 TYPES_FORCES = {
     "code_insee": "Texte", "dep_code": "Texte", "reg_code": "Texte", "chef_lieu_code_insee": "Texte",
+    "groupe": "Entier", "ordre": "Entier",
 }
 
 
@@ -175,12 +194,14 @@ def main():
 
     client = Client(args.url, args.jeton, contexte)
 
-    print("Import du jeu de données réel (communes et régions de France, data.gouv.fr)...")
+    print("Import du jeu de données réel (communes, régions et contours départementaux)...")
     base = base_personnelle(client)
     base_id = base["id"] if base else None
-    importer_table(client, "communes_france.csv", "communes_france", base_id)
-    base = base_personnelle(client)
-    importer_table(client, "regions_france.csv", "regions_france", base["id"])
+    for nom_fichier, nom_table in TABLES:
+        importer_table(client, nom_fichier, nom_table, base_id)
+        if not base_id:
+            base_id = base_personnelle(client)["id"]
+    base = {"id": base_id}
 
     print("Exécution des requêtes d'exemple (historique)...")
     for requete in REQUETES_EXEMPLE:
