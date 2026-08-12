@@ -1,0 +1,18 @@
+#!/bin/bash
+set -e
+
+# Ce paquet ne crée ni le compte de démonstration ni sa base (sillon-
+# tutoriel s'en charge) : sirene_etablissements n'est qu'une table de plus
+# dans cette base, déjà supprimée intégralement par le postrm de
+# sillon-tutoriel (DROP DATABASE) quel que soit l'ordre de purge entre les
+# deux paquets. Il ne reste donc à nettoyer ici que le répertoire de
+# travail temporaire (téléchargement/réduction du CSV Sirene).
+REPERTOIRE_TRAVAIL="/var/lib/sillon-demo-sirene"
+
+case "$1" in
+    purge)
+        rm -rf "$REPERTOIRE_TRAVAIL"
+        ;;
+esac
+
+exit 0

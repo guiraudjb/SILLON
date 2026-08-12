@@ -1,0 +1,23 @@
+Package: sillon-demo-sirene
+Version: 0.1.0
+Architecture: all
+Maintainer: Administrateur SILLON <admin@sillon.local>
+Depends: sillon-tutoriel, python3
+Section: web
+Priority: optional
+Description: SILLON - Jeu de donnees Sirene massif pour demonstration a l'echelle.
+ Paquet optionnel, complementaire de sillon-tutoriel (meme compte de
+ demonstration, jamais installe en production - voir le guide
+ d'installation administrateur). Telecharge a l'installation le fichier
+ Sirene "StockEtablissement" complet (INSEE, Licence Ouverte 2.0,
+ data.gouv.fr, environ 43,9 millions de lignes / 2,86 Go compresse),
+ l'importe dans la base du compte demo via l'API d'import existante, et
+ depose un jeu de scripts Python et R demontrant chacune des possibilites
+ offertes par les bibliotheques disponibles dans l'environnement
+ d'execution a cette echelle (types de graphiques, tableaux, export Excel,
+ rapports PDF multi-pages, cartographie, diagrammes Mermaid).
+ .
+ Necessite un acces Internet reel sur la machine cible au moment de
+ l'installation (derogation documentee au principe general "aucun acces
+ reseau hors proxy Debian" - jamais vrai en production, uniquement sur une
+ VM de demonstration ou de formation).

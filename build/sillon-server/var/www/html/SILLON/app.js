@@ -237,6 +237,7 @@ document.addEventListener("DOMContentLoaded", () => {
     Modales.init();
     Import.initGlisserDeposer();
     Auth.chargerSession();
+    mermaid.initialize({ startOnLoad: false });
 });
 
 // =============================================================================
@@ -1087,10 +1088,12 @@ const Suivi = {
                 <td>
                     ${["en_attente", "en_cours"].includes(job.statut) ? `<button class="fr-btn fr-btn--sm fr-btn--tertiary-no-outline fr-icon-close-line" onclick="Suivi.annuler(${job.id})">Annuler</button>` : ""}
                     ${estScript(job.type) && job.statut !== "annule" ? `<button class="fr-btn fr-btn--sm fr-btn--tertiary-no-outline fr-icon-file-text-line" onclick="Suivi.afficherJournal(${job.id})">Journal</button>` : ""}
+                    ${estScript(job.type) && job.statut === "termine" ? `<button class="fr-btn fr-btn--sm fr-btn--tertiary-no-outline fr-icon-flow-chart" onclick="Suivi.afficherApercus(${job.id})">Diagrammes</button>` : ""}
                     ${job.statut === "termine" && job.chemin_resultat ? `<a class="fr-btn fr-btn--sm fr-btn--tertiary-no-outline fr-icon-download-line" href="/orchestrateur/jobs/${job.id}/telecharger">Télécharger</a>` : ""}
                 </td>
             </tr>
-            ${estScript(job.type) ? `<tr class="ligne-journal" id="journal-${job.id}" hidden><td colspan="5"></td></tr>` : ""}`).join("")
+            ${estScript(job.type) ? `<tr class="ligne-journal" id="journal-${job.id}" hidden><td colspan="5"></td></tr>` : ""}
+            ${estScript(job.type) ? `<tr class="ligne-apercu" id="apercu-${job.id}" hidden><td colspan="5"></td></tr>` : ""}`).join("")
             || `<tr><td colspan="5">Aucun traitement pour l'instant.</td></tr>`;
     },
 
@@ -1143,6 +1146,40 @@ const Suivi = {
             cellule.innerHTML = `<div class="fr-alert fr-alert--error fr-alert--sm">${echapper(erreur.message)}</div>`;
             clearInterval(Suivi._intervallesJournal[idJob]);
             delete Suivi._intervallesJournal[idJob];
+        }
+    },
+
+    // Diagrammes Mermaid produits par un script (fichiers .mmd dans
+    // l'archive résultat, cf. orchestrateur.py /jobs/<id>/apercus) - rendu
+    // côté navigateur, le bac à sable ne pouvant pas le faire lui-même
+    // (§8.7 : pas de Node/Chromium dans sillon-image-execution).
+    async afficherApercus(idJob) {
+        const ligne = document.getElementById(`apercu-${idJob}`);
+        ligne.hidden = !ligne.hidden;
+        if (ligne.hidden) return;
+
+        const cellule = document.querySelector(`#apercu-${idJob} td`);
+        cellule.innerHTML = `<p class="fr-text--sm">Chargement…</p>`;
+        try {
+            const resultat = await appelJson(`/orchestrateur/jobs/${idJob}/apercus`);
+            if (resultat.apercus.length === 0) {
+                cellule.innerHTML = `<p class="fr-text--sm">Aucun diagramme Mermaid dans ce résultat.</p>`;
+                return;
+            }
+            cellule.innerHTML = resultat.apercus.map((_, i) =>
+                `<p class="fr-text--sm fr-mb-1w"><strong></strong></p><div class="diagramme-mermaid" id="mermaid-${idJob}-${i}"></div>`).join("");
+            for (const [i, apercu] of resultat.apercus.entries()) {
+                const conteneur = document.getElementById(`mermaid-${idJob}-${i}`);
+                conteneur.previousElementSibling.querySelector("strong").textContent = apercu.nom;
+                try {
+                    const { svg } = await mermaid.render(`svg-${idJob}-${i}`, apercu.contenu);
+                    conteneur.innerHTML = svg;
+                } catch (erreurRendu) {
+                    conteneur.innerHTML = `<div class="fr-alert fr-alert--error fr-alert--sm">Diagramme illisible : ${echapper(erreurRendu.message)}</div>`;
+                }
+            }
+        } catch (erreur) {
+            cellule.innerHTML = `<div class="fr-alert fr-alert--error fr-alert--sm">${echapper(erreur.message)}</div>`;
         }
     },
 };

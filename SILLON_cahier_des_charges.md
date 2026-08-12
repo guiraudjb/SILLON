@@ -8,7 +8,7 @@
 
 | Champ | Valeur |
 |---|---|
-| Version | 1.3 |
+| Version | 1.4 |
 | Date | 12 août 2026 |
 | Statut | Avant-projet — en cours de validation |
 | Périmètre | Direction locale — hors lac de données national |
@@ -216,6 +216,7 @@ Liste en deux sections :
 - Annulation possible tant que le job est en attente ou en cours.
 - Pour un job en erreur : un message technique (pour investigation) et un message utilisateur reformulé de façon compréhensible.
 - Lien de téléchargement du résultat une fois le job terminé, soumis à authentification (voir §8.10).
+- Pour un job de script terminé : prévisualisation directe, dans le navigateur, de tout diagramme Mermaid (fichier `.mmd`) produit parmi les résultats — le bac à sable d'exécution ne peut pas rendre l'image lui-même (aucun moteur de rendu Node/Chromium dans `sillon-image-execution`, §8.7), un script s'y limite donc à écrire le texte Mermaid ; SILLON le rend côté client (bibliothèque JavaScript vendorisée, aucun appel externe) sans obliger l'utilisateur à télécharger l'archive complète pour le consulter.
 
 ### 5.6 Panneau Administration
 
@@ -437,6 +438,7 @@ L'application est distribuée sous forme de paquets Debian indépendants, pour p
 | `sillon-worker` | Exécution des jobs | `sillon-orchestrateur`, un moteur de conteneurisation (`podman` ou `docker.io`) | Service consommant la file d'attente, responsable du lancement des conteneurs éphémères et de l'application des quotas cgroups |
 | `sillon-image-execution` | Environnement d'exécution des scripts | `sillon-worker` | Image de base figée contenant l'environnement Python et R validé (§8.7) ; paquet séparé pour permettre sa mise à jour indépendamment du reste de l'application |
 | `sillon-tutoriel` | **Optionnel** — démonstration et formation (§12.7) | `sillon-image-execution` | Compte de démonstration, jeu de données réel, tutoriel PDF et corrigés d'exercices ; jamais installé sur un déploiement de production |
+| `sillon-demo-sirene` | **Optionnel** — démonstration à l'échelle (§12.8) | `sillon-tutoriel` | Jeu de données Sirene complet (~43,9 millions de lignes), téléchargé à l'installation, et scripts Python/R démontrant les possibilités de l'environnement d'exécution à cette échelle ; jamais installé sur un déploiement de production |
 
 ### 12.3 Comportement d'installation
 
@@ -460,6 +462,7 @@ L'application est distribuée sous forme de paquets Debian indépendants, pour p
 - Une désinstallation standard (`apt remove`) arrête les services et retire les binaires, en conservant les bases de données et les fichiers de configuration.
 - Une désinstallation complète (`apt purge`) supprime en plus la configuration, mais ne supprime jamais les bases de travail créées par les agents (§4.4) sans confirmation explicite et distincte — la perte de données de la direction ne doit jamais être un effet de bord d'une commande de désinstallation de paquet.
 - Cas particulier de `sillon-tutoriel` (§12.7) : n'ayant par nature aucune donnée de la direction à protéger, sa désinstallation complète supprime intégralement le compte de démonstration, sa base et les documents publiés — comportement volontairement plus radical que le reste du paquet applicatif.
+- Cas particulier de `sillon-demo-sirene` (§12.8) : ne possède ni compte ni base propres (il ajoute une table à la base du compte de démonstration créé par `sillon-tutoriel`) — sa désinstallation complète se limite donc au nettoyage de son répertoire de travail temporaire, la donnée elle-même disparaissant avec celle de `sillon-tutoriel` quel que soit l'ordre de purge entre les deux paquets.
 
 ### 12.7 Compte de démonstration et formation (`sillon-tutoriel`)
 
@@ -468,6 +471,14 @@ L'application est distribuée sous forme de paquets Debian indépendants, pour p
 - Il importe un jeu de données réel et ouvert (communes et départements de France — source data.gouv.fr, INSEE, IGN, Licence Ouverte 2.0), avec des requêtes SQL et des scripts Python/R d'exemple déjà exécutés à l'installation.
 - Il fournit un tutoriel au format PDF (exercices SQL en difficulté croissante, puis formation avancée aux possibilités du contrat d'exécution des scripts §5.4/§8.7 : types de graphiques, tableaux et export Excel, rapports PDF multi-pages, cartographie), ainsi que les corrigés correspondants sous forme de scripts réellement fonctionnels et téléchargeables (pas de simples extraits de code).
 - Le tutoriel et ses corrigés ne sont accessibles, depuis la modale « À propos » de l'application, que lorsque le compte connecté est le compte de démonstration lui-même — jamais pour un compte réel de la direction.
+
+### 12.8 Jeu de données massif de démonstration (`sillon-demo-sirene`)
+
+- Paquet séparé et entièrement optionnel, dépendant de `sillon-tutoriel` (même compte de démonstration, même caractère strictement non-production) : son but n'est plus la pédagogie progressive mais la démonstration des possibilités de l'environnement d'exécution (§5.4/§8.7) à une échelle représentative d'un usage réel intensif.
+- Il télécharge, à l'installation, le jeu de données ouvert Sirene « StockEtablissement » (INSEE, Licence Ouverte 2.0, data.gouv.fr) : environ 43,9 millions de lignes, un ordre de grandeur au-delà des autres jeux de données du projet — et l'importe dans la base personnelle du compte de démonstration en passant par le même chemin d'import qu'un utilisateur réel (§5.1), pas par un chargement direct en base.
+- **Seconde dérogation assumée du projet à un accès réseau sortant limité au strict nécessaire** (la première étant l'exécution de code, §8.7, qui l'exclut explicitement) : ce fichier, plusieurs Go une fois compressé, ne peut raisonnablement être vendorisé dans un paquet ni dans le dépôt de code du projet — contrairement au jeu de données de `sillon-tutoriel`, volontairement réduit pour rester embarquable. Un accès Internet réel doit donc exister sur la machine cible au moment de l'installation de ce paquet précisément — jamais vrai en production, seulement sur une VM de démonstration ou de test disposant d'une telle connexion.
+- Il fournit un jeu de scripts Python et R distinct de celui de `sillon-tutoriel`, chacun démontrant une possibilité différente de l'environnement d'exécution (types de graphiques, tableau croisé, export Excel avec graphique natif, rapport PDF multi-pages, cartographie croisée avec les contours départementaux de `sillon-tutoriel`, diagramme Mermaid) — chacun agrégeant systématiquement côté PostgreSQL plutôt que de charger la table complète en mémoire dans le conteneur d'exécution.
+- Les quotas généraux (taille maximale d'un CSV importé, durée maximale d'un job, §11) sont relevés par ce paquet à l'installation pour accueillir un import de cette taille, sans être restaurés à leur valeur par défaut ensuite — cohérent avec le caractère non-production déjà assumé pour toute la famille de paquets de démonstration.
 
 ---
 
@@ -503,6 +514,7 @@ L'application est distribuée sous forme de paquets Debian indépendants, pour p
 - **Job** : unité de traitement asynchrone (import, requête longue, script, création/suppression de base) suivie dans la file d'attente.
 - **Orchestrateur** : composant applicatif responsable de la création des bases, de la file d'attente et de l'exécution isolée des scripts.
 - **Compte de démonstration** : compte utilisateur (profil agent) créé par le paquet optionnel `sillon-tutoriel` (§12.7), à mot de passe fixe et documenté, réservé aux VM de démonstration et de formation — jamais présent sur un déploiement de production.
+- **Sirene** : répertoire national des entreprises et établissements tenu par l'INSEE, publié en open data (Licence Ouverte 2.0) — source du jeu de données massif (~43,9 millions de lignes) du paquet optionnel `sillon-demo-sirene` (§12.8).
 
 ### 15.2 Points de vigilance à confirmer avant le développement
 

@@ -23,6 +23,7 @@ import threading
 import time
 import unicodedata
 import uuid
+import zipfile
 from datetime import date, datetime
 from email.message import EmailMessage
 
@@ -1367,6 +1368,46 @@ def journal_job(id_job):
         contenu = f.read().decode("utf-8", errors="replace")
 
     return jsonify(statut=statut, journal=contenu, tronque=taille > TAILLE_JOURNAL_MAX)
+
+
+# =============================================================================
+# ENDPOINT : APERCU DES DIAGRAMMES MERMAID D'UN JOB (§5.4)
+# =============================================================================
+# Un script Python/R ne peut pas rendre une image Mermaid dans le bac à
+# sable (§8.7 : pas de Node/Chromium dans sillon-image-execution) - il peut
+# seulement écrire un fichier .mmd (texte Mermaid brut) parmi ses
+# résultats. Cet endpoint lit ce texte directement dans l'archive
+# résultat pour un rendu côté navigateur (mermaid.min.js vendorisé,
+# index.html), sans obliger l'utilisateur à télécharger l'archive entière.
+TAILLE_MERMAID_MAX = 200_000  # un diagramme dépassant cette taille est illisible de toute façon
+
+
+@app.route("/jobs/<int:id_job>/apercus", methods=["GET"])
+def apercus_mermaid(id_job):
+    # Même garantie d'appartenance que /telecharger (§8.10) : la
+    # vérification passe par vue_mes_jobs, jamais par le seul identifiant.
+    with connexion_catalogue(claims=g.claims) as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT statut, chemin_resultat FROM public.vue_mes_jobs WHERE id = %s",
+            (id_job,),
+        )
+        ligne = cur.fetchone()
+
+    if not ligne:
+        return jsonify(erreur="Job introuvable ou inaccessible"), 404
+    statut, chemin_resultat = ligne
+    if statut != "termine" or not chemin_resultat or not os.path.isfile(chemin_resultat):
+        return jsonify(erreur="Aucun résultat disponible pour ce job"), 404
+
+    apercus = []
+    with zipfile.ZipFile(chemin_resultat) as archive:
+        for info in archive.infolist():
+            if not info.filename.endswith(".mmd") or info.file_size > TAILLE_MERMAID_MAX:
+                continue
+            contenu = archive.read(info).decode("utf-8", errors="replace")
+            apercus.append({"nom": info.filename, "contenu": contenu})
+
+    return jsonify(apercus=apercus)
 
 
 # =============================================================================

@@ -7,7 +7,7 @@ set -e
 
 cd "$(dirname "$0")"
 
-PAQUETS=(sillon-server sillon-orchestrateur sillon-worker sillon-image-execution sillon-tutoriel)
+PAQUETS=(sillon-server sillon-orchestrateur sillon-worker sillon-image-execution sillon-tutoriel sillon-demo-sirene)
 
 POSTGREST_VERSION="14.8"
 POSTGREST_SHA256="172a55aebcee6d7be2c3ea16476fca69a215afcd68d3d1849b7555878909f0b0"

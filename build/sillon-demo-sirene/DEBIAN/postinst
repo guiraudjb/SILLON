@@ -1,0 +1,64 @@
+#!/bin/bash
+set -e
+
+echo "=== Installation de SILLON (sillon-demo-sirene) ==="
+
+DEMO_EMAIL="demo@sillon.local"
+DB_NAME="sillon_catalog"
+
+if [ ! -f /etc/sillon/secrets.env ]; then
+    echo "ERREUR : sillon-server doit être installé et configuré au préalable." >&2
+    exit 1
+fi
+
+DEJA_PRESENT=$(sudo -u postgres psql -d "$DB_NAME" -tAc \
+    "SELECT 1 FROM public.utilisateurs WHERE email = '$DEMO_EMAIL'")
+if [ "$DEJA_PRESENT" != "1" ]; then
+    echo "ERREUR : le compte de démonstration ($DEMO_EMAIL) n'existe pas - sillon-tutoriel doit être installé au préalable." >&2
+    exit 1
+fi
+
+# =====================================================================
+# 1. QUOTAS RELEVES POUR UN IMPORT DE PLUSIEURS GO / DIZAINES DE MINUTES
+# =====================================================================
+# Paramètres admin habituellement laissés à leurs valeurs par défaut
+# (§11) : relevés ici sans être restaurés ensuite, cohérent avec le
+# principe déjà établi pour ce paquet et sillon-tutoriel (jamais en
+# production, dérogations assumées) - un déploiement de démonstration
+# capable d'accueillir Sirene en entier doit aussi pouvoir réimporter un
+# fichier tout aussi volumineux par la suite sans reconfiguration manuelle.
+echo "Relevé des quotas (taille max CSV, durée max job) pour ce jeu de données volumineux..."
+sudo -u postgres psql -d "$DB_NAME" -c \
+    "UPDATE public.parametres SET valeur = '8192' WHERE cle = 'taille_max_csv_mo' AND valeur::int < 8192;" >/dev/null
+sudo -u postgres psql -d "$DB_NAME" -c \
+    "UPDATE public.parametres SET valeur = '240' WHERE cle = 'duree_max_job_minutes' AND valeur::int < 240;" >/dev/null
+
+# =====================================================================
+# 2. JETON DU COMPTE DEMO, SANS PASSER PAR /api/rpc/login
+# =====================================================================
+# Même mécanisme que sillon-tutoriel/postinst (auth.sign_jwt(), voir sa
+# docstring dédiée) - un jeton de 4h30 ici plutôt que l'heure habituelle,
+# le temps que le téléchargement puis l'import (potentiellement plusieurs
+# heures pour ~43,9 millions de lignes) puissent aller au bout sans que le
+# script ne se retrouve avec un jeton expiré en cours de route.
+JETON=$(sudo -u postgres psql -d "$DB_NAME" -tAc "
+    SELECT auth.sign_jwt(
+        json_build_object(
+            'role', u.role_pg, 'profil', u.profil, 'user_id', u.id, 'email', u.email,
+            'exp', extract(epoch from now())::integer + 16200
+        ),
+        (SELECT valeur FROM auth.secrets WHERE cle = 'jwt_secret')
+    )
+    FROM public.utilisateurs u WHERE u.email = '$DEMO_EMAIL';
+")
+
+# =====================================================================
+# 3. TELECHARGEMENT, REDUCTION ET IMPORT DU JEU DE DONNEES SIRENE
+# =====================================================================
+echo "Téléchargement et import du jeu de données Sirene (peut prendre plusieurs heures selon la machine et la bande passante)..."
+python3 /usr/share/sillon-demo-sirene/preparer_sirene.py --url https://localhost --jeton "$JETON"
+
+echo ""
+echo "=== Installation de SILLON (sillon-demo-sirene) terminée ==="
+echo "Table sirene_etablissements disponible dans la base personnelle du compte $DEMO_EMAIL."
+exit 0
