@@ -1412,55 +1412,75 @@ def _traiter_job(conn, id_job, type_job, utilisateur_id, base_id, payload):
         debut = time.monotonic()  # utilisé par la branche "requete_sql", y compris dans le except ci-dessous
         if type_job == "creation_base":
             nom_base_pg = f"sillon_{role_pg}"
-            conn_admin = psycopg2.connect(host=DB_HOST, port=DB_PORT, dbname="postgres", user=DB_USER, password=DB_PASSWORD)
-            conn_admin.autocommit = True
-            try:
-                with conn_admin.cursor() as cur:
-                    cur.execute(sql.SQL("CREATE DATABASE {} OWNER {}").format(
-                        sql.Identifier(nom_base_pg), sql.Identifier(role_pg)
-                    ))
-            finally:
-                conn_admin.close()
 
-            # pg_trgm est nécessaire aux index de recherche approchée créés
-            # à l'import (§7.4) ; il n'existe que dans le catalogue tant
-            # qu'il n'est pas explicitement activé dans chaque nouvelle
-            # base utilisateur.
-            conn_neuve = psycopg2.connect(host=DB_HOST, port=DB_PORT, dbname=nom_base_pg, user=DB_USER, password=DB_PASSWORD)
-            conn_neuve.autocommit = True
-            try:
-                with conn_neuve.cursor() as cur:
-                    cur.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm;")
-                    # Catalogue local de date/taille du dernier import par
-                    # table (§5.2, fiche d'une table) : distinct du
-                    # catalogue applicatif sillon_catalog, qui ne connaît
-                    # que les bases, jamais leurs tables individuelles (§6).
-                    # "SET ROLE" avant le CREATE TABLE (constaté en pratique
-                    # sur la VM de test) : sillon_orchestrateur a bien le
-                    # droit de créer la table sans bascule de rôle, en
-                    # héritant des privilèges de role_pg dont il est membre
-                    # (§4.4), mais l'objet créé appartiendrait alors à
-                    # sillon_orchestrateur lui-même, pas à role_pg - le
-                    # propriétaire d'une table est toujours le rôle courant
-                    # au moment du CREATE, jamais un rôle dont les
-                    # privilèges sont seulement hérités. Sans ce SET ROLE,
-                    # creer_table_et_charger (exécuté avec le rôle personnel
-                    # de l'agent, §4.4) se voit ensuite refuser l'INSERT.
-                    cur.execute(sql.SQL("SET ROLE {}").format(sql.Identifier(role_pg)))
-                    cur.execute("""
-                        CREATE TABLE public._sillon_imports (
-                            nom_table     TEXT PRIMARY KEY,
-                            date_import   TIMESTAMPTZ NOT NULL DEFAULT now(),
-                            nb_lignes     BIGINT NOT NULL,
-                            taille_octets BIGINT NOT NULL
-                        )
-                    """)
-            finally:
-                conn_neuve.close()
+            # Idempotence (§5.1 : le sélecteur d'import propose "Ma base
+            # personnelle (créée si nécessaire)") : ce job est redéclenché à
+            # chaque import tant qu'aucune autre base n'est choisie
+            # explicitement, y compris quand la base personnelle existe déjà
+            # - un nouveau CREATE DATABASE échouerait alors systématiquement
+            # ("la base ... existe déjà"), constaté en pratique. Le nom est
+            # déterministe par rôle (sillon_<role_pg>) : une ligne déjà
+            # présente dans le catalogue suffit à savoir qu'il n'y a rien à
+            # (re)créer.
+            with conn.cursor() as cur:
+                cur.execute("SELECT id FROM public.bases WHERE nom_pg = %s", (nom_base_pg,))
+                ligne_existante = cur.fetchone()
+
+            if ligne_existante:
+                nouvelle_base_id = ligne_existante[0]
+            else:
+                conn_admin = psycopg2.connect(host=DB_HOST, port=DB_PORT, dbname="postgres", user=DB_USER, password=DB_PASSWORD)
+                conn_admin.autocommit = True
+                try:
+                    with conn_admin.cursor() as cur:
+                        cur.execute(sql.SQL("CREATE DATABASE {} OWNER {}").format(
+                            sql.Identifier(nom_base_pg), sql.Identifier(role_pg)
+                        ))
+                finally:
+                    conn_admin.close()
+
+                # pg_trgm est nécessaire aux index de recherche approchée créés
+                # à l'import (§7.4) ; il n'existe que dans le catalogue tant
+                # qu'il n'est pas explicitement activé dans chaque nouvelle
+                # base utilisateur.
+                conn_neuve = psycopg2.connect(host=DB_HOST, port=DB_PORT, dbname=nom_base_pg, user=DB_USER, password=DB_PASSWORD)
+                conn_neuve.autocommit = True
+                try:
+                    with conn_neuve.cursor() as cur:
+                        cur.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm;")
+                        # Catalogue local de date/taille du dernier import par
+                        # table (§5.2, fiche d'une table) : distinct du
+                        # catalogue applicatif sillon_catalog, qui ne connaît
+                        # que les bases, jamais leurs tables individuelles (§6).
+                        # "SET ROLE" avant le CREATE TABLE (constaté en pratique
+                        # sur la VM de test) : sillon_orchestrateur a bien le
+                        # droit de créer la table sans bascule de rôle, en
+                        # héritant des privilèges de role_pg dont il est membre
+                        # (§4.4), mais l'objet créé appartiendrait alors à
+                        # sillon_orchestrateur lui-même, pas à role_pg - le
+                        # propriétaire d'une table est toujours le rôle courant
+                        # au moment du CREATE, jamais un rôle dont les
+                        # privilèges sont seulement hérités. Sans ce SET ROLE,
+                        # creer_table_et_charger (exécuté avec le rôle personnel
+                        # de l'agent, §4.4) se voit ensuite refuser l'INSERT.
+                        cur.execute(sql.SQL("SET ROLE {}").format(sql.Identifier(role_pg)))
+                        cur.execute("""
+                            CREATE TABLE public._sillon_imports (
+                                nom_table     TEXT PRIMARY KEY,
+                                date_import   TIMESTAMPTZ NOT NULL DEFAULT now(),
+                                nb_lignes     BIGINT NOT NULL,
+                                taille_octets BIGINT NOT NULL
+                            )
+                        """)
+                finally:
+                    conn_neuve.close()
+
+                with conn.cursor() as cur:
+                    cur.execute("SELECT public.enregistrer_base(%s, %s)", (nom_base_pg, utilisateur_id))
+                    nouvelle_base_id = cur.fetchone()[0]
+                conn.commit()
 
             with conn.cursor() as cur:
-                cur.execute("SELECT public.enregistrer_base(%s, %s)", (nom_base_pg, utilisateur_id))
-                nouvelle_base_id = cur.fetchone()[0]
                 cur.execute("SELECT public.maj_statut_job(%s, 'termine')", (id_job,))
                 cur.execute(
                     "UPDATE public.jobs SET base_id = %s WHERE id = %s",

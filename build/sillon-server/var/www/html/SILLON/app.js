@@ -533,9 +533,35 @@ const Travaux = {
             mode: "text/x-sql",
             lineNumbers: true,
             lineWrapping: true,
-            extraKeys: { "Ctrl-Space": "autocomplete" },
+            // Pas "autocomplete" (générique) : sql-hint ne propose les
+            // colonnes que via la notation pointée ("table.") sans
+            // "defaultTable" (cf. sa logique interne, options.defaultTable
+            // vide sinon) - le cas le plus courant, taper un nom de colonne
+            // seul après FROM, ne suggérait donc jamais aucune colonne
+            // (§5.3, constaté en pratique). "defaultTable" est recalculé à
+            // chaque déclenchement plutôt que figé à l'ouverture de
+            // l'éditeur, pour suivre la table couramment éditée.
+            extraKeys: {
+                "Ctrl-Space": (cm) => CodeMirror.showHint(cm, CodeMirror.hint.sql, {
+                    tables: cm.options.hintOptions.tables,
+                    defaultTable: Travaux._tableCourante(cm),
+                }),
+            },
             hintOptions: { tables: {} },
         });
+    },
+
+    // Première table citée dans une clause FROM/JOIN avant le curseur :
+    // meilleure estimation simple de "la table qu'on est en train
+    // d'éditer" pour une requête mono-table (cas dominant de l'éditeur
+    // libre, §5.3) - une requête à plusieurs tables reste couverte par la
+    // notation pointée classique ("table.colonne").
+    _tableCourante(cm) {
+        const texte = cm.getRange({ line: 0, ch: 0 }, cm.getCursor());
+        const correspondance = texte.match(/\b(?:from|join)\s+"?([a-zA-Z_][\w]*)"?/gi);
+        if (!correspondance) return undefined;
+        const derniere = correspondance[correspondance.length - 1].match(/"?([a-zA-Z_][\w]*)"?$/);
+        return derniere ? derniere[1] : undefined;
     },
 
     // Rafraîchit l'auto-complétion des noms de tables/colonnes (§5.3) sur

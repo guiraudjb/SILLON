@@ -146,7 +146,21 @@ Environment=SILLON_URL=https://sillon.exemple-direction.fr
 
 Puis `systemctl restart sillon-orchestrateur`. Un échec d'envoi de notification est journalisé (`journalctl -u sillon-orchestrateur`) mais ne bloque jamais le traitement lui-même.
 
-### 7.2 Quotas et paramètres applicatifs
+### 7.2 Compte de démonstration
+
+Pour une VM de démonstration ou de formation, le dépôt fournit un script autonome — `outils/peupler_demo.py`, jamais exécuté par les paquets eux-mêmes — qui crée (ou réutilise s'il existe déjà) un compte `demo@sillon.local` de profil agent, avec :
+
+- sa base personnelle, contenant un jeu de données fictif (`communes_exemple`) déjà importé ;
+- trois requêtes SQL d'exemple, déjà présentes dans son historique ;
+- un script Python et un script R d'exemple, réellement exécutés via la file d'attente — leurs résultats sont déjà téléchargeables dès le premier login du compte demo.
+
+```bash
+python3 outils/peupler_demo.py --url https://<adresse-du-serveur> --admin-password '<mot de passe administrateur>'
+```
+
+Le mot de passe du compte demo est **fixe et documenté** (`demo` par défaut, modifiable avec `--demo-password`) — pratique pour une démonstration, mais à ne jamais laisser sur une VM exposée ou de production : c'est précisément pour cette raison que ce peuplement n'est jamais déclenché automatiquement par un `apt install`, contrairement au compte administrateur (mot de passe généré aléatoirement, §5). Voir `python3 outils/peupler_demo.py --help` pour les options (URL, identifiants, certificat TLS).
+
+### 7.3 Quotas et paramètres applicatifs
 
 Les quotas (taille maximale d'import CSV, durée maximale d'un job, CPU/RAM/PID par conteneur, quota disque par base, etc.) sont stockés dans la table `parametres` du catalogue applicatif, modifiable sans redémarrage de service ni reconstruction de paquet — soit depuis le panneau d'administration de l'application, soit directement en SQL :
 
@@ -172,15 +186,25 @@ Valeurs par défaut à l'installation :
 
 ## 8. Désinstallation
 
-```bash
-sudo apt-get remove sillon-image-execution sillon-worker sillon-orchestrateur sillon-server
-```
+Deux niveaux, sémantique standard `dpkg` :
 
-Les `prerm`/`postrm` ne suppriment jamais la base `sillon_catalog` ni `/etc/sillon/secrets.env` automatiquement (protection contre une perte de données accidentelle). Pour une suppression complète, après désinstallation des paquets :
+- **`remove`** : arrête les services et retire les fichiers du paquet, mais conserve `/etc/sillon/secrets.env`, `/etc/sillon-api.conf` et la base `sillon_catalog` — une réinstallation ultérieure reprend alors à l'identique (mêmes secrets, mêmes comptes), sans passer par la branche « premier déploiement ».
+
+  ```bash
+  sudo apt-get remove sillon-image-execution sillon-worker sillon-orchestrateur sillon-server
+  ```
+
+- **`purge`** : en plus de ce qui précède, supprime réellement le catalogue applicatif (base `sillon_catalog`, rôles PostgreSQL personnels et de service qu'elle porte) ainsi que `/etc/sillon`, `/etc/sillon-api.conf`, `/etc/ssl/sillon` et `/var/lib/sillon` — une réinstallation ultérieure repart alors intégralement à zéro (nouveaux secrets, nouveau compte administrateur).
+
+  ```bash
+  sudo apt-get purge sillon-image-execution sillon-worker sillon-orchestrateur sillon-server
+  ```
+
+Dans les deux cas, **les bases de travail créées par les agents** (§4.4 du cahier des charges — une base physique par agent, distincte du catalogue `sillon_catalog`) **ne sont jamais supprimées automatiquement**, ni par `remove` ni par `purge` : ce sont des données applicatives, pas des artefacts d'installation. Pour les retirer explicitement si c'est réellement souhaité :
 
 ```bash
-sudo -u postgres psql -c "DROP DATABASE sillon_catalog;"
-sudo rm -rf /etc/sillon /var/lib/sillon /etc/ssl/sillon
+sudo -u postgres psql -c "\l" | grep sillon_
+sudo -u postgres dropdb <nom_de_la_base>
 ```
 
 Rappel : aucun mécanisme de sauvegarde n'est porté par l'application — la protection contre la perte de données relève de l'infrastructure d'hébergement de la direction.
