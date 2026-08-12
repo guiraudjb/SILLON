@@ -4,8 +4,10 @@ __pycache__/
 .venv/
 venv/
 
-# Paquets Debian construits
+# Paquets Debian construits ailleurs que dans build/ (exclus) ; ceux de
+# build/ sont versionnés via Git LFS (cf. .gitattributes)
 *.deb
+!build/*.deb
 
 # Artefacts vendorisés par build/build.sh (téléchargés/construits, pas du code source)
 build/sillon-server/usr/lib/sillon/postgrest
