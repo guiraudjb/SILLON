@@ -238,6 +238,22 @@ def base_personnelle(client):
     return bases[0] if bases else None
 
 
+def table_deja_importee(client, base_id):
+    """Idempotence de bout en bout (au même titre que --remplacer pour
+    peupler_tutoriel.py) : une réinstallation ne doit jamais redéclencher un
+    téléchargement + une extraction de plusieurs heures si la table est déjà
+    en place - y compris quand le fichier réduit local a déjà été consommé
+    par un essai précédent (renommé vers STAGING_DIR par /import/apercu_local,
+    cf. apercu_local ci-dessus), constaté en pratique lors des tests de ce
+    paquet."""
+    if not base_id:
+        return False
+    resultat = client.post_json("/orchestrateur/sql", {
+        "base_id": base_id, "requete": f"SELECT to_regclass('{NOM_TABLE}') IS NOT NULL AS existe",
+    })
+    return bool(resultat["lignes"][0][0])
+
+
 def attendre_job(client, id_job, delai_max_s):
     fin = time.monotonic() + delai_max_s
     dernier_statut = None
@@ -278,16 +294,13 @@ def apercu_local(jeton, chemin_csv):
         conn.close()
 
 
-def importer_sirene(client, chemin_csv):
+def importer_sirene(client, chemin_csv, base_id):
     print("Aperçu du fichier réduit auprès de l'orchestrateur (dépôt local direct)...")
     apercu = apercu_local(client.jeton, chemin_csv)
     colonnes = [
         {"nom_normalise": c["nom_normalise"], "type": TYPES_FORCES.get(c["nom_normalise"], c["type_suggere"])}
         for c in apercu["colonnes"]
     ]
-
-    base = base_personnelle(client)
-    base_id = base["id"] if base else None
 
     corps = {
         "jeton": apercu["jeton"], "nom_table": NOM_TABLE, "colonnes": colonnes,
@@ -371,6 +384,16 @@ def main():
     else:
         contexte = ssl._create_unverified_context()
 
+    client = Client(args.url, args.jeton, contexte)
+    base = base_personnelle(client)
+    base_id = base["id"] if base else None
+
+    if table_deja_importee(client, base_id):
+        print(f"Table {NOM_TABLE} déjà présente - import ignoré, dépôt des scripts de démonstration uniquement.")
+        deposer_scripts_exemple(client, base_id)
+        print("Préparation du jeu de données Sirene terminée.")
+        return
+
     os.makedirs(args.repertoire_travail, exist_ok=True)
     # Groupe www-data avec droit d'écriture (0775) : /import/apercu_local
     # (orchestrateur.py, exécuté sous www-data) déplace le fichier réduit
@@ -399,12 +422,16 @@ def main():
         extraire_et_reduire(chemin_zip, chemin_csv)
         os.remove(chemin_zip)  # ne garder que le CSV réduit le temps de l'import
 
-    client = Client(args.url, args.jeton, contexte)
-    importer_sirene(client, chemin_csv)
-    os.remove(chemin_csv)
+    importer_sirene(client, chemin_csv, base_id)
+    # /import/apercu_local (orchestrateur.py) a déjà consommé ce fichier par
+    # un renommage (§12.8) : plus rien à supprimer ici sauf si l'import a
+    # échoué avant d'atteindre cette étape (fichier alors toujours présent).
+    if os.path.isfile(chemin_csv):
+        os.remove(chemin_csv)
 
-    base = base_personnelle(client)
-    deposer_scripts_exemple(client, base["id"])
+    if not base_id:
+        base_id = base_personnelle(client)["id"]
+    deposer_scripts_exemple(client, base_id)
 
     print("Préparation du jeu de données Sirene terminée.")
 

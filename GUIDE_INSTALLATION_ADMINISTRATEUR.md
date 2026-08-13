@@ -261,4 +261,42 @@ Rappel : aucun mécanisme de sauvegarde n'est porté par l'application — la pr
 | Import CSV volumineux rejeté (413) | Anciennement un défaut Nginx (`client_max_body_size`) — corrigé, la limite Nginx est illimitée et seule la limite applicative (`taille_max_csv_mo`) s'applique | `grep client_max_body_size /etc/nginx/sites-available/sillon` |
 | Script utilisateur ne démarre jamais | Session D-Bus de `www-data` non encore prête après un redémarrage du serveur | `systemctl status user@33.service`, puis `systemctl restart sillon-worker` |
 | `sillon-orchestrateur` refuse de s'installer | `sillon-server` non installé/configuré au préalable (`/etc/sillon/secrets.env` absent) | Installer/vérifier `sillon-server` d'abord |
-| Script ne peut pas joindre PostgreSQL | Adresse hôte détectée par le `postinst` de `sillon-worker` obsolète (changement d'interface réseau) | Réinstaller `sillon-worker`, ou ajouter manuellement l'entrée dans `pg_hba.conf` |
+| Requêtes SQL normales, mais tous les scripts échouent (statut « erreur ») après un changement d'adresse IP ou un redémarrage du serveur | Adresse hôte détectée par le `postinst` de `sillon-worker` obsolète (§9.1) | `journalctl -u sillon-worker -n 50`, rechercher une erreur de connexion PostgreSQL |
+
+### 9.1 Changement d'adresse IP du serveur (ou redémarrage avec IP dynamique)
+
+**Symptôme observé en pratique** : après un changement d'adresse IP (DHCP, réaffectation de VM, changement d'interface réseau) suivi ou non d'un redémarrage, les requêtes SQL de l'onglet Travaux continuent de fonctionner normalement, mais **tous** les scripts Python/R déposés échouent immédiatement (statut « erreur », sans même produire de journal d'exécution).
+
+**Cause** : les scripts s'exécutent dans un conteneur Podman rootless, qui n'a pas d'accès direct à `localhost` de l'hôte. Le réseau rootless par défaut (`pasta`) route l'alias `host.containers.internal` vers l'hôte réel, mais en réémettant la connexion avec l'adresse IP LAN de l'hôte comme adresse source (jamais `127.0.0.1`, constaté en pratique dans les journaux PostgreSQL) — c'est pourquoi le `postinst` de `sillon-worker` autorise explicitement **cette seule adresse** dans `pg_hba.conf`, détectée une fois à l'installation :
+
+```
+host    all             all             <adresse détectée à l'installation>/32            scram-sha-256
+```
+
+Cette détection n'est **jamais refaite automatiquement** par la suite. Si l'adresse IP du serveur change après coup, cette règle devient obsolète : PostgreSQL rejette toute connexion venant de la nouvelle adresse, donc tout script (qui doit s'y connecter via `SILLON_DSN`) échoue dès sa tentative de connexion — alors que les requêtes SQL de l'onglet Travaux, elles, transitent par l'orchestrateur en `host=localhost` et ne sont jamais concernées.
+
+**Remédiation — deux options équivalentes :**
+
+- **Réinstaller `sillon-worker`** (le plus simple, redétecte l'adresse courante et ajoute la règle manquante sans toucher au reste de la configuration) :
+
+  ```bash
+  sudo dpkg -i sillon-worker_0.1.0_all.deb
+  ```
+
+  L'ancienne règle (adresse obsolète) n'est pas supprimée — elle ne gêne pas, `pg_hba.conf` accepte plusieurs règles `host` sans conflit — mais peut être retirée manuellement par propreté si souhaité.
+
+- **Corriger à la main**, sans reconstruire/redéployer de paquet :
+
+  ```bash
+  ADRESSE_HOTE=$(ip -4 route get 1.1.1.1 | grep -oP 'src \K\S+' | head -1)
+  echo "host    all             all             ${ADRESSE_HOTE}/32            scram-sha-256" \
+      | sudo tee -a /etc/postgresql/17/main/pg_hba.conf
+  sudo systemctl reload postgresql
+  ```
+
+**Point de vigilance pour un serveur à adresse IP dynamique (DHCP sans bail réservé)** : ce mécanisme n'est pas auto-réparant — chaque changement d'adresse casse à nouveau les scripts jusqu'à la prochaine réinstallation ou correction manuelle. Pour un déploiement durable, préférer une **adresse IP statique ou un bail DHCP réservé** pour le serveur SILLON, ce qui élimine le problème à la source plutôt que de le corriger à chaque occurrence.
+
+**Autres points de friction possibles liés à un changement d'adresse IP** (moins critiques, sans impact constaté à ce jour) :
+
+- Le certificat TLS auto-signé est généré avec `CN=localhost` (aucune adresse IP ni nom d'hôte spécifique) : un changement d'IP ne l'invalide pas, mais l'avertissement de certificat non reconnu par le navigateur reste présent quelle que soit l'adresse utilisée pour se connecter — sans lien avec ce changement.
+- Si `SILLON_URL` a été configuré manuellement (`systemctl edit sillon-orchestrateur`, §7.1) avec une adresse IP littérale plutôt qu'un nom de domaine, les liens inclus dans les notifications par mail pointeront vers l'ancienne adresse après un changement — à corriger manuellement dans ce cas précis.

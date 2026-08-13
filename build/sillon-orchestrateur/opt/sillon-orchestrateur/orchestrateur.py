@@ -608,7 +608,15 @@ def apercu_import():
     # avec un vrai jeu de données de test (~500 Mo).
     jeton = uuid.uuid4().hex
     chemin_stage = os.path.join(STAGING_DIR, f"{jeton}.csv")
-    fichier.save(chemin_stage)
+    try:
+        fichier.save(chemin_stage)
+    except OSError:
+        # Écriture interrompue (ex. disque plein en cours de copie, §12.8) :
+        # jamais laisser un fichier partiel - potentiellement plusieurs Go -
+        # orphelin dans STAGING_DIR, constaté en pratique.
+        if os.path.exists(chemin_stage):
+            os.remove(chemin_stage)
+        raise
 
     avec_entete = request.form.get("avec_entete", "true").lower() != "false"
     return _analyser_fichier_stage(jeton, chemin_stage, avec_entete)
@@ -1673,9 +1681,15 @@ def _traiter_job(conn, id_job, type_job, utilisateur_id, base_id, payload):
                     set(payload.get("lignes_exclues") or []),
                 )
             finally:
+                # Dans le "finally", pas seulement après le bloc : un import
+                # échoué (ex. disque plein en cours de COPY, §12.8) laissait
+                # jusqu'ici le fichier tamponné - potentiellement plusieurs Go
+                # - orphelin dans STAGING_DIR indéfiniment, l'exception
+                # remontant directement au gestionnaire générique plus bas
+                # sans jamais repasser par ce nettoyage.
                 conn_cible.close()
-            if os.path.exists(payload["chemin_fichier"]):
-                os.remove(payload["chemin_fichier"])
+                if os.path.exists(payload["chemin_fichier"]):
+                    os.remove(payload["chemin_fichier"])
             rafraichir_taille_base(base_id, payload["nom_pg"])
             # Hors contexte HTTP ici (consommateur de fond, §9) : pas de
             # g.claims. role_pg/email_utilisateur, déjà résolus plus haut
