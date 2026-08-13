@@ -15,6 +15,7 @@ deux fois, quel que soit le nombre de workers).
 import csv
 import io
 import json
+import mimetypes
 import os
 import queue
 import re
@@ -609,6 +610,55 @@ def apercu_import():
     chemin_stage = os.path.join(STAGING_DIR, f"{jeton}.csv")
     fichier.save(chemin_stage)
 
+    avec_entete = request.form.get("avec_entete", "true").lower() != "false"
+    return _analyser_fichier_stage(jeton, chemin_stage, avec_entete)
+
+
+# =============================================================================
+# ENDPOINT : APERCU D'IMPORT - DEPOT LOCAL DIRECT (§12.8)
+# =============================================================================
+# Une requête HTTP multipart classique (/import/apercu) fait transiter le
+# fichier par deux tampons disque successifs (celui de Werkzeug le temps
+# du parsing, puis la copie de fichier.save()) - négligeable pour un import
+# ordinaire, mais un fichier de plusieurs Go en fait déjà trois copies
+# simultanées avec celle du script appelant, pour un gain nul quand ce
+# dernier tourne déjà sur la même machine que l'orchestrateur (§12.8,
+# sillon-demo-sirene : constaté en pratique, "No space left on device" sur
+# la VM de test avec seulement 9 Go libres). Cet endpoint se contente d'un
+# renommage (même disque, donc atomique et sans copie) plutôt que d'une
+# réception réseau.
+#
+# Jamais exposé publiquement (bloqué explicitement côté Nginx, cf.
+# sillon-server/etc/nginx/sites-available/sillon) : accessible uniquement
+# en direct sur 127.0.0.1:5000, jamais via le reverse proxy - sans quoi un
+# agent authentifié quelconque pourrait faire lire n'importe quel fichier
+# accessible à www-data. Restreint en plus, ici, à un unique répertoire de
+# dépôt local (jamais un chemin arbitraire, même pour un appel qui
+# parviendrait malgré tout jusqu'ici).
+REPERTOIRE_DEPOT_LOCAL = os.path.realpath("/var/lib/sillon-demo-sirene")
+
+
+@app.route("/import/apercu_local", methods=["POST"])
+def apercu_import_local():
+    if request.remote_addr not in ("127.0.0.1", "::1"):
+        return jsonify(erreur="Endpoint réservé aux appels locaux"), 403
+
+    donnees = request.get_json(force=True)
+    chemin_source = os.path.realpath(donnees.get("chemin") or "")
+    if not chemin_source.startswith(REPERTOIRE_DEPOT_LOCAL + os.sep):
+        return jsonify(erreur="Chemin source non autorisé"), 400
+    if not os.path.isfile(chemin_source):
+        return jsonify(erreur="Fichier source introuvable"), 404
+
+    jeton = uuid.uuid4().hex
+    chemin_stage = os.path.join(STAGING_DIR, f"{jeton}.csv")
+    os.rename(chemin_source, chemin_stage)
+
+    avec_entete = str(donnees.get("avec_entete", "true")).lower() != "false"
+    return _analyser_fichier_stage(jeton, chemin_stage, avec_entete)
+
+
+def _analyser_fichier_stage(jeton, chemin_stage, avec_entete):
     taille_max_mo = int(lire_parametre("taille_max_csv_mo", "2048"))
     if os.path.getsize(chemin_stage) > taille_max_mo * 1024 * 1024:
         os.remove(chemin_stage)
@@ -618,12 +668,6 @@ def apercu_import():
         echantillon_brut = f.read(1_000_000)
     encodage = detecter_encodage(echantillon_brut)
     delimiteur = detecter_delimiteur(echantillon_brut.decode(encodage, errors="replace")[:10_000])
-
-    # Ligne d'en-tête desactivable (§5.1, étape 2) : sans elle, la première
-    # ligne est une ligne de données comme les autres, et les colonnes
-    # reçoivent des noms génériques (mêmes conventions que le repli déjà
-    # utilisé ci-dessous pour un en-tête vide).
-    avec_entete = request.form.get("avec_entete", "true").lower() != "false"
 
     # Un seul passage en flux : compte le nombre réel de lignes tout en
     # conservant seulement les 50 premières pour l'aperçu, sans jamais
@@ -1371,43 +1415,81 @@ def journal_job(id_job):
 
 
 # =============================================================================
-# ENDPOINT : APERCU DES DIAGRAMMES MERMAID D'UN JOB (§5.4)
+# ENDPOINTS : APERCU DES RESULTATS D'UN JOB (§5.4/§5.5)
 # =============================================================================
-# Un script Python/R ne peut pas rendre une image Mermaid dans le bac à
-# sable (§8.7 : pas de Node/Chromium dans sillon-image-execution) - il peut
-# seulement écrire un fichier .mmd (texte Mermaid brut) parmi ses
-# résultats. Cet endpoint lit ce texte directement dans l'archive
-# résultat pour un rendu côté navigateur (mermaid.min.js vendorisé,
-# index.html), sans obliger l'utilisateur à télécharger l'archive entière.
-TAILLE_MERMAID_MAX = 200_000  # un diagramme dépassant cette taille est illisible de toute façon
+# Certains types de résultats se consultent utilement sans télécharger
+# l'archive complète : diagrammes Mermaid (texte .mmd - le bac à sable ne
+# peut pas les rendre lui-même en image, aucun Node/Chromium dans
+# sillon-image-execution, §8.7), images (graphiques matplotlib/ggplot2) et
+# tableaux CSV. Rendu entièrement côté navigateur (mermaid.min.js
+# vendorisé pour les diagrammes, une balise <img> pour les images, un
+# tableau HTML construit par app.js pour les CSV) - ces deux endpoints ne
+# font que donner accès, en lecture, au contenu déjà présent dans
+# l'archive résultat.
+TYPES_APERCU = {
+    ".mmd": "mermaid", ".csv": "csv",
+    ".png": "image", ".jpg": "image", ".jpeg": "image", ".svg": "image", ".gif": "image",
+}
+TAILLES_MAX_APERCU = {"mermaid": 200_000, "csv": 5_000_000, "image": 20_000_000}
 
 
-@app.route("/jobs/<int:id_job>/apercus", methods=["GET"])
-def apercus_mermaid(id_job):
-    # Même garantie d'appartenance que /telecharger (§8.10) : la
-    # vérification passe par vue_mes_jobs, jamais par le seul identifiant.
+def _job_resultat_accessible(id_job):
+    """Même garantie d'appartenance que /telecharger (§8.10) : la
+    vérification passe par vue_mes_jobs, jamais par le seul identifiant."""
     with connexion_catalogue(claims=g.claims) as conn, conn.cursor() as cur:
         cur.execute(
             "SELECT statut, chemin_resultat FROM public.vue_mes_jobs WHERE id = %s",
             (id_job,),
         )
         ligne = cur.fetchone()
-
     if not ligne:
-        return jsonify(erreur="Job introuvable ou inaccessible"), 404
+        return None
     statut, chemin_resultat = ligne
     if statut != "termine" or not chemin_resultat or not os.path.isfile(chemin_resultat):
+        return None
+    return chemin_resultat
+
+
+@app.route("/jobs/<int:id_job>/apercus", methods=["GET"])
+def liste_apercus(id_job):
+    chemin_resultat = _job_resultat_accessible(id_job)
+    if not chemin_resultat:
         return jsonify(erreur="Aucun résultat disponible pour ce job"), 404
 
     apercus = []
     with zipfile.ZipFile(chemin_resultat) as archive:
         for info in archive.infolist():
-            if not info.filename.endswith(".mmd") or info.file_size > TAILLE_MERMAID_MAX:
+            _racine, extension = os.path.splitext(info.filename)
+            type_apercu = TYPES_APERCU.get(extension.lower())
+            if not type_apercu or info.file_size > TAILLES_MAX_APERCU[type_apercu]:
                 continue
-            contenu = archive.read(info).decode("utf-8", errors="replace")
-            apercus.append({"nom": info.filename, "contenu": contenu})
+            apercus.append({"nom": info.filename, "type": type_apercu})
 
     return jsonify(apercus=apercus)
+
+
+@app.route("/jobs/<int:id_job>/apercu/<path:nom_fichier>", methods=["GET"])
+def contenu_apercu(id_job, nom_fichier):
+    chemin_resultat = _job_resultat_accessible(id_job)
+    if not chemin_resultat:
+        return jsonify(erreur="Aucun résultat disponible pour ce job"), 404
+
+    _racine, extension = os.path.splitext(nom_fichier)
+    type_apercu = TYPES_APERCU.get(extension.lower())
+    if not type_apercu:
+        return jsonify(erreur="Type de fichier non prévisualisable"), 400
+
+    with zipfile.ZipFile(chemin_resultat) as archive:
+        try:
+            info = archive.getinfo(nom_fichier)
+        except KeyError:
+            return jsonify(erreur="Fichier introuvable dans le résultat"), 404
+        if info.file_size > TAILLES_MAX_APERCU[type_apercu]:
+            return jsonify(erreur="Fichier trop volumineux pour un aperçu"), 413
+        contenu = archive.read(info)
+
+    type_mime = mimetypes.guess_type(nom_fichier)[0] or "application/octet-stream"
+    return Response(contenu, mimetype=type_mime)
 
 
 # =============================================================================

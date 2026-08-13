@@ -32,6 +32,7 @@ Les dépendances sont déclarées dans chaque paquet SILLON et installées autom
 | `sillon-worker` | Consommation de la file, lancement des conteneurs d'exécution de scripts | `sillon-orchestrateur` |
 | `sillon-image-execution` | Image figée (Python/R) utilisée pour l'exécution des scripts | `sillon-worker` |
 | `sillon-tutoriel` *(optionnel)* | Compte de démonstration, jeu de données réel et tutoriel PDF — VM de démo/formation uniquement, voir §7.2 | `sillon-image-execution` |
+| `sillon-demo-sirene` *(optionnel)* | Jeu de données Sirene massif (~43,9 millions de lignes) et scripts de démonstration à l'échelle — VM de démo/formation uniquement, voir §7.2 | `sillon-tutoriel` |
 
 **L'ordre d'installation ci-dessus est obligatoire** : chaque paquet vérifie au `postinst` que le précédent est déjà configuré (présence de `/etc/sillon/secrets.env`, service actif) et refuse de s'installer sinon.
 
@@ -41,7 +42,7 @@ Les dépendances sont déclarées dans chaque paquet SILLON et installées autom
 
 Deux cas de figure :
 
-- **Paquets déjà construits** : le dossier `build/` du dépôt contient les `.deb` prêts à l'emploi (`sillon-server_0.1.0_amd64.deb`, `sillon-orchestrateur_0.1.0_all.deb`, `sillon-worker_0.1.0_all.deb`, `sillon-image-execution_0.1.0_amd64.deb`, et `sillon-tutoriel_0.1.0_all.deb` — optionnel, §7.2). C'est le cas le plus courant : passer directement à l'étape 4.
+- **Paquets déjà construits** : le dossier `build/` du dépôt contient les `.deb` prêts à l'emploi (`sillon-server_0.1.0_amd64.deb`, `sillon-orchestrateur_0.1.0_all.deb`, `sillon-worker_0.1.0_all.deb`, `sillon-image-execution_0.1.0_amd64.deb`, et les deux paquets optionnels `sillon-tutoriel_0.1.0_all.deb` et `sillon-demo-sirene_0.1.0_all.deb` — §7.2). C'est le cas le plus courant : passer directement à l'étape 4.
 - **Reconstruction nécessaire** (nouvelle version, modification du code applicatif) : depuis une machine **ayant accès à internet** (le binaire PostgREST et l'image d'exécution sont téléchargés/construits à cette étape, pas sur la cible) :
 
   ```bash
@@ -79,10 +80,11 @@ sudo dpkg -i sillon-worker_0.1.0_all.deb
 sudo dpkg -i sillon-image-execution_0.1.0_amd64.deb
 ```
 
-Sur une VM de démonstration ou de formation uniquement, un cinquième paquet optionnel peut ensuite être installé (§7.2) :
+Sur une VM de démonstration ou de formation uniquement, deux paquets optionnels peuvent ensuite être installés (§7.2) :
 
 ```bash
-sudo dpkg -i sillon-tutoriel_0.1.0_all.deb    # jamais sur un déploiement de production
+sudo dpkg -i sillon-tutoriel_0.1.0_all.deb        # jamais sur un déploiement de production
+sudo dpkg -i sillon-demo-sirene_0.1.0_all.deb     # optionnel, nécessite un accès Internet - voir §7.2
 ```
 
 ### Ce que fait chaque `postinst`, en résumé
@@ -166,6 +168,34 @@ Deux façons de peupler un compte de démonstration, **jamais installées automa
   ```
 
 Dans les deux cas, le mot de passe du compte demo est **fixe et documenté** (`demo`) — pratique pour une démonstration, mais à ne jamais laisser sur une VM exposée ou de production, contrairement au compte administrateur (mot de passe généré aléatoirement, §5).
+
+#### Jeu de données massif (`sillon-demo-sirene`)
+
+Sixième paquet `.deb`, optionnel, complémentaire de `sillon-tutoriel` (mêmes règles : jamais en production, dérogation assumée). Il télécharge et importe le fichier Sirene « StockEtablissement » complet (INSEE, ~43,9 millions de lignes, Licence Ouverte 2.0), puis dépose un second jeu de scripts Python/R démontrant les possibilités de l'environnement d'exécution à cette échelle (cahier des charges §12.8).
+
+**C'est le seul paquet du projet qui a besoin d'un accès Internet réel sur la machine cible au moment de son installation** — tous les autres composants sont vendorisés (§4). Deux façons de procéder :
+
+- **Automatique** (cas courant, VM disposant d'une sortie Internet) :
+
+  ```bash
+  sudo dpkg -i sillon-demo-sirene_0.1.0_all.deb
+  ```
+
+  Le `postinst` télécharge lui-même l'archive (environ 2,9 Go), l'extrait et la réduit aux colonnes utiles (environ 3,8 Go de CSV, quelques heures selon la machine — la sortie du `postinst` progresse par paliers de 5 millions de lignes), puis l'importe via l'API d'import normale.
+
+- **Manuelle** (machine cible sans sortie Internet directe, ou pour ne pas dépendre de la durée du téléchargement pendant l'installation) : télécharger au préalable, depuis une machine qui a accès à Internet, le fichier « Sirene : Fichier StockEtablissement » (pas la variante *Historique*, pas le format *parquet*) depuis [data.gouv.fr](https://www.data.gouv.fr/) (jeu de données « Base Sirene des entreprises et de leurs établissements »), puis :
+
+  ```bash
+  sudo mkdir -p /var/lib/sillon-demo-sirene
+  sudo cp stock-stocketablissement-csv.zip /var/lib/sillon-demo-sirene/stock_etablissement.zip
+  sudo dpkg -i sillon-demo-sirene_0.1.0_all.deb
+  ```
+
+  Le `postinst` détecte l'archive déjà présente et saute le téléchargement, pour passer directement à l'extraction puis à l'import. Le même mécanisme de reprise s'applique si une précédente tentative a déjà produit le fichier réduit (`sirene_reduit.csv` dans ce même répertoire) : `dpkg -i` peut être relancé sans redemander le fichier ni recommencer l'extraction en cas d'échec à une étape ultérieure (constaté en pratique lors des tests de ce paquet).
+
+  Prévoir au moins **12 Go d'espace disque libre** sur la partition qui héberge `/var/lib` le temps de l'installation (archive + fichier réduit + tampon d'import), même si l'espace définitivement occupé par la table importée est moindre.
+
+`sudo apt-get purge sillon-demo-sirene` ne supprime que son répertoire de travail temporaire : la donnée elle-même (une table de plus dans la base du compte demo) disparaît avec `sillon-tutoriel`, quel que soit l'ordre de purge entre les deux paquets.
 
 ### 7.3 Quotas et paramètres applicatifs
 

@@ -24,6 +24,7 @@ import io
 import json
 import mimetypes
 import os
+import shutil
 import ssl
 import sys
 import time
@@ -202,8 +203,8 @@ class Client:
         self.contexte_ssl = contexte_ssl
         self.jeton = jeton
 
-    def _connexion(self):
-        return http.client.HTTPSConnection(self.hote, self.port, timeout=120, context=self.contexte_ssl)
+    def _connexion(self, timeout=120):
+        return http.client.HTTPSConnection(self.hote, self.port, timeout=timeout, context=self.contexte_ssl)
 
     def get_json(self, chemin):
         conn = self._connexion()
@@ -232,49 +233,6 @@ class Client:
         finally:
             conn.close()
 
-    def post_multipart_fichier_volumineux(self, chemin, champs, nom_champ_fichier, chemin_fichier):
-        """Envoi en flux (http.client accepte un objet fichier comme corps de
-        requête et le lit par blocs lui-même) : un .read() unique matérialiserait
-        plusieurs Go en mémoire pour rien (même exigence que le reste de SILLON,
-        cf. docstring du module)."""
-        frontiere = uuid.uuid4().hex
-        nom_fichier = os.path.basename(chemin_fichier)
-        type_mime = mimetypes.guess_type(nom_fichier)[0] or "application/octet-stream"
-
-        preambule = b""
-        for cle, valeur in champs.items():
-            preambule += f'--{frontiere}\r\nContent-Disposition: form-data; name="{cle}"\r\n\r\n{valeur}\r\n'.encode("utf-8")
-        preambule += (
-            f'--{frontiere}\r\nContent-Disposition: form-data; name="{nom_champ_fichier}"; filename="{nom_fichier}"\r\n'
-            f"Content-Type: {type_mime}\r\n\r\n"
-        ).encode("utf-8")
-        epilogue = f"\r\n--{frontiere}--\r\n".encode("utf-8")
-        taille_totale = len(preambule) + os.path.getsize(chemin_fichier) + len(epilogue)
-
-        conn = self._connexion()
-        try:
-            conn.putrequest("POST", chemin)
-            conn.putheader("Cookie", f"sillon_token={self.jeton}")
-            conn.putheader("Content-Type", f"multipart/form-data; boundary={frontiere}")
-            conn.putheader("Content-Length", str(taille_totale))
-            conn.endheaders()
-            conn.send(preambule)
-            with open(chemin_fichier, "rb") as f:
-                while True:
-                    bloc = f.read(4 * 1024 * 1024)
-                    if not bloc:
-                        break
-                    conn.send(bloc)
-            conn.send(epilogue)
-            reponse = conn.getresponse()
-            corps_reponse = reponse.read()
-            if reponse.status >= 400:
-                raise ErreurHTTP(reponse.status, corps_reponse.decode("utf-8", errors="replace"))
-            return json.loads(corps_reponse) if corps_reponse else None
-        finally:
-            conn.close()
-
-
 def base_personnelle(client):
     bases = client.get_json("/api/vue_mes_bases?je_suis_proprietaire=eq.true")
     return bases[0] if bases else None
@@ -294,11 +252,35 @@ def attendre_job(client, id_job, delai_max_s):
     raise TimeoutError(f"Job {id_job} toujours en cours après {delai_max_s}s.")
 
 
+def apercu_local(jeton, chemin_csv):
+    """Dépôt local direct (§12.8) plutôt qu'un envoi multipart classique :
+    ce script tourne déjà en root sur la même machine que l'orchestrateur,
+    inutile de faire transiter un fichier de plusieurs Go par un tampon
+    HTTP pour ensuite le recopier - un simple renommage sur le même disque
+    suffit (orchestrateur.py /import/apercu_local, jamais exposé par
+    Nginx). Appelé en direct sur le port local de l'orchestrateur plutôt
+    que via Nginx : l'authentification par jeton reste exigée comme pour
+    tout autre endpoint (before_request, §4.3) - seule la traduction
+    cookie -> en-tête Authorization habituellement faite par Nginx doit
+    être reproduite ici à la main, Nginx n'étant pas dans le chemin."""
+    corps = json.dumps({"chemin": chemin_csv, "avec_entete": "true"}).encode("utf-8")
+    conn = http.client.HTTPConnection("127.0.0.1", 5000, timeout=1800)
+    try:
+        conn.request("POST", "/import/apercu_local", body=corps, headers={
+            "Content-Type": "application/json", "Authorization": f"Bearer {jeton}",
+        })
+        reponse = conn.getresponse()
+        corps_reponse = reponse.read()
+        if reponse.status >= 400:
+            raise ErreurHTTP(reponse.status, corps_reponse.decode("utf-8", errors="replace"))
+        return json.loads(corps_reponse)
+    finally:
+        conn.close()
+
+
 def importer_sirene(client, chemin_csv):
-    print("Aperçu du fichier réduit auprès de l'orchestrateur...")
-    apercu = client.post_multipart_fichier_volumineux(
-        "/orchestrateur/import/apercu", {"avec_entete": "true"}, "fichier", chemin_csv,
-    )
+    print("Aperçu du fichier réduit auprès de l'orchestrateur (dépôt local direct)...")
+    apercu = apercu_local(client.jeton, chemin_csv)
     colonnes = [
         {"nom_normalise": c["nom_normalise"], "type": TYPES_FORCES.get(c["nom_normalise"], c["type_suggere"])}
         for c in apercu["colonnes"]
@@ -354,7 +336,7 @@ def deposer_scripts_exemple(client, base_id):
 
 def _deposer_petit_fichier(client, base_id, nom_fichier, contenu):
     """Scripts de démonstration : quelques Ko, un envoi bufferisé classique
-    suffit (contrairement au CSV Sirene, cf. post_multipart_fichier_volumineux)."""
+    suffit (contrairement au CSV Sirene, cf. apercu_local)."""
     frontiere = uuid.uuid4().hex
     type_mime = mimetypes.guess_type(nom_fichier)[0] or "text/plain"
     corps = (
@@ -390,13 +372,32 @@ def main():
         contexte = ssl._create_unverified_context()
 
     os.makedirs(args.repertoire_travail, exist_ok=True)
+    # Groupe www-data avec droit d'écriture (0775) : /import/apercu_local
+    # (orchestrateur.py, exécuté sous www-data) déplace le fichier réduit
+    # hors de ce répertoire par un simple renommage - qui exige un droit
+    # d'écriture sur le répertoire source, pas seulement sur le fichier.
+    shutil.chown(args.repertoire_travail, group="www-data")
+    os.chmod(args.repertoire_travail, 0o775)
     chemin_zip = os.path.join(args.repertoire_travail, "stock_etablissement.zip")
     chemin_csv = os.path.join(args.repertoire_travail, "sirene_reduit.csv")
 
-    url_ressource, taille_attendue = resoudre_ressource_stock_etablissement()
-    telecharger(url_ressource, chemin_zip, taille_attendue)
-    extraire_et_reduire(chemin_zip, chemin_csv)
-    os.remove(chemin_zip)  # ne garder que le CSV réduit le temps de l'import
+    # Reprise sans refaire une étape déjà accomplie - deux cas concrets :
+    # un précédent essai a échoué après le téléchargement/l'extraction
+    # (constaté en pratique sur la VM de test, plusieurs heures à ne pas
+    # perdre), ou l'administrateur a lui-même déposé l'archive à l'avance
+    # dans ce répertoire (§7.2 du guide d'installation) - machine cible sans
+    # accès Internet direct, ou simplement pour ne pas dépendre de la durée
+    # du téléchargement au moment de l'installation du paquet.
+    if os.path.isfile(chemin_csv):
+        print(f"Fichier réduit déjà présent ({os.path.getsize(chemin_csv) / 1e9:.2f} Go) - reprise sans nouveau téléchargement.")
+    else:
+        if os.path.isfile(chemin_zip):
+            print(f"Archive déjà présente ({os.path.getsize(chemin_zip) / 1e9:.2f} Go, déposée manuellement ou reprise d'un essai précédent) - pas de nouveau téléchargement.")
+        else:
+            url_ressource, taille_attendue = resoudre_ressource_stock_etablissement()
+            telecharger(url_ressource, chemin_zip, taille_attendue)
+        extraire_et_reduire(chemin_zip, chemin_csv)
+        os.remove(chemin_zip)  # ne garder que le CSV réduit le temps de l'import
 
     client = Client(args.url, args.jeton, contexte)
     importer_sirene(client, chemin_csv)

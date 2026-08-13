@@ -1088,7 +1088,7 @@ const Suivi = {
                 <td>
                     ${["en_attente", "en_cours"].includes(job.statut) ? `<button class="fr-btn fr-btn--sm fr-btn--tertiary-no-outline fr-icon-close-line" onclick="Suivi.annuler(${job.id})">Annuler</button>` : ""}
                     ${estScript(job.type) && job.statut !== "annule" ? `<button class="fr-btn fr-btn--sm fr-btn--tertiary-no-outline fr-icon-file-text-line" onclick="Suivi.afficherJournal(${job.id})">Journal</button>` : ""}
-                    ${estScript(job.type) && job.statut === "termine" ? `<button class="fr-btn fr-btn--sm fr-btn--tertiary-no-outline fr-icon-flow-chart" onclick="Suivi.afficherApercus(${job.id})">Diagrammes</button>` : ""}
+                    ${estScript(job.type) && job.statut === "termine" ? `<button class="fr-btn fr-btn--sm fr-btn--tertiary-no-outline fr-icon-image-line" onclick="Suivi.afficherApercus(${job.id})">Aperçus</button>` : ""}
                     ${job.statut === "termine" && job.chemin_resultat ? `<a class="fr-btn fr-btn--sm fr-btn--tertiary-no-outline fr-icon-download-line" href="/orchestrateur/jobs/${job.id}/telecharger">Télécharger</a>` : ""}
                 </td>
             </tr>
@@ -1149,10 +1149,14 @@ const Suivi = {
         }
     },
 
-    // Diagrammes Mermaid produits par un script (fichiers .mmd dans
-    // l'archive résultat, cf. orchestrateur.py /jobs/<id>/apercus) - rendu
-    // côté navigateur, le bac à sable ne pouvant pas le faire lui-même
-    // (§8.7 : pas de Node/Chromium dans sillon-image-execution).
+    // Aperçus des résultats d'un script (diagrammes Mermaid, images,
+    // tableaux CSV - cf. orchestrateur.py /jobs/<id>/apercus et
+    // /jobs/<id>/apercu/<nom>) : rendu entièrement côté navigateur, sans
+    // obliger l'utilisateur à télécharger l'archive complète pour
+    // consulter un seul fichier. Les diagrammes Mermaid en particulier ne
+    // peuvent pas être rendus par le bac à sable lui-même (§8.7 : pas de
+    // Node/Chromium dans sillon-image-execution) - seul le texte .mmd y
+    // est produit, rendu ici en SVG.
     async afficherApercus(idJob) {
         const ligne = document.getElementById(`apercu-${idJob}`);
         ligne.hidden = !ligne.hidden;
@@ -1163,24 +1167,85 @@ const Suivi = {
         try {
             const resultat = await appelJson(`/orchestrateur/jobs/${idJob}/apercus`);
             if (resultat.apercus.length === 0) {
-                cellule.innerHTML = `<p class="fr-text--sm">Aucun diagramme Mermaid dans ce résultat.</p>`;
+                cellule.innerHTML = `<p class="fr-text--sm">Aucun fichier prévisualisable (diagramme Mermaid, image ou CSV) dans ce résultat.</p>`;
                 return;
             }
             cellule.innerHTML = resultat.apercus.map((_, i) =>
-                `<p class="fr-text--sm fr-mb-1w"><strong></strong></p><div class="diagramme-mermaid" id="mermaid-${idJob}-${i}"></div>`).join("");
+                `<p class="fr-text--sm fr-mb-1w"><strong></strong></p><div class="apercu-fichier" id="apercu-contenu-${idJob}-${i}"></div>`).join("");
             for (const [i, apercu] of resultat.apercus.entries()) {
-                const conteneur = document.getElementById(`mermaid-${idJob}-${i}`);
+                const conteneur = document.getElementById(`apercu-contenu-${idJob}-${i}`);
                 conteneur.previousElementSibling.querySelector("strong").textContent = apercu.nom;
-                try {
-                    const { svg } = await mermaid.render(`svg-${idJob}-${i}`, apercu.contenu);
-                    conteneur.innerHTML = svg;
-                } catch (erreurRendu) {
-                    conteneur.innerHTML = `<div class="fr-alert fr-alert--error fr-alert--sm">Diagramme illisible : ${echapper(erreurRendu.message)}</div>`;
-                }
+                await Suivi._rendreApercu(idJob, apercu, conteneur, i);
             }
         } catch (erreur) {
             cellule.innerHTML = `<div class="fr-alert fr-alert--error fr-alert--sm">${echapper(erreur.message)}</div>`;
         }
+    },
+
+    async _rendreApercu(idJob, apercu, conteneur, indice) {
+        const url = `/orchestrateur/jobs/${idJob}/apercu/${encodeURIComponent(apercu.nom)}`;
+        if (apercu.type === "image") {
+            conteneur.innerHTML = `<img src="${url}" alt="${echapper(apercu.nom)}" style="max-width:100%">`;
+            return;
+        }
+        try {
+            const reponse = await fetch(url, { credentials: "same-origin" });
+            if (!reponse.ok) throw new Error(`Erreur HTTP ${reponse.status}`);
+            const texte = await reponse.text();
+            if (apercu.type === "mermaid") {
+                const { svg } = await mermaid.render(`svg-${idJob}-${indice}`, texte);
+                conteneur.innerHTML = svg;
+            } else if (apercu.type === "csv") {
+                conteneur.innerHTML = Suivi._tableauDepuisCSV(texte);
+            }
+        } catch (erreur) {
+            conteneur.innerHTML = `<div class="fr-alert fr-alert--error fr-alert--sm">Aperçu impossible : ${echapper(erreur.message)}</div>`;
+        }
+    },
+
+    _LIMITE_LIGNES_CSV: 200,
+
+    // Analyseur CSV minimal (virgule, guillemets doublés pour échapper un
+    // guillemet - RFC 4180) : suffisant pour les fichiers produits par
+    // csv.writer (Python) et write.csv (R), pas un analyseur généraliste.
+    _analyserCSV(texte) {
+        const lignes = [];
+        let ligne = [], champ = "", dansGuillemets = false;
+        for (let i = 0; i < texte.length; i++) {
+            const c = texte[i];
+            if (dansGuillemets) {
+                if (c === '"' && texte[i + 1] === '"') { champ += '"'; i++; }
+                else if (c === '"') { dansGuillemets = false; }
+                else { champ += c; }
+            } else if (c === '"') {
+                dansGuillemets = true;
+            } else if (c === ",") {
+                ligne.push(champ); champ = "";
+            } else if (c === "\n" || c === "\r") {
+                if (c === "\r" && texte[i + 1] === "\n") i++;
+                ligne.push(champ); champ = "";
+                if (ligne.length > 1 || ligne[0] !== "") lignes.push(ligne);
+                ligne = [];
+            } else {
+                champ += c;
+            }
+        }
+        if (champ !== "" || ligne.length > 0) { ligne.push(champ); lignes.push(ligne); }
+        return lignes;
+    },
+
+    _tableauDepuisCSV(texte) {
+        const lignes = Suivi._analyserCSV(texte);
+        if (lignes.length === 0) return `<p class="fr-text--sm">Fichier CSV vide.</p>`;
+        const [entetes, ...donnees] = lignes;
+        const tronque = donnees.length > Suivi._LIMITE_LIGNES_CSV;
+        const affichees = tronque ? donnees.slice(0, Suivi._LIMITE_LIGNES_CSV) : donnees;
+        return `
+            <div style="max-height:400px; overflow:auto;">
+            <table class="fr-table fr-table--sm"><thead><tr>${entetes.map((c) => `<th>${echapper(c)}</th>`).join("")}</tr></thead>
+            <tbody>${affichees.map((l) => `<tr>${l.map((v) => `<td>${echapper(v)}</td>`).join("")}</tr>`).join("")}</tbody></table>
+            </div>
+            ${tronque ? `<p class="fr-text--xs">${donnees.length} lignes au total, aperçu tronqué aux ${Suivi._LIMITE_LIGNES_CSV} premières — téléchargez l'archive pour le fichier complet.</p>` : ""}`;
     },
 };
 

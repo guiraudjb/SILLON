@@ -64,6 +64,19 @@ server {
         server_tokens off;
     }
 
+    # Jamais exposé publiquement (§12.8) : dépôt local direct réservé aux
+    # scripts d'installation tournant sur la machine elle-même (sillon-
+    # demo-sirene), qui l'appellent en direct sur 127.0.0.1:5000 sans
+    # passer par ce reverse proxy. Un agent authentifié quelconque pourrait
+    # sinon faire lire n'importe quel fichier accessible à www-data via un
+    # chemin arbitraire dans le corps de la requête - la vérification de
+    # remote_addr côté Flask ne suffit pas seule, puisque Nginx lui-même
+    # apparaît toujours comme venant de 127.0.0.1 à ce niveau.
+    location = /orchestrateur/import/apercu_local {
+        deny all;
+        return 403;
+    }
+
     # Même extraction pour l'orchestrateur : il a besoin du jeton pour
     # basculer sur le rôle personnel de l'appelant (§4.3, §4.4).
     location /orchestrateur/ {

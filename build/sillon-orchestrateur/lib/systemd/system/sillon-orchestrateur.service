@@ -15,6 +15,17 @@ EnvironmentFile=/etc/sillon/secrets.env
 Environment=SILLON_DB_HOST=localhost
 Environment=SILLON_DB_NAME=sillon_catalog
 
+# Werkzeug met en mémoire tampon disque le corps d'une requête multipart
+# avant même que le code applicatif (fichier.save() vers STAGING_DIR) ne
+# s'exécute - il utilise pour cela l'emplacement temporaire par défaut de
+# Python (tempfile.gettempdir(), "/tmp" en l'absence de TMPDIR), qui peut
+# être un tmpfs de petite taille selon l'installation (constaté en
+# pratique : échec "No space left on device" sur un /tmp tmpfs de 2 Go
+# pour un import de plusieurs Go, cf. sillon-demo-sirene, §12.8). Redirigé
+# vers le même disque que STAGING_DIR plutôt que de dépendre de la taille
+# du tmpfs système.
+Environment=TMPDIR=/var/lib/sillon/staging
+
 # --timeout : le défaut de Gunicorn (30 s) tue silencieusement le worker
 # bien avant "duree_max_job_minutes" (30 min par défaut, modifiable par
 # l'admin - §11) pour toute requête SQL synchrone de l'onglet Travaux

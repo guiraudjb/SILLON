@@ -216,7 +216,7 @@ Liste en deux sections :
 - Annulation possible tant que le job est en attente ou en cours.
 - Pour un job en erreur : un message technique (pour investigation) et un message utilisateur reformulé de façon compréhensible.
 - Lien de téléchargement du résultat une fois le job terminé, soumis à authentification (voir §8.10).
-- Pour un job de script terminé : prévisualisation directe, dans le navigateur, de tout diagramme Mermaid (fichier `.mmd`) produit parmi les résultats — le bac à sable d'exécution ne peut pas rendre l'image lui-même (aucun moteur de rendu Node/Chromium dans `sillon-image-execution`, §8.7), un script s'y limite donc à écrire le texte Mermaid ; SILLON le rend côté client (bibliothèque JavaScript vendorisée, aucun appel externe) sans obliger l'utilisateur à télécharger l'archive complète pour le consulter.
+- Pour un job de script terminé : prévisualisation directe, dans le navigateur, des fichiers de résultat qui s'y prêtent — images (graphiques), tableaux CSV et diagrammes Mermaid (fichier `.mmd`) — sans obliger l'utilisateur à télécharger l'archive complète pour les consulter. Cas particulier des diagrammes Mermaid : le bac à sable d'exécution ne peut pas rendre l'image lui-même (aucun moteur de rendu Node/Chromium dans `sillon-image-execution`, §8.7), un script s'y limite donc à écrire le texte Mermaid ; SILLON le rend côté client (bibliothèque JavaScript vendorisée, aucun appel externe).
 
 ### 5.6 Panneau Administration
 
