@@ -29,7 +29,7 @@ import uuid
 
 ICI = os.path.dirname(os.path.abspath(__file__))
 DONNEES = os.path.join(ICI, "donnees")
-SCRIPTS = os.path.join(ICI, "scripts")
+CORRIGES = os.path.join(ICI, "corriges")
 
 # Sous-ensemble des exercices du tutoriel PDF (§5.3) : préchargé dans
 # l'historique pour que le compte demo ait déjà des exemples travaillés à
@@ -50,7 +50,12 @@ REQUETES_EXEMPLE = [
     "ORDER BY c.population DESC",
 ]
 
-SCRIPTS_EXEMPLE = ["analyse_demographie.py", "analyse_densite.R", "carte_departements.py", "carte_departements.R"]
+SCRIPTS_EXEMPLE = [
+    ("python/exemples", "exemple_2.1_panorama_graphiques.py"),
+    ("r/exemples", "exemple_3.1_panorama_graphiques.R"),
+    ("python/exemples", "exemple_2.4_cartographie.py"),
+    ("r/exemples", "exemple_3.4_cartographie.R"),
+]
 
 TABLES = [
     ("communes_france.csv", "communes_france"),
@@ -60,7 +65,8 @@ TABLES = [
     # longitude, latitude) : pas de format géospatial (GeoJSON...) en base,
     # ni Python ni R n'ont de librairie dédiée dans l'image d'exécution
     # (§7.7) - un simple CSV de points reste lisible en SQL basique et
-    # suffit à reconstituer chaque polygone (cf. carte_departements.py/.R).
+    # suffit à reconstituer chaque polygone (cf. corriges/python/exemples/
+    # exemple_2.4_cartographie.py et son équivalent R).
     ("contours_departements.csv", "contours_departements"),
 ]
 
@@ -211,8 +217,8 @@ def main():
             print(f"  AVERTISSEMENT requête ignorée : {exc}", file=sys.stderr)
 
     print("Dépôt et exécution des scripts d'exemple...")
-    for nom_fichier in SCRIPTS_EXEMPLE:
-        chemin = os.path.join(SCRIPTS, nom_fichier)
+    for sous_dossier, nom_fichier in SCRIPTS_EXEMPLE:
+        chemin = os.path.join(CORRIGES, sous_dossier, nom_fichier)
         with open(chemin, "rb") as f:
             contenu = f.read()
         resultat = client.post_multipart(

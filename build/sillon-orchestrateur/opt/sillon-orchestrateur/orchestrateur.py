@@ -182,6 +182,19 @@ def est_requete_lecture(texte_sql):
     return not _MOTS_ECRITURE.match(texte_sql.strip())
 
 
+def nettoyer_requete_sql(texte):
+    """Un point-virgule final est la façon normale de terminer une requête
+    SQL - mais devient une erreur de syntaxe une fois la requête enveloppée
+    entre parenthèses ("SELECT * FROM (...) AS _sillon_apercu", "COPY (...)
+    TO STDOUT", §5.3), constaté en pratique. Retiré ici une bonne fois pour
+    toutes les requêtes libres, aux points d'entrée, plutôt que dans chacun
+    des trois endroits qui enveloppent ensuite la requête."""
+    texte = (texte or "").strip()
+    if texte.endswith(";"):
+        texte = texte[:-1].rstrip()
+    return texte
+
+
 def base_accessible(claims, base_id, exiger_script=False):
     """Vérifie que l'appelant a accès à la base (propriétaire ou
     bénéficiaire d'un partage, §8.4) et retourne son nom PostgreSQL, ou
@@ -250,7 +263,7 @@ def enregistrer_historique(claims, base_id, requete, type_requete, succes, duree
 def executer_sql():
     donnees = request.get_json(force=True)
     base_id = donnees.get("base_id")
-    requete_utilisateur = (donnees.get("requete") or "").strip()
+    requete_utilisateur = nettoyer_requete_sql(donnees.get("requete"))
     if not requete_utilisateur:
         return jsonify(erreur="Requête vide"), 400
 
@@ -330,7 +343,7 @@ def executer_sql_en_tache_de_fond():
     synchrone (et le navigateur avec elle) jusqu'à 30 minutes."""
     donnees = request.get_json(force=True)
     base_id = donnees.get("base_id")
-    requete_utilisateur = (donnees.get("requete") or "").strip()
+    requete_utilisateur = nettoyer_requete_sql(donnees.get("requete"))
     if not requete_utilisateur:
         return jsonify(erreur="Requête vide"), 400
 
@@ -364,7 +377,7 @@ def executer_sql_en_tache_de_fond():
 def exporter_sql():
     donnees = request.get_json(force=True)
     base_id = donnees.get("base_id")
-    requete_utilisateur = (donnees.get("requete") or "").strip()
+    requete_utilisateur = nettoyer_requete_sql(donnees.get("requete"))
 
     nom_pg = base_accessible(g.claims, base_id)
     if not nom_pg:

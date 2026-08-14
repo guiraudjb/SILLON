@@ -56,27 +56,33 @@ NOM_TABLE = "sirene_etablissements"
 # partir de codeCommuneEtablissement, sur le même principe que
 # communes_france.dep_code (sillon-tutoriel) pour rester croisable avec
 # ce jeu de données existant (jointure possible entre les deux paquets).
+#
+# Volontairement réduit par rapport à un premier essai qui incluait aussi
+# code_postal, libelleCommuneEtablissement, codeCommuneEtablissement (gardé
+# uniquement pour calculer dep_code, jamais persisté tel quel), enseigne1 et
+# denomination : aucun des scripts de démonstration de ce paquet ne les
+# utilise, et chaque colonne Texte supplémentaire ajoute un index GIN
+# trigram (§7.4) coûteux en espace disque à la construction - constaté en
+# pratique, l'import échouait avec "espace disque insuffisant" sur une VM
+# de test à 18 Go avec le jeu de colonnes complet.
 COLONNES_SOURCE = [
     "siren", "siret", "dateCreationEtablissement", "trancheEffectifsEtablissement",
-    "etablissementSiege", "codePostalEtablissement", "libelleCommuneEtablissement",
-    "codeCommuneEtablissement", "etatAdministratifEtablissement", "enseigne1Etablissement",
-    "denominationUsuelleEtablissement", "activitePrincipaleEtablissement", "caractereEmployeurEtablissement",
+    "etablissementSiege", "codeCommuneEtablissement", "etatAdministratifEtablissement",
+    "activitePrincipaleEtablissement", "caractereEmployeurEtablissement",
 ]
 COLONNES_SORTIE = [
-    "siren", "siret", "date_creation", "tranche_effectifs", "etablissement_siege", "code_postal",
-    "commune_libelle", "code_commune", "dep_code", "etat_administratif", "enseigne1", "denomination",
-    "activite_principale", "caractere_employeur",
+    "siren", "siret", "date_creation", "tranche_effectifs", "etablissement_siege",
+    "dep_code", "etat_administratif", "activite_principale", "caractere_employeur",
 ]
 
 # Mêmes deux angles morts que sillon-tutoriel (TYPES_FORCES,
 # peupler_tutoriel.py) : suggerer_type() n'échantillonne que les 50
 # premières lignes de l'aperçu, jamais le fichier entier - un identifiant
-# ou un code à zéros de tête (siren, siret, code_postal, code_commune,
-# dep_code) doit donc toujours être forcé en Texte, jamais laissé à la
-# détection automatique.
+# ou un code à zéros de tête (siren, siret, dep_code) doit donc toujours
+# être forcé en Texte, jamais laissé à la détection automatique.
 TYPES_FORCES = {
-    "siren": "Texte", "siret": "Texte", "tranche_effectifs": "Texte", "code_postal": "Texte",
-    "code_commune": "Texte", "dep_code": "Texte", "activite_principale": "Texte",
+    "siren": "Texte", "siret": "Texte", "tranche_effectifs": "Texte",
+    "dep_code": "Texte", "activite_principale": "Texte",
     "etat_administratif": "Texte", "caractere_employeur": "Texte",
     "etablissement_siege": "Booléen", "date_creation": "Date",
 }
@@ -171,10 +177,8 @@ def extraire_et_reduire(chemin_zip, chemin_csv_sortie):
                     ecrivain.writerow([
                         ligne["siren"], ligne["siret"], ligne["dateCreationEtablissement"],
                         ligne["trancheEffectifsEtablissement"], ligne["etablissementSiege"],
-                        ligne["codePostalEtablissement"], ligne["libelleCommuneEtablissement"],
-                        code_commune, calculer_dep_code(code_commune),
-                        ligne["etatAdministratifEtablissement"], ligne["enseigne1Etablissement"],
-                        ligne["denominationUsuelleEtablissement"], ligne["activitePrincipaleEtablissement"],
+                        calculer_dep_code(code_commune),
+                        ligne["etatAdministratifEtablissement"], ligne["activitePrincipaleEtablissement"],
                         ligne["caractereEmployeurEtablissement"],
                     ])
                     nb_lignes += 1

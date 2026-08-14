@@ -1,4 +1,4 @@
-"""SILLON - Tutoriel, corrigé de l'exercice Python 2.3.
+"""SILLON - Tutoriel, corrigé de l'exercice Python 2.4.
 
 Corrélation entre altitude moyenne et densité, calculée pour chaque
 région : les régions de montagne sont-elles significativement moins

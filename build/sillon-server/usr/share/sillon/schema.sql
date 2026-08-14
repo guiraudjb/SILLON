@@ -148,6 +148,14 @@ INSERT INTO public.parametres (cle, valeur) VALUES
     ('jobs_simultanes_par_utilisateur',  '1'),
     ('quota_disque_base_mo',             '20480'),
     ('work_mem_defaut_mo',               '64'),
+    -- Mémoire de travail dédiée à la construction des index (CREATE INDEX,
+    -- appelé automatiquement à chaque import CSV, §7.4) - distincte de
+    -- work_mem (tri/hash des requêtes) : une valeur trop basse (64 Mo,
+    -- valeur d'installation par défaut de PostgreSQL) ralentit nettement
+    -- la construction des index GIN trigram sur les colonnes Texte, en
+    -- particulier pour un import volumineux - constaté en pratique sur un
+    -- import de plusieurs dizaines de millions de lignes.
+    ('maintenance_work_mem_defaut_mo',   '256'),
     ('connexions_max_par_utilisateur',   '5'),
     -- Seuil en-deca duquel un import CSV est charge immediatement plutot
     -- que differe par la file d'attente (§5.1, etape 7) ; distinct de
@@ -197,11 +205,13 @@ RETURNS void AS $$
 DECLARE
     _role_pg        TEXT;
     _work_mem_mo    TEXT;
+    _maintenance_mo TEXT;
     _connexions_max INTEGER;
 BEGIN
     _role_pg := auth.nom_role_personnel(_email);
 
     SELECT valeur INTO _work_mem_mo FROM public.parametres WHERE cle = 'work_mem_defaut_mo';
+    SELECT valeur INTO _maintenance_mo FROM public.parametres WHERE cle = 'maintenance_work_mem_defaut_mo';
     SELECT valeur::INTEGER INTO _connexions_max FROM public.parametres WHERE cle = 'connexions_max_par_utilisateur';
 
     -- 1. Role PostgreSQL personnel : ne sert qu'a porter des permissions,
@@ -211,9 +221,11 @@ BEGIN
     -- connexion) et le fait en minuscules ("64mb"), que le parseur d'unite
     -- de PostgreSQL rejette ("MB" attendu en majuscules) - constate en
     -- pratique. Un nombre nu (kB par defaut pour work_mem) contourne le
-    -- probleme sans dependre de la casse.
+    -- probleme sans dependre de la casse. Meme raisonnement pour
+    -- maintenance_work_mem (construction des index a l'import, §7.4).
     EXECUTE format('CREATE ROLE %I NOLOGIN CONNECTION LIMIT %s', _role_pg, _connexions_max);
     EXECUTE format('ALTER ROLE %I SET work_mem = %L', _role_pg, (_work_mem_mo::integer * 1024)::text);
+    EXECUTE format('ALTER ROLE %I SET maintenance_work_mem = %L', _role_pg, (_maintenance_mo::integer * 1024)::text);
 
     -- 2. Rattachement aux roles de service (bascule "SET ROLE", §4.3) et au
     --    gabarit de profil (§8.3).

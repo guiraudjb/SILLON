@@ -150,7 +150,19 @@ const Auth = {
         // uniquement pour le compte de démonstration du paquet optionnel
         // sillon-tutoriel - ces liens 404 si ce paquet n'est pas installé,
         // jamais montrés à un compte réel dans ce cas.
-        document.getElementById("modal-about-formation").hidden = Etat.utilisateur.email !== "demo@sillon.local";
+        const estCompteDemo = Etat.utilisateur.email === "demo@sillon.local";
+        document.getElementById("modal-about-formation").hidden = !estCompteDemo;
+
+        // sillon-demo-sirene est un paquet séparé, optionnel : peut être
+        // absent même avec le compte demo présent (sillon-tutoriel seul
+        // suffit à créer ce compte) - un simple test d'existence du
+        // fichier plutôt qu'un lien systématiquement affiché, qui 404rait
+        // sinon pour quiconque n'a installé que sillon-tutoriel.
+        if (estCompteDemo) {
+            fetch("./Documentation/corriges-sirene.zip", { method: "HEAD" })
+                .then((reponse) => { document.getElementById("modal-about-sirene").hidden = !reponse.ok; })
+                .catch(() => {});
+        }
 
         Bases.charger();
         Suivi.rafraichir();

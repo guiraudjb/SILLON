@@ -1,10 +1,11 @@
-# SILLON - Tutoriel, corrigé de l'exercice R 3.1.
+# SILLON - Tutoriel, corrigé de l'exercice R 3.2.
 #
-# Nombre de communes et population totale par région, exportés en CSV.
+# Avec facet_wrap, histogramme de la population des communes, un panneau
+# par région.
 suppressMessages({
   library(DBI)
   library(RPostgreSQL)
-  library(dplyr)
+  library(ggplot2)
 })
 
 analyser_dsn <- function(dsn) {
@@ -27,10 +28,12 @@ connexion <- dbConnect(
 communes <- dbGetQuery(connexion, "SELECT reg_nom, population FROM communes_france")
 dbDisconnect(connexion)
 
-tableau <- communes %>%
-  group_by(reg_nom) %>%
-  summarise(nb_communes = n(), population_totale = sum(population)) %>%
-  arrange(desc(population_totale))
+graphique <- ggplot(communes, aes(x = population)) +
+  geom_histogram(bins = 30, fill = "#000091") +
+  scale_x_log10() +
+  facet_wrap(~ reg_nom) +
+  labs(title = "Population des communes par région", x = "Population (échelle log)", y = "Nombre de communes") +
+  theme_minimal()
 
-write.csv(tableau, file.path(resultats, "population_par_region.csv"), row.names = FALSE)
-cat(sprintf("%d region(s) resumee(s).\n", nrow(tableau)))
+ggsave(file.path(resultats, "histogramme_population_facette.png"), graphique, width = 12, height = 9)
+cat(sprintf("Histogramme facette pour %d region(s).\n", length(unique(communes$reg_nom))))

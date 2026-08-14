@@ -26,9 +26,29 @@ if [ "$DB_EXISTE" = "1" ]; then
     echo "Installation existante détectée (base $DB_NAME présente)."
     echo "Application des migrations incrémentales (§12.4) - aucune recréation du catalogue."
 
-    # TODO : au-delà de la version 0.1.0, appliquer ici les scripts de
-    # migration correspondant aux versions intermédiaires installées.
-    # Rien à migrer pour cette toute première version du schéma.
+    # Migration : mémoire de travail dédiée à la construction des index
+    # (maintenance_work_mem_defaut_mo, §7.4/§11) - absente des installations
+    # antérieures à son introduction. INSERT ... ON CONFLICT DO NOTHING
+    # plutôt qu'un schema.sql rejoué en entier (ce dernier échouerait sur
+    # les INSERT déjà présents dans public.parametres, sans clause de
+    # conflit) : le mécanisme de migration incrémentale générique reste à
+    # construire (TODO ci-dessus), ceci n'est qu'un correctif ciblé.
+    sudo -u postgres psql -d "$DB_NAME" -c "
+        INSERT INTO public.parametres (cle, valeur) VALUES ('maintenance_work_mem_defaut_mo', '256')
+        ON CONFLICT (cle) DO NOTHING;
+    " >/dev/null
+    sudo -u postgres psql -d "$DB_NAME" -tAc "
+        DO \$\$
+        DECLARE
+            _maintenance_mo TEXT;
+            _u RECORD;
+        BEGIN
+            SELECT valeur INTO _maintenance_mo FROM public.parametres WHERE cle = 'maintenance_work_mem_defaut_mo';
+            FOR _u IN SELECT role_pg FROM public.utilisateurs LOOP
+                EXECUTE format('ALTER ROLE %I SET maintenance_work_mem = %L', _u.role_pg, (_maintenance_mo::integer * 1024)::text);
+            END LOOP;
+        END \$\$;
+    " >/dev/null
 
     # Les secrets existants sont conservés tels quels (§12.3) : les
     # régénérer invaliderait toutes les sessions actives et romprait la
@@ -87,6 +107,96 @@ EOF
 
     echo "=== Identifiant administrateur initial : $ADMIN_EMAIL ==="
     echo "=== Mot de passe administrateur initial : $ADMIN_PASS ==="
+fi
+
+# =====================================================================
+# 2bis. DIMENSIONNEMENT DU MOTEUR POSTGRESQL (§7.1)
+# =====================================================================
+# Valeurs calculées à partir de la RAM et du nombre de cœurs réels de la
+# machine (comme ADRESSE_HOTE dans sillon-worker, §7.7 : redétecté à
+# chaque installation plutôt que supposé stable) plutôt que des constantes
+# arbitraires - un serveur de démonstration modeste et un serveur de
+# production dimensionné n'ont pas les mêmes ordres de grandeur.
+PG_CONF_DIR="/etc/postgresql/${PG_VERSION:-17}/main"
+RAM_TOTALE_MO=$(awk '/MemTotal/{printf "%d", $2/1024}' /proc/meminfo 2>/dev/null || echo 0)
+NB_CPU=$(nproc 2>/dev/null || echo 1)
+
+if [ -f "$PG_CONF_DIR/postgresql.conf" ] && [ "$RAM_TOTALE_MO" -gt 0 ]; then
+    # shared_buffers ~ un quart de la RAM (cache géré par le moteur
+    # lui-même) ; effective_cache_size ~ trois quarts (RAM réellement
+    # disponible pour le cache disque du système, shared_buffers inclus -
+    # n'alloue rien en soi, indique seulement au planificateur ce qu'il
+    # peut espérer trouver déjà en cache).
+    SHARED_BUFFERS_MO=$((RAM_TOTALE_MO / 4))
+    EFFECTIVE_CACHE_MO=$((RAM_TOTALE_MO * 3 / 4))
+
+    # Parallélisation dimensionnée sur le nombre de cœurs (§7.1) : les
+    # requêtes analytiques sur de gros volumes, cas d'usage central de
+    # SILLON, en bénéficient directement. max_parallel_workers_per_gather
+    # à la moitié du total, jamais en dessous de 1 sur une machine mono-cœur.
+    MAX_PARALLEL_GATHER=$((NB_CPU / 2))
+    if [ "$MAX_PARALLEL_GATHER" -lt 1 ]; then MAX_PARALLEL_GATHER=1; fi
+
+    REDEMARRAGE_REQUIS=0
+    RECHARGEMENT_REQUIS=0
+
+    # Une seule fonction pour le motif idempotent "grep puis sed ou append"
+    # déjà utilisé par ailleurs (listen_addresses, sillon-worker/postinst) :
+    # ne réécrit le fichier, et ne redémarre/recharge, que si la valeur
+    # cible n'y est pas déjà - une réinstallation ne doit jamais perturber
+    # un serveur déjà correctement réglé.
+    regler_postgresql_conf() {
+        cle="$1"; valeur="$2"; besoin_redemarrage="$3"
+        if grep -qE "^${cle}\s*=\s*${valeur}(\s|\$)" "$PG_CONF_DIR/postgresql.conf"; then
+            return
+        fi
+        if grep -qE "^#?${cle}\b" "$PG_CONF_DIR/postgresql.conf"; then
+            sed -i "s/^#\?${cle}[[:space:]]*=.*/${cle} = ${valeur}/" "$PG_CONF_DIR/postgresql.conf"
+        else
+            echo "${cle} = ${valeur}" >> "$PG_CONF_DIR/postgresql.conf"
+        fi
+        if [ "$besoin_redemarrage" = "1" ]; then REDEMARRAGE_REQUIS=1; else RECHARGEMENT_REQUIS=1; fi
+    }
+
+    # maintenance_work_mem (§7.4) : accélère la construction des index GIN
+    # trigram créés automatiquement à chaque import CSV - constaté en
+    # pratique, la valeur par défaut de PostgreSQL (quelques dizaines de
+    # Mo) ralentit nettement cette étape pour un import volumineux.
+    # Complémentaire du réglage par rôle (maintenance_work_mem_defaut_mo,
+    # public.parametres), qui prime pour un utilisateur donné - celui-ci
+    # ne sert que de plancher pour toute connexion sans réglage explicite.
+    regler_postgresql_conf "maintenance_work_mem" "256MB" 0
+    regler_postgresql_conf "shared_buffers" "${SHARED_BUFFERS_MO}MB" 1
+    regler_postgresql_conf "effective_cache_size" "${EFFECTIVE_CACHE_MO}MB" 0
+    regler_postgresql_conf "max_worker_processes" "$NB_CPU" 1
+    regler_postgresql_conf "max_parallel_workers" "$NB_CPU" 0
+    regler_postgresql_conf "max_parallel_workers_per_gather" "$MAX_PARALLEL_GATHER" 0
+    # Points de contrôle desserrés (§7.1) : absorbe les pics d'écriture des
+    # imports en masse sans dégrader la latence perçue par les autres
+    # utilisateurs actifs au même moment (contexte "sighup", jamais de
+    # redémarrage requis).
+    regler_postgresql_conf "checkpoint_timeout" "15min" 0
+    regler_postgresql_conf "max_wal_size" "4GB" 0
+    # pg_stat_statements (§7.1) : permet a posteriori d'identifier les
+    # requêtes les plus coûteuses et d'ajuster réglages/quotas en
+    # connaissance de cause - contexte "postmaster", seul réglage de ce
+    # bloc à nécessiter un redémarrage plutôt qu'un simple rechargement.
+    regler_postgresql_conf "shared_preload_libraries" "'pg_stat_statements'" 1
+
+    if [ "$REDEMARRAGE_REQUIS" = "1" ]; then
+        systemctl restart postgresql 2>/dev/null || pg_ctlcluster "${PG_VERSION:-17}" main restart 2>/dev/null || true
+    elif [ "$RECHARGEMENT_REQUIS" = "1" ]; then
+        systemctl reload postgresql 2>/dev/null || pg_ctlcluster "${PG_VERSION:-17}" main reload 2>/dev/null || true
+    fi
+
+    # CREATE EXTENSION séparé de shared_preload_libraries (§7.1) : ce
+    # dernier charge le module dans le moteur, l'extension expose la vue
+    # public.pg_stat_statements dans une base donnée - ici le catalogue,
+    # qui centralise déjà les autres vues d'administration (§6). Non
+    # bloquant : l'absence de pg_stat_statements ne doit jamais empêcher
+    # le reste de l'installation d'aboutir.
+    sudo -u postgres psql -d "$DB_NAME" -c "CREATE EXTENSION IF NOT EXISTS pg_stat_statements;" >/dev/null 2>&1 || \
+        echo "AVERTISSEMENT : extension pg_stat_statements indisponible (§7.1) - suivi des requêtes coûteuses non actif." >&2
 fi
 
 # =====================================================================

@@ -10,6 +10,7 @@ d'environnement, jamais en dur.
 """
 import os
 
+import numpy as np
 import matplotlib
 matplotlib.use("Agg")  # aucun affichage interactif possible dans le conteneur d'exécution (§7.7)
 import matplotlib.pyplot as plt
@@ -52,7 +53,14 @@ par_region.to_csv(os.path.join(resultats, "population_par_region.csv"), header=[
 densites = communes["densite"].dropna()
 densites = densites[densites > 0]
 figure, axe = plt.subplots(figsize=(8, 5))
-axe.hist(densites, bins=50, color="#000091")
+# set_xscale("log") seul ne change que l'affichage de l'axe, pas le calcul
+# des tranches de l'histogramme : avec des tranches par défaut (linéaires),
+# la quasi-totalité des communes tombe dans une seule tranche qui, une fois
+# affichée sur un axe log, semble occuper presque toute la largeur du
+# graphique - constaté en pratique. Des tranches elles-mêmes espacées en
+# log (np.logspace) donnent une répartition réellement lisible.
+tranches_log = np.logspace(np.log10(densites.min()), np.log10(densites.max()), 50)
+axe.hist(densites, bins=tranches_log, color="#000091")
 axe.set_xscale("log")
 axe.set_xlabel("Densité (hab/km², échelle logarithmique)")
 axe.set_ylabel("Nombre de communes")

@@ -89,7 +89,7 @@ sudo dpkg -i sillon-demo-sirene_0.1.0_all.deb     # optionnel, nécessite un acc
 
 ### Ce que fait chaque `postinst`, en résumé
 
-- **`sillon-server`** : génère les secrets applicatifs (`/etc/sillon/secrets.env`, `chmod 600 root:root`), crée la base `sillon_catalog` et y déploie le catalogue (`schema.sql`), configure l'API PostgREST (`/etc/sillon-api.conf`), génère un certificat TLS auto-signé si aucun n'est présent (`/etc/ssl/sillon/`), active le site Nginx, configure la limitation de débit et Fail2Ban sur `/api/rpc/login`, met en place la purge automatique du journal d'audit, et démarre les services `sillon-api` et `nginx`.
+- **`sillon-server`** : génère les secrets applicatifs (`/etc/sillon/secrets.env`, `chmod 600 root:root`), crée la base `sillon_catalog` et y déploie le catalogue (`schema.sql`), **dimensionne le moteur PostgreSQL selon la RAM et le nombre de cœurs détectés** (`shared_buffers`, `effective_cache_size`, `maintenance_work_mem`, parallélisation, points de contrôle, `pg_stat_statements` — §7.1, redétecté et réappliqué sans effet si déjà correct à chaque réinstallation), configure l'API PostgREST (`/etc/sillon-api.conf`), génère un certificat TLS auto-signé si aucun n'est présent (`/etc/ssl/sillon/`), active le site Nginx, configure la limitation de débit et Fail2Ban sur `/api/rpc/login`, met en place la purge automatique du journal d'audit, et démarre les services `sillon-api` et `nginx`.
 
   **À la première installation**, l'identifiant et le mot de passe administrateur initiaux s'affichent dans la sortie du `postinst` :
   ```
@@ -217,7 +217,24 @@ Valeurs par défaut à l'installation :
 | `jobs_simultanes_par_utilisateur` | 1 |
 | `quota_disque_base_mo` | 20480 |
 | `work_mem_defaut_mo` | 64 |
+| `maintenance_work_mem_defaut_mo` | 256 |
 | `connexions_max_par_utilisateur` | 5 |
+
+**Import volumineux lent à indexer** : chaque import CSV crée automatiquement un index par colonne (§7.4 du cahier des charges — GIN trigram pour le texte, B-tree pour les dates), coûteux en mémoire de travail pour un fichier de plusieurs millions de lignes. `maintenance_work_mem_defaut_mo` (appliqué par utilisateur, comme `work_mem_defaut_mo`) contrôle cette mémoire — la relever nettement (par exemple 1024 à 2048 selon la RAM disponible sur le serveur) accélère sensiblement la construction des index pour un import de cette taille :
+
+```sql
+UPDATE public.parametres SET valeur = '2048' WHERE cle = 'maintenance_work_mem_defaut_mo';
+ALTER ROLE "<role_pg_de_l_utilisateur>" SET maintenance_work_mem = '2097152'; -- en kilo-octets, 2048 * 1024
+```
+
+Cette seconde commande ne s'applique qu'aux comptes déjà créés (`role_pg` visible dans `public.utilisateurs`) : modifier le paramètre seul suffit pour tout compte créé après coup. `sillon-demo-sirene` applique déjà cette optimisation automatiquement à son installation pour le compte de démonstration (§7.2).
+
+**Identifier les requêtes les plus coûteuses** : `sillon-server` active `pg_stat_statements` à l'installation (§7.1) — consultable directement en SQL, par exemple pour les dix requêtes cumulant le plus de temps d'exécution :
+
+```sql
+SELECT query, calls, round(total_exec_time) AS temps_total_ms, round(mean_exec_time) AS temps_moyen_ms
+FROM public.pg_stat_statements ORDER BY total_exec_time DESC LIMIT 10;
+```
 
 ---
 
@@ -262,6 +279,7 @@ Rappel : aucun mécanisme de sauvegarde n'est porté par l'application — la pr
 | Script utilisateur ne démarre jamais | Session D-Bus de `www-data` non encore prête après un redémarrage du serveur | `systemctl status user@33.service`, puis `systemctl restart sillon-worker` |
 | `sillon-orchestrateur` refuse de s'installer | `sillon-server` non installé/configuré au préalable (`/etc/sillon/secrets.env` absent) | Installer/vérifier `sillon-server` d'abord |
 | Requêtes SQL normales, mais tous les scripts échouent (statut « erreur ») après un changement d'adresse IP ou un redémarrage du serveur | Adresse hôte détectée par le `postinst` de `sillon-worker` obsolète (§9.1) | `journalctl -u sillon-worker -n 50`, rechercher une erreur de connexion PostgreSQL |
+| Bouton « Journal » (onglet Suivi) affiche systématiquement « journal vide pour l'instant », même pour un job en cours | Corrigé (`python3 -u` / `stdbuf`, worker.py) : la sortie standard d'un interprète non attaché à un terminal était mise en tampon par blocs, jamais vidée avant la fin d'un script court — le journal réellement produit n'apparaissait qu'une fois le job déjà terminé (et donc déjà uniquement dans l'archive téléchargeable, plus dans la fenêtre « en cours ») | `sudo dpkg -i sillon-worker_0.1.0_all.deb` puis `systemctl restart sillon-worker` si une version antérieure au correctif est installée |
 
 ### 9.1 Changement d'adresse IP du serveur (ou redémarrage avec IP dynamique)
 

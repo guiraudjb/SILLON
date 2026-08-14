@@ -38,7 +38,13 @@ tableau = tableau.sort_values("total", ascending=False)
 
 tableau.to_csv(os.path.join(resultats, "tableau_croise_departements.csv"))
 
-figure, axe = plt.subplots(figsize=(12, 0.5 * len(tableau) + 1.5))
+# Largeur proportionnelle au nombre de colonnes (jusqu'à une quinzaine de
+# tranches d'effectif distinctes dans la nomenclature INSEE) plutôt qu'une
+# largeur fixe : sans cela, les colonnes se resserrent au point de rendre
+# les valeurs illisibles une fois toutes les tranches réellement présentes
+# dans le jeu de données (constaté avec les autres tableaux de ce paquet).
+nb_colonnes = len(tableau.columns) + 1
+figure, axe = plt.subplots(figsize=(max(12, 0.9 * nb_colonnes), 0.5 * len(tableau) + 1.5))
 axe.axis("off")
 rendu = axe.table(
     cellText=tableau.reset_index().values,

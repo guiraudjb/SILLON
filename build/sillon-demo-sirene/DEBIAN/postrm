@@ -6,12 +6,15 @@ set -e
 # dans cette base, déjà supprimée intégralement par le postrm de
 # sillon-tutoriel (DROP DATABASE) quel que soit l'ordre de purge entre les
 # deux paquets. Il ne reste donc à nettoyer ici que le répertoire de
-# travail temporaire (téléchargement/réduction du CSV Sirene).
+# travail temporaire (téléchargement/réduction du CSV Sirene) et l'archive
+# de scripts publiée aux côtés de la documentation.
 REPERTOIRE_TRAVAIL="/var/lib/sillon-demo-sirene"
+SCRIPTS_CIBLE="/var/www/html/SILLON/Documentation/corriges-sirene.zip"
 
 case "$1" in
     purge)
         rm -rf "$REPERTOIRE_TRAVAIL"
+        rm -f "$SCRIPTS_CIBLE"
         ;;
 esac
 

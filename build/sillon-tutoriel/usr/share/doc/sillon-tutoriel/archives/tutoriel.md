@@ -6,7 +6,7 @@
 
 ## À propos de ce tutoriel
 
-Ce document accompagne le compte de démonstration `demo@sillon.local` créé par le paquet `sillon-tutoriel`. Il vous fait découvrir SILLON à travers un vrai jeu de données ouvert, avec des exercices SQL en difficulté croissante, puis un panorama complet de ce qu'il est possible de produire en Python et en R : graphiques, tableaux, exports Excel, rapports PDF et cartographie.
+Ce document accompagne le compte de démonstration `demo@sillon.local` créé par le paquet `sillon-tutoriel`. Il vous fait découvrir SILLON à travers un vrai jeu de données ouvert, avec des exercices SQL en difficulté croissante, puis un panorama complet de ce qu'il est possible de produire en Python et en R : graphiques, tableaux, exports Excel, rapports PDF, cartographie et diagrammes Mermaid — le tout démontré une seconde fois à grande échelle (43,9 millions de lignes) si le paquet optionnel `sillon-demo-sirene` est également installé (Parties 4 et 5).
 
 **Identifiants du compte de démonstration**
 
@@ -17,6 +17,8 @@ Ce document accompagne le compte de démonstration `demo@sillon.local` créé pa
 | Profil | Agent |
 
 > **Ce mot de passe est volontairement fixe et documenté**, pour faciliter une session de démonstration ou de formation. Le paquet `sillon-tutoriel` ne doit **jamais** être installé sur un serveur de production — voir le guide d'installation administrateur, §7.2.
+
+**Tous les scripts présentés dans ce tutoriel sont téléchargeables**, sous forme de fichiers réellement fonctionnels (pas de simples extraits) — qu'il s'agisse des scripts d'exemple déjà exécutés à l'installation ou des corrigés d'exercices. Depuis le bouton « À propos » de l'application, connecté avec le compte de démonstration : archive **`corriges-tutoriel.zip`**, organisée en `sql/`, `python/exemples/`, `python/exercices/`, `r/exemples/` et `r/exercices/`.
 
 ## Le jeu de données
 
@@ -52,7 +54,7 @@ Colonnes de `contours_departements` : `dep_code`, `dep_nom`, `groupe` (numéro d
 
 ## Partie 1 — SQL progressif
 
-Tous les exercices se travaillent dans l'onglet **Travaux**, en sélectionnant votre base personnelle. Les sept premiers exercices sont déjà présents dans votre **historique** (onglet Travaux) : vous pouvez les relire ou les réexécuter avant de passer aux suivants, qui restent à écrire vous-même.
+Tous les exercices se travaillent dans l'onglet **Travaux**, en sélectionnant votre base personnelle. Les sept premiers exercices sont déjà présents dans votre **historique** (onglet Travaux) : vous pouvez les relire ou les réexécuter avant de passer aux suivants, qui restent à écrire vous-même. Corrigés téléchargeables dans `sql/` (`exercice_1.3.sql` à `exercice_7.2.sql`).
 
 ### Niveau 1 — Sélection et filtrage
 
@@ -304,7 +306,9 @@ plt.colorbar(image, ax=axe, label="Corrélation")
 figure.savefig(os.path.join(resultats, "correlations.png"), bbox_inches="tight")
 ```
 
-Le script d'exemple `analyse_demographie.py` (déjà déposé et exécuté, résultat dans l'onglet **Suivi**) combine barres horizontales, barres verticales et histogramme en échelle logarithmique sur les 34 868 communes.
+Le script d'exemple **`exemple_2.1_panorama_graphiques.py`** (déjà déposé et exécuté, résultat dans l'onglet **Suivi** ; téléchargeable dans `python/exemples/`) combine barres horizontales, barres verticales et histogramme en échelle logarithmique sur les 34 868 communes.
+
+![Population totale par région, résultat réel de exemple_2.1_panorama_graphiques.py](images/exemple_2.1_panorama.png)
 
 ### 2.2 Tableaux et export Excel
 
@@ -370,7 +374,7 @@ with PdfPages(os.path.join(resultats, "rapport.pdf")) as pdf:
 
 Pas de `geopandas`/`shapely` dans l'image d'exécution : la table `contours_departements` aplatit volontairement chaque polygone en points ordonnés (`dep_code`, `groupe`, `ordre`, `longitude`, `latitude`) plutôt qu'un format géospatial — `matplotlib.patches.Polygon` sait tracer un polygone à partir d'une simple liste de coordonnées, sans dépendance supplémentaire.
 
-Le script d'exemple `carte_departements.py` (déjà déposé et exécuté, résultat dans l'onglet **Suivi**) trace une carte choroplèthe de la population par département :
+Le script d'exemple **`exemple_2.4_cartographie.py`** (déjà déposé et exécuté, résultat dans l'onglet **Suivi** ; téléchargeable dans `python/exemples/`) trace une carte choroplèthe de la population par département :
 
 ```python
 from collections import defaultdict
@@ -397,15 +401,38 @@ axe.axis("off")
 figure.savefig(os.path.join(resultats, "carte.png"), bbox_inches="tight")
 ```
 
+![Carte choroplèthe de la population par département, résultat réel de exemple_2.4_cartographie.py](images/exemple_2.4_cartographie.png)
+
 ### Exercices
 
-**2.1.** Reproduisez la carte de `carte_departements.py`, mais coloriée par **densité moyenne** du département plutôt que par population totale.
+Corrigés téléchargeables dans `python/exercices/` (`exercice_2.1.py` à `exercice_2.4.py`).
+
+**2.1.** Reproduisez la carte de `exemple_2.4_cartographie.py`, mais coloriée par **densité moyenne** du département plutôt que par population totale.
+
+![Corrigé de l'exercice 2.1 : carte coloriée par densité moyenne](images/exercice_2.1_carte_densite.png)
 
 **2.2.** Exportez un fichier Excel avec un onglet par région, chacun listant les communes de la région triées par population, en utilisant `openpyxl` (indice : une feuille par valeur unique de `reg_nom`, via une boucle).
 
-**2.3.** *Avancé* : assemblez en un seul PDF (`PdfPages`) trois graphiques de votre choix parmi ceux du panorama (2.1).
+<img src="images/exercice_2.2_excel.png" alt="Corrigé de l'exercice 2.2 : classeur Excel avec un onglet par région (ici, l'onglet Auvergne-Rhône-Alpes, 10 premières lignes)" style="max-width:220px">
+
+**2.3.** *Avancé* : assemblez en un seul PDF (`PdfPages`) trois graphiques de votre choix parmi ceux du panorama (2.1 ci-dessus).
+
+![Corrigé de l'exercice 2.3 : première page du rapport PDF (barres, camembert, histogramme assemblés)](images/exercice_2.3_pdf_page1.png)
 
 **2.4.** *Avancé* : calculez, pour chaque région, le coefficient de corrélation entre altitude moyenne et densité (`DataFrame.corr()` après un `groupby`). Les régions de montagne sont-elles significativement moins denses ?
+
+Résultat réel (`correlation_altitude_densite.csv`, extrait) :
+
+| Région | Corrélation |
+|---|---|
+| Île-de-France | -0,43 |
+| Provence-Alpes-Côte d'Azur | -0,34 |
+| Hauts-de-France | -0,30 |
+| Bretagne | -0,26 |
+| Corse | -0,23 |
+| Bourgogne-Franche-Comté | -0,06 |
+
+Corrélations négatives partout : dans chaque région, les communes les plus hautes en altitude tendent à être les moins denses — hypothèse confirmée, à des degrés très variables selon la région.
 
 ---
 
@@ -463,7 +490,9 @@ graphique <- ggplot(communes, aes(x = densite)) +
 ggsave(file.path(resultats, "densite_par_region.png"), graphique, width = 10, height = 8)
 ```
 
-Le script d'exemple `analyse_densite.R` (déjà exécuté, résultat dans l'onglet **Suivi**) trace la densité moyenne des 15 départements les plus denses et la relation altitude/densité.
+Le script d'exemple **`exemple_3.1_panorama_graphiques.R`** (déjà exécuté, résultat dans l'onglet **Suivi** ; téléchargeable dans `r/exemples/`) trace la densité moyenne des 15 départements les plus denses et la relation altitude/densité.
+
+![Densité moyenne des 15 départements les plus denses, résultat réel de exemple_3.1_panorama_graphiques.R](images/exemple_3.1_panorama.png)
 
 ### 3.2 Tableaux
 
@@ -496,7 +525,7 @@ dev.off()
 
 Sans `sf` ni `maps` dans l'image d'exécution : `geom_polygon()` de ggplot2 sait tracer un polygone directement à partir d'un data frame de points ordonnés (colonnes `x`, `y`, `group`) — le style « fortifié » classique de ggplot2, sans dépendance géospatiale.
 
-Le script d'exemple `carte_departements.R` (déjà déposé et exécuté, résultat dans l'onglet **Suivi**) trace la même carte choroplèthe qu'en Python :
+Le script d'exemple **`exemple_3.4_cartographie.R`** (déjà déposé et exécuté, résultat dans l'onglet **Suivi** ; téléchargeable dans `r/exemples/`) trace la même carte choroplèthe qu'en Python :
 
 ```r
 contours <- dbGetQuery(
@@ -519,15 +548,91 @@ carte <- ggplot(contours, aes(x = longitude, y = latitude, group = id_polygone, 
 ggsave(file.path(resultats, "carte.png"), carte, width = 8, height = 8)
 ```
 
+![Carte choroplèthe de la population par département, résultat réel de exemple_3.4_cartographie.R](images/exemple_3.4_cartographie.png)
+
 ### Exercices
 
-**3.1.** Reproduisez la carte de `carte_departements.R`, mais coloriée par densité moyenne plutôt que par population totale (indice : comparez à l'exercice Python 2.1).
+Corrigés téléchargeables dans `r/exercices/` (`exercice_3.1.R` à `exercice_3.4.R`).
+
+**3.1.** Reproduisez la carte de `exemple_3.4_cartographie.R`, mais coloriée par densité moyenne plutôt que par population totale (indice : comparez à l'exercice Python 2.1).
+
+![Corrigé de l'exercice 3.1 : carte coloriée par densité moyenne](images/exercice_3.1_carte_densite.png)
 
 **3.2.** Avec `facet_wrap`, tracez un histogramme de la population des communes, un panneau par région.
 
+![Corrigé de l'exercice 3.2 : histogramme facetté, un panneau par région](images/exercice_3.2_histogramme_facette.png)
+
 **3.3.** *Avancé* : à l'aide de `regions_france`, faites une jointure (`inner_join`) entre les deux tables pour comparer, région par région, la population du chef-lieu à la population totale de la région — comme l'exercice SQL 6.2, mais en R.
 
+Résultat réel (`part_chef_lieu.csv`, 5 premières lignes sur 18 régions) :
+
+| Chef-lieu | Région | Population du chef-lieu | Population totale | Part |
+|---|---|---|---|---|
+| Mamoudzou | Mayotte | 71 437 | 256 518 | 27,8 % |
+| Ajaccio | Corse | 76 320 | 355 486 | 21,5 % |
+| Cayenne | Guyane | 62 675 | 293 996 | 21,3 % |
+| Fort-de-France | Martinique | 75 506 | 360 630 | 20,9 % |
+| Paris | Île-de-France | 2 103 778 | 12 463 067 | 16,9 % |
+
+Sans surprise, les chefs-lieux des petites régions ultramarines pèsent nettement plus lourd dans leur région que les grandes métropoles métropolitaines (Lyon : 6,3 %, Lille : 4 %) dans la leur.
+
 **3.4.** *Avancé* : assemblez trois graphiques dans un seul rapport PDF avec `pdf()`/`dev.off()`.
+
+![Corrigé de l'exercice 3.4 : première page du rapport PDF](images/exercice_3.4_pdf_page1.png)
+
+---
+
+## Partie 4 — Python à grande échelle (`sillon-demo-sirene`)
+
+Le paquet optionnel `sillon-demo-sirene` (complémentaire de `sillon-tutoriel`, à installer séparément — voir le guide d'installation administrateur, §7.2) importe le jeu de données Sirene complet de l'INSEE (« StockEtablissement », Licence Ouverte 2.0, [data.gouv.fr](https://www.data.gouv.fr/)) dans votre base personnelle : la table **`sirene_etablissements`**, environ **43,9 millions de lignes** — un ordre de grandeur au-delà de `communes_france`. Six scripts Python et trois scripts R, déjà déposés et exécutés à l'installation de ce paquet, démontrent les mêmes possibilités que les Parties 2 et 3 mais à cette échelle. **Si ce paquet n'est pas installé, cette table n'existe pas** : passez directement à « Pour continuer ».
+
+**Règle impérative à cette échelle** : chaque script agrège côté PostgreSQL (`GROUP BY`, `COUNT`, ...) avant de rapatrier le résultat en Python/R — jamais un `SELECT * FROM sirene_etablissements` ni un `pd.read_sql("SELECT * FROM ...")` sans filtre, qui dépasserait largement le quota mémoire du conteneur d'exécution (`ram_max_conteneur_mo`, §11 du cahier des charges). Une requête déjà réduite à quelques dizaines ou centaines de lignes transite seule vers pandas/dplyr.
+
+Colonnes de `sirene_etablissements` : `siren`, `siret`, `date_creation`, `tranche_effectifs`, `etablissement_siege` (booléen), `dep_code` (croisable avec `communes_france`/`contours_departements`), `etat_administratif` (`A` = actif), `activite_principale` (code NAF), `caractere_employeur` — volontairement réduit aux colonnes utilisées par les scripts de démonstration (chaque colonne Texte ajoute un index de recherche approchée coûteux en espace disque à la construction, §7.4).
+
+Scripts téléchargeables dans `python/` et `r/` (archive `corriges-sirene.zip`, modale « À propos »).
+
+### 4.1 Panorama des graphiques (`graphiques_couverture.py`)
+
+Quatre graphiques dans une seule image (`plt.subplots(2, 2)`) à partir de quatre requêtes agrégées : barres (établissements actifs par tranche d'effectif), camembert (part des employeurs), courbe (créations par année), barres horizontales (15 divisions NAF les plus représentées).
+
+### 4.2 Tableau croisé (`tableau_pandas.py`)
+
+Tableau croisé `pandas.pivot_table` (départements × tranches d'effectif, sur les 12 départements les plus dotés), exporté en CSV et en image de tableau (`ax.table`) — utile quand le résultat doit être consulté sans tableur.
+
+### 4.3 Export Excel avec graphique natif (`export_excel.py`)
+
+Classeur `openpyxl` à trois feuilles (résumé, top secteurs NAF, par département), avec un graphique natif Excel (`openpyxl.chart.BarChart`) directement modifiable dans Excel ou LibreOffice.
+
+### 4.4 Rapport PDF multi-pages (`rapport_pdf_multipages.py`)
+
+`PdfPages` assemble une page de garde (texte) et deux graphiques (évolution des créations, top 10 départements) en un seul PDF.
+
+### 4.5 Diagramme Mermaid (`diagramme_mermaid.py`)
+
+Le bac à sable n'a ni Node.js ni Chromium (§7.7/§8.7 du cahier des charges) : impossible d'y rendre une image Mermaid. Le script se contente d'écrire le **texte** Mermaid (`pie showData title ...`) dans ses résultats — SILLON le rend lui-même, côté navigateur, dès que vous ouvrez le bouton **« Aperçus »** du job dans l'onglet Suivi (à côté de « Journal » et « Télécharger »). Aucune bibliothèque supplémentaire requise, en Python comme en R : c'est la même mécanique que 4.5/5.3.
+
+### 4.6 Cartographie croisée (`carte_choroplethe.py`)
+
+Densité d'établissements actifs par département, sur les contours réels déjà importés par `sillon-tutoriel` (`contours_departements`) — les deux paquets partagent la même base personnelle, cette jointure ne nécessite donc aucun import supplémentaire.
+
+---
+
+## Partie 5 — R à grande échelle (`sillon-demo-sirene`)
+
+Même jeu de données et même règle d'agrégation SQL qu'en Partie 4.
+
+### 5.1 Panorama des graphiques (`graphiques_ggplot.R`)
+
+Trois graphiques ggplot2 à partir de requêtes agrégées : barres (par tranche d'effectif), courbe (créations par année), histogramme (distribution du nombre d'établissements actifs par département).
+
+### 5.2 Pipeline dplyr (`analyse_dplyr.R`)
+
+Classement des 20 divisions NAF les plus représentées (`mutate`/`arrange`/`row_number` sur un résultat déjà agrégé côté SQL), exporté en CSV.
+
+### 5.3 Diagramme Mermaid (`diagramme_mermaid.R`)
+
+Même principe qu'en 4.5 : le script écrit le texte Mermaid (répartition employeurs/non-employeurs), rendu côté navigateur depuis l'onglet Suivi.
 
 ---
 
@@ -536,3 +641,4 @@ ggsave(file.path(resultats, "carte.png"), carte, width = 8, height = 8)
 - Les onglets **Bases**, **Import** et **Suivi** couvrent le reste des fonctionnalités de SILLON : import de vos propres fichiers CSV, partage de base avec un autre compte, suivi et annulation des traitements en cours.
 - Le **Guide d'installation administrateur** (accessible depuis le bouton « À propos ») détaille la configuration du serveur, les quotas et les procédures de désinstallation.
 - Ce compte de démonstration peut être réinitialisé à tout moment : `sudo apt-get purge sillon-tutoriel && sudo apt-get install sillon-tutoriel` (voir le guide d'installation administrateur, §7.2 et §8).
+- Si `sillon-demo-sirene` (Parties 4 et 5) n'est pas encore installé, il s'ajoute sans toucher au reste : `sudo dpkg -i sillon-demo-sirene_0.1.0_all.deb` (nécessite un accès Internet sur la machine cible le temps de l'installation — voir le guide d'installation administrateur, §7.2).

@@ -50,9 +50,17 @@ patches = [Polygon(points, closed=True) for (_dep_code, _groupe), points in poly
 couleurs = [etablissements_par_dep.get(dep_code, 0) for (dep_code, _groupe) in polygones]
 
 figure, axe = plt.subplots(figsize=(8, 8))
+# LogNorm plutôt que Normalize (linéaire) : le nombre d'établissements par
+# département est extrêmement asymétrique (Paris et les départements
+# franciliens en concentrent bien plus, toutes proportions gardées, que
+# les départements ruraux) - une échelle linéaire écraserait la plupart
+# des départements dans la teinte la plus claire de la palette, tous
+# indiscernables (même défaut constaté sur la densité de population,
+# sillon-tutoriel, corrigé de l'exercice 2.1). L'échelle logarithmique
+# donne un contraste réel sur toute la gamme de valeurs.
 collection = PatchCollection(
     patches, array=couleurs, cmap=cm.get_cmap("Reds"),
-    norm=mcolors.Normalize(vmin=min(couleurs), vmax=max(couleurs)),
+    norm=mcolors.LogNorm(vmin=max(min(couleurs), 1), vmax=max(couleurs)),
     edgecolor="white", linewidth=0.3,
 )
 axe.add_collection(collection)

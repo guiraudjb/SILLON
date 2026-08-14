@@ -64,11 +64,21 @@ graphique_annees <- ggplot(par_annee, aes(x = annee, y = nb)) +
   labs(title = "Créations d'établissements par année", x = "Année", y = "Créations")
 ggsave(file.path(resultats, "ggplot_creations.png"), graphique_annees, width = 8, height = 6)
 
+# scale_x_log10() : le nombre d'établissements par département est
+# asymétrique (Paris et les départements franciliens en concentrent
+# nettement plus que les départements ruraux) - avec une centaine de
+# départements seulement, des tranches linéaires écraseraient la plupart
+# d'entre eux dans les premières tranches (même défaut que la densité,
+# corrigé de l'exercice R 3.1/3.4, sillon-tutoriel). Contrairement à un
+# histogramme matplotlib (Python), ggplot2 recalcule réellement les
+# tranches dans l'espace transformé plutôt que de se contenter de changer
+# l'affichage de l'axe - scale_x_log10() seul suffit ici.
 graphique_departements <- ggplot(par_departement, aes(x = nb)) +
   geom_histogram(bins = 30, fill = "#000091") +
+  scale_x_log10() +
   theme_minimal() +
   labs(title = "Distribution du nombre d'établissements actifs par département",
-       x = "Établissements actifs (par département)", y = "Nombre de départements")
+       x = "Établissements actifs par département (échelle log)", y = "Nombre de départements")
 ggsave(file.path(resultats, "ggplot_distribution_departements.png"), graphique_departements, width = 8, height = 6)
 
 cat(sprintf("3 graphiques ggplot2 produits (%d tranches, %d annees, %d departements).\n",

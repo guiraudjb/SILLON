@@ -30,6 +30,13 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install --no-instal
         r-cran-tidyverse \
         r-cran-dbi \
         r-cran-rpostgresql \
+        # matplotlib embarque sa propre police (DejaVu Sans) et n'a besoin
+        # d'aucune police systeme, mais ggplot2/R (peripherique Cairo) si -
+        # une image minimale n'en fournit aucune par defaut, d'ou un
+        # caractere accentue affiche comme glyphe manquant dans une image
+        # produite par un script R (jamais en Python), constate en pratique
+        # sur un titre de graphique contenant "densite".
+        fonts-dejavu-core \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
@@ -57,7 +64,18 @@ ENV HOME=/tmp \
     TMPDIR=/tmp \
     MPLCONFIGDIR=/tmp/matplotlib \
     PYTHONDONTWRITEBYTECODE=1 \
-    R_LIBS_USER=/tmp/R
+    R_LIBS_USER=/tmp/R \
+    LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8
+
+# Sans locale UTF-8 explicite, "debian:13-slim" ne fournit que la locale
+# "C"/"POSIX" (aucune locale generee par defaut dans une image minimale) :
+# R (moins tolerant que Python 3 sur ce point) peut alors ecrire les
+# caracteres accentues renvoyes par PostgreSQL sous forme d'echappement
+# litteral "<U+00E9>" au lieu du caractere UTF-8 lui-meme dans un fichier
+# exporte (write.csv) - constate en pratique sur un nom de region contenant
+# un accent. "C.UTF-8" est une locale compilee en dur dans glibc, toujours
+# disponible sans "locale-gen" ni le paquet "locales" complet.
 
 WORKDIR /travail/resultats
 USER sillon

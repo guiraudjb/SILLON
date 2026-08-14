@@ -31,14 +31,21 @@ dbDisconnect(connexion)
 
 pdf(file.path(resultats, "rapport_trois_graphiques.pdf"), width = 8, height = 6)
 
-hist(communes$densite, breaks = 50, main = "Distribution de la densite", xlab = "Densite (hab/km2)")
+# Histogramme en log10 plutôt qu'en échelle linéaire : la densité est
+# extrêmement asymétrique (quelques communes très denses face à des
+# dizaines de milliers de communes rurales) - un histogramme linéaire
+# entasse alors la quasi-totalité des communes dans le tout premier
+# intervalle, illisible (constaté en pratique). Mêmes conventions que le
+# nuage de points ci-dessous (log = "y"), qui traite déjà ce même défaut.
+hist(log10(communes$densite[communes$densite > 0]), breaks = 50,
+     main = "Distribution de la densité (échelle log)", xlab = "Densité (hab/km², log10)")
 
 par_region <- communes %>% group_by(reg_nom) %>% summarise(population_totale = sum(population))
 barplot(par_region$population_totale, names.arg = par_region$reg_nom, las = 2,
-        main = "Population par region", cex.names = 0.6)
+        main = "Population par région", cex.names = 0.6)
 
 plot(communes$altitude_moyenne, communes$densite, log = "y", pch = 20, col = rgb(0, 0, 0.57, 0.2),
-     main = "Altitude vs densite", xlab = "Altitude moyenne (m)", ylab = "Densite (log)")
+     main = "Altitude vs densité", xlab = "Altitude moyenne (m)", ylab = "Densité (log)")
 
 dev.off()
 cat("Rapport PDF genere : rapport_trois_graphiques.pdf\n")

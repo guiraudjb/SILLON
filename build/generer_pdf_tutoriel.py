@@ -43,6 +43,13 @@ STYLE = """
   blockquote { border-left: 3px solid #b34000; background: #fef4e5; margin: 8pt 0; padding: 6pt 10pt; }
   strong { color: #000091; }
   a { color: #000091; }
+  /* Sans borne explicite, une image insérée à sa taille native (ex. une
+     figure matplotlib sauvegardée à dpi=120) déborde largement la largeur
+     utile de la page ou s'étire sur presque une page entière - constaté en
+     pratique une fois les captures d'écran intégrées. max-height laisse de
+     la place pour la légende/le texte qui suit sur la même page plutôt que
+     de forcer un saut de page pour une seule image. */
+  img { display: block; max-width: 100%; max-height: 200mm; height: auto; margin: 10pt auto; page-break-inside: avoid; }
 """
 
 

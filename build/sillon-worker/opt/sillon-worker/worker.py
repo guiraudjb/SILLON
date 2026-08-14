@@ -139,7 +139,18 @@ def executer_conteneur(conn, id_job, type_job, payload, mot_de_passe, repertoire
 
     extension = ".py" if type_job == "script_python" else ".R"
     nom_script_conteneur = f"/travail/script{extension}"
-    interprete = "python3" if type_job == "script_python" else "Rscript"
+    # Sans ceci, le journal en direct (§5.4, /jobs/<id>/journal) reste vide
+    # pendant toute la durée d'un script cout (constaté en pratique) : la
+    # sortie standard d'un interprète non attaché à un terminal est mise en
+    # tampon par blocs (~4 Ko) plutôt que ligne à ligne, jamais vidée avant
+    # la fin du process pour un script qui affiche seulement quelques
+    # lignes - "python3 -u" désactive ce tampon ; Rscript n'a pas
+    # d'équivalent intégré, d'où "stdbuf" (coreutils, déjà présent sur
+    # toute image Debian de base, aucune dépendance supplémentaire).
+    commande_interprete = (
+        ["python3", "-u", nom_script_conteneur] if type_job == "script_python"
+        else ["stdbuf", "-oL", "-eL", "Rscript", nom_script_conteneur]
+    )
 
     dsn = (
         f"host={HOTE_DB_DEPUIS_CONTENEUR} port={DB_PORT} dbname={payload['nom_pg']} "
@@ -177,7 +188,7 @@ def executer_conteneur(conn, id_job, type_job, payload, mot_de_passe, repertoire
         "-e", f"SILLON_DSN={dsn}",
         "-e", "SILLON_RESULTATS=/travail/resultats",
         IMAGE_EXECUTION,
-        interprete, nom_script_conteneur,
+        *commande_interprete,
     ]
 
     date_limite = time.monotonic() + delai_minutes * 60

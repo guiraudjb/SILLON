@@ -33,6 +33,20 @@ sudo -u postgres psql -d "$DB_NAME" -c \
 sudo -u postgres psql -d "$DB_NAME" -c \
     "UPDATE public.parametres SET valeur = '240' WHERE cle = 'duree_max_job_minutes' AND valeur::int < 240;" >/dev/null
 
+# maintenance_work_mem dedie a la construction des index (§7.4) : la table
+# sirene_etablissements compte une douzaine de colonnes Texte, chacune
+# indexee en GIN trigram a l'import - constate en pratique, la valeur par
+# defaut de PostgreSQL (quelques dizaines de Mo) ralentit nettement cette
+# etape sur ~43,9 millions de lignes. Applique directement au role du
+# compte demo (INSERT/migration deja generique cote sillon-server pour les
+# futurs comptes, mais celui-ci existe deja - cf. §9 du guide d'installation
+# administrateur pour la meme optimisation sur un import personnel).
+sudo -u postgres psql -d "$DB_NAME" -c \
+    "UPDATE public.parametres SET valeur = '2048' WHERE cle = 'maintenance_work_mem_defaut_mo' AND valeur::int < 2048;" >/dev/null
+ROLE_DEMO=$(sudo -u postgres psql -d "$DB_NAME" -tAc "SELECT role_pg FROM public.utilisateurs WHERE email = '$DEMO_EMAIL'")
+sudo -u postgres psql -d "$DB_NAME" -c \
+    "ALTER ROLE \"$ROLE_DEMO\" SET maintenance_work_mem = '2097152';" >/dev/null
+
 # =====================================================================
 # 2. JETON DU COMPTE DEMO, SANS PASSER PAR /api/rpc/login
 # =====================================================================
@@ -58,7 +72,31 @@ JETON=$(sudo -u postgres psql -d "$DB_NAME" -tAc "
 echo "Téléchargement et import du jeu de données Sirene (peut prendre plusieurs heures selon la machine et la bande passante)..."
 python3 /usr/share/sillon-demo-sirene/preparer_sirene.py --url https://localhost --jeton "$JETON"
 
+# =====================================================================
+# 4. SCRIPTS EMPAQUETES EN ARCHIVE TELECHARGEABLE (§12.8)
+# =====================================================================
+# Même principe que sillon-tutoriel/postinst (python3 zipfile plutôt que
+# la commande "zip", déjà une dépendance de fait) : tous les scripts de
+# démonstration de ce paquet, téléchargeables depuis la modale « À propos »
+# au même titre que ceux de sillon-tutoriel, jamais de simples extraits.
+SCRIPTS_SOURCE="/usr/share/sillon-demo-sirene/scripts"
+SCRIPTS_CIBLE="/var/www/html/SILLON/Documentation/corriges-sirene.zip"
+if [ -d "$SCRIPTS_SOURCE" ] && [ -d /var/www/html/SILLON/Documentation ]; then
+    python3 -c "
+import zipfile, os
+source = '$SCRIPTS_SOURCE'
+with zipfile.ZipFile('$SCRIPTS_CIBLE', 'w', zipfile.ZIP_DEFLATED) as archive:
+    for racine, _dirs, fichiers in os.walk(source):
+        for nom in fichiers:
+            chemin = os.path.join(racine, nom)
+            archive.write(chemin, os.path.relpath(chemin, source))
+"
+    chown root:www-data "$SCRIPTS_CIBLE"
+    chmod 644 "$SCRIPTS_CIBLE"
+fi
+
 echo ""
 echo "=== Installation de SILLON (sillon-demo-sirene) terminée ==="
 echo "Table sirene_etablissements disponible dans la base personnelle du compte $DEMO_EMAIL."
+echo "Scripts de démonstration téléchargeables depuis la modale « À propos » (compte demo uniquement)."
 exit 0

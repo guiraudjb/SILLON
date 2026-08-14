@@ -1,4 +1,4 @@
-"""SILLON - Tutoriel, corrigé de l'exercice Python 2.4.
+"""SILLON - Tutoriel, corrigé de l'exercice Python 2.2.
 
 Export Excel avec un onglet par région, chacun listant les communes de la
 région triées par population.
