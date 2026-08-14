@@ -240,6 +240,7 @@ La base personnelle est sélectionnée automatiquement comme base active dès la
 - Coloration : palette par défaut (Bleu France), deux dégradés divergents prédéfinis, ou dégradé personnalisé à deux couleurs choisies dans un nuancier à deux niveaux (une teinte du système de design de l'État, puis une nuance de cette teinte, de la plus claire à la plus soutenue) pour chacune des deux bornes du dégradé.
 - Légende de colorimétrie optionnelle.
 - Export de la carte en image PNG.
+- Fichiers d'exemple (départements, communes, pays du monde) téléchargeables depuis la modale « À propos », pour s'exercer sans avoir de jeu de données personnel sous la main.
 
 ### 5.8 Onglet « Graphiques »
 
@@ -249,6 +250,7 @@ La base personnelle est sélectionnée automatiquement comme base active dès la
 - Couleurs des séries choisies parmi les couleurs illustratives du système de design de l'État.
 - Tableau de données équivalent au graphique, masqué visuellement mais accessible aux technologies d'assistance (RGAA), généré automatiquement à chaque rendu.
 - Export du graphique en image PNG.
+- Fichier d'exemple téléchargeable depuis la modale « À propos ».
 
 ### 5.9 Onglet « Diagrammes »
 
