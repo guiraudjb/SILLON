@@ -37,9 +37,6 @@ DB_PORT = os.environ.get("SILLON_DB_PORT", "5432")
 DB_NAME = os.environ.get("SILLON_DB_NAME", "sillon_catalog")
 DB_USER = "sillon_orchestrateur"
 DB_PASSWORD = os.environ["SILLON_ORCHESTRATEUR_PASS"]
-SMTP_HOTE = os.environ.get("SILLON_SMTP_HOST", "localhost")
-SMTP_PORT = int(os.environ.get("SILLON_SMTP_PORT", "25"))
-SMTP_EXPEDITEUR = os.environ.get("SILLON_SMTP_FROM", "sillon@sillon.local")
 URL_APPLICATION = os.environ.get("SILLON_URL", "https://localhost")
 
 # Nom d'image partagé avec le paquet sillon-image-execution (§8.7,§12.2) et
@@ -248,15 +245,22 @@ def empaqueter_resultats(id_job, repertoire_resultats):
 # NOTIFICATIONS PAR MAIL (§9, §10)
 # =============================================================================
 def envoyer_notification(email_destinataire, sujet, corps):
+    # Lu à chaque envoi, pas mémorisé au démarrage (§5.6) : réglage
+    # modifiable à chaud par un administrateur, sans redémarrage de ce
+    # service - même principe que orchestrateur.py, qui envoie ses propres
+    # notifications (import CSV, requêtes SQL) indépendamment de celles-ci
+    # (scripts Python/R).
     message = EmailMessage()
     message["Subject"] = sujet
-    message["From"] = SMTP_EXPEDITEUR
+    message["From"] = lire_parametre("smtp_expediteur", "sillon@sillon.local")
     message["To"] = email_destinataire
     message.set_content(corps)
     try:
-        with smtplib.SMTP(SMTP_HOTE, SMTP_PORT, timeout=10) as serveur:
+        smtp_hote = lire_parametre("smtp_hote", "localhost")
+        smtp_port = int(lire_parametre("smtp_port", "25"))
+        with smtplib.SMTP(smtp_hote, smtp_port, timeout=10) as serveur:
             serveur.send_message(message)
-    except OSError as exc:
+    except (OSError, ValueError) as exc:
         print(f"Échec d'envoi de la notification à {email_destinataire} : {exc}", file=sys.stderr)
 
 

@@ -321,11 +321,17 @@ def importer_sirene(client, chemin_csv, base_id):
         return
 
     id_job = resultat["id_job"]
-    # Plusieurs dizaines de minutes possibles pour ~43,9 millions de lignes
-    # selon la machine (COPY + construction d'index) : un délai de 4h reste
-    # trois fois la limite déjà généreuse fixée pour ce paquet
-    # (duree_max_job_minutes relevé par le postinst, cf. commentaire dédié).
-    job = attendre_job(client, id_job, delai_max_s=4 * 3600)
+    # Plusieurs heures possibles pour ~43,9 millions de lignes selon la
+    # machine (COPY + une douzaine d'index GIN trigram, un par colonne
+    # Texte) : porté de 4h à 10h après un incident constaté en pratique sur
+    # une machine lente (COPY+réduction ~2h, puis construction des index
+    # seule plus de 5h) - ce délai côté client doit rester inférieur à la
+    # durée de vie du jeton (12h, cf. postinst) pour ne jamais échouer sur
+    # un jeton expiré avant d'atteindre son propre timeout. Aucun
+    # statement_timeout serveur ne s'applique à un import CSV (contrairement
+    # à requete_sql, seul type job borné par duree_max_job_minutes) : seule
+    # cette limite côté script est réellement contraignante ici.
+    job = attendre_job(client, id_job, delai_max_s=10 * 3600)
     if job["statut"] != "termine":
         raise RuntimeError(f"Import échoué : {job.get('message_utilisateur') or job.get('message_erreur')}")
     print(f"  {NOM_TABLE} importée avec succès (job n°{id_job}).")

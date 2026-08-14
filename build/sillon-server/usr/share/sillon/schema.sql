@@ -162,7 +162,23 @@ INSERT INTO public.parametres (cle, valeur) VALUES
     -- taille_max_csv_mo qui est la limite absolue au-dela de laquelle
     -- l'import est refuse.
     ('seuil_import_synchrone_mo',        '10'),
-    ('taille_max_script_mo',             '10');
+    ('taille_max_script_mo',             '10'),
+    -- Proxy HTTP sortant utilise par l'orchestrateur pour interroger l'API
+    -- data.gouv.fr (recherche et telechargement de ressources CSV, §5.1).
+    -- Vide par defaut (acces direct) ; modifiable uniquement par un compte
+    -- administrateur (panneau Administration), la cible n'ayant par
+    -- construction aucun acces reseau hors proxy (cahier des charges §12.1).
+    ('datagouv_proxy_url',               ''),
+    -- Serveur de mail sortant (§9, §10) utilise par l'orchestrateur et par
+    -- sillon-worker pour les notifications de fin de tache asynchrone -
+    -- jusqu'ici uniquement configurable via des variables d'environnement
+    -- jamais renseignees par le paquet (donc toujours la valeur par defaut
+    -- ci-dessous, sans aucun moyen de la changer sans modifier le code).
+    -- Lu a chaque envoi (lire_parametre), pas mis en cache au demarrage :
+    -- modifiable a chaud par un administrateur, sans redemarrage.
+    ('smtp_hote',                        'localhost'),
+    ('smtp_port',                        '25'),
+    ('smtp_expediteur',                  'sillon@sillon.local');
 
 -- -----------------------------------------------------------------------------
 -- 4. ROLES POSTGRESQL (§3, §4.3, §8.3)

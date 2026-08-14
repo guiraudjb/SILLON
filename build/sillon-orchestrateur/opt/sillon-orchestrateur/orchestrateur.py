@@ -23,6 +23,9 @@ import smtplib
 import threading
 import time
 import unicodedata
+import urllib.error
+import urllib.parse
+import urllib.request
 import uuid
 import zipfile
 from datetime import date, datetime
@@ -43,9 +46,6 @@ DB_PORT = os.environ.get("SILLON_DB_PORT", "5432")
 DB_NAME = os.environ.get("SILLON_DB_NAME", "sillon_catalog")
 DB_USER = "sillon_orchestrateur"
 DB_PASSWORD = os.environ["SILLON_ORCHESTRATEUR_PASS"]
-SMTP_HOTE = os.environ.get("SILLON_SMTP_HOST", "localhost")
-SMTP_PORT = int(os.environ.get("SILLON_SMTP_PORT", "25"))
-SMTP_EXPEDITEUR = os.environ.get("SILLON_SMTP_FROM", "sillon@sillon.local")
 URL_APPLICATION = os.environ.get("SILLON_URL", "https://localhost")
 
 # Repertoire de dépôt temporaire des CSV en cours de qualification (§5.1) :
@@ -126,6 +126,44 @@ def lire_parametre(cle, defaut=None):
         cur.execute("SELECT valeur FROM public.parametres WHERE cle = %s", (cle,))
         ligne = cur.fetchone()
     return ligne[0] if ligne else defaut
+
+
+# =============================================================================
+# ACCES A DATA.GOUV.FR (§5.1) - RECHERCHE ET IMPORT DE JEUX DE DONNEES
+# =============================================================================
+# urllib.request de la bibliotheque standard, plutot qu'une dependance
+# python3-requests supplementaire (paquet sillon-orchestrateur) : le seul
+# besoin ici (JSON de recherche, telechargement en flux, test de connexion)
+# est deja couvert nativement, proxy inclus via ProxyHandler.
+def _opener_datagouv(proxy_url=None):
+    if proxy_url is None:
+        proxy_url = lire_parametre("datagouv_proxy_url", "") or ""
+    if proxy_url:
+        return urllib.request.build_opener(urllib.request.ProxyHandler({"http": proxy_url, "https": proxy_url}))
+    return urllib.request.build_opener()
+
+
+def _telecharger_ressource_datagouv(url, chemin_cible):
+    """Télécharge une ressource CSV data.gouv.fr en flux vers chemin_cible.
+
+    Garde-fou de taille appliqué pendant le téléchargement (par blocs d'1 Mo,
+    §12/§13 - jamais de fichier entier en mémoire) et non a posteriori
+    seulement : le champ "filesize" de l'API data.gouv.fr n'est pas garanti
+    présent, donc pas fiable comme unique protection. _analyser_fichier_stage
+    réapplique de toute façon son propre contrôle sur le fichier final, en
+    confirmation."""
+    taille_max_octets = int(lire_parametre("taille_max_csv_mo", "2048")) * 1024 * 1024
+    opener = _opener_datagouv()
+    with opener.open(url, timeout=60) as reponse, open(chemin_cible, "wb") as sortie:
+        recu = 0
+        while True:
+            bloc = reponse.read(1024 * 1024)
+            if not bloc:
+                break
+            recu += len(bloc)
+            if recu > taille_max_octets:
+                raise RuntimeError(f"Ressource trop volumineuse (limite : {taille_max_octets // (1024 * 1024)} Mo)")
+            sortie.write(bloc)
 
 
 # =============================================================================
@@ -677,6 +715,96 @@ def apercu_import_local():
 
     avec_entete = str(donnees.get("avec_entete", "true")).lower() != "false"
     return _analyser_fichier_stage(jeton, chemin_stage, avec_entete, os.path.basename(chemin_source))
+
+
+# =============================================================================
+# ENDPOINT : RECHERCHE DE JEUX DE DONNEES DATA.GOUV.FR (§5.1)
+# =============================================================================
+# Aucune restriction de profil (contrairement à /datagouv/tester-proxy
+# ci-dessous) : lecture seule, hôte cible fixe côté serveur (jamais fourni
+# par le client, donc pas de SSRF possible), même absence de contrôle que
+# /import/apercu - la vraie barrière reste /import/valider (§5.1).
+@app.route("/datagouv/recherche", methods=["GET"])
+def rechercher_datagouv():
+    mot_cle = request.args.get("q", "")
+    url = "https://www.data.gouv.fr/api/1/datasets/?" + urllib.parse.urlencode({"q": mot_cle, "page_size": 20})
+    try:
+        with _opener_datagouv().open(url, timeout=15) as reponse:
+            donnees = json.loads(reponse.read())
+    except (urllib.error.URLError, OSError) as exc:
+        return jsonify(erreur=f"data.gouv.fr injoignable : {exc} (vérifiez le réglage du proxy en Administration)"), 502
+
+    resultats = []
+    for jeu in donnees.get("data", []):
+        ressources_csv = [
+            {"id": r.get("id"), "titre": r.get("title"), "url": r.get("url"), "taille": r.get("filesize")}
+            for r in (jeu.get("resources") or [])
+            if (r.get("format") or "").lower() == "csv" and r.get("url")
+        ]
+        resultats.append({
+            "id": jeu.get("id"),
+            "titre": jeu.get("title"),
+            "organisation": (jeu.get("organization") or {}).get("name"),
+            "description": (jeu.get("description") or "")[:300],
+            "ressources_csv": ressources_csv,
+        })
+    return jsonify(resultats=resultats)
+
+
+# =============================================================================
+# ENDPOINT : APERCU D'IMPORT - TELECHARGEMENT DEPUIS DATA.GOUV.FR (§5.1)
+# =============================================================================
+# Même rôle que /import/apercu et /import/apercu_local ci-dessus : prépare un
+# fichier dans STAGING_DIR puis délègue entièrement à _analyser_fichier_stage.
+# Tout ce qui suit (assistant de relecture des colonnes, contrôle de
+# cohérence, /import/valider, bascule synchrone/file d'attente) est le
+# pipeline d'import CSV existant, totalement inchangé - il ne sait jamais
+# d'où vient le fichier stagé.
+@app.route("/import/datagouv/apercu", methods=["POST"])
+def apercu_import_datagouv():
+    donnees = request.get_json(force=True)
+    url_ressource = donnees.get("url_ressource")
+    if not url_ressource:
+        return jsonify(erreur="URL de ressource manquante"), 400
+
+    jeton = uuid.uuid4().hex
+    chemin_stage = os.path.join(STAGING_DIR, f"{jeton}.csv")
+    try:
+        _telecharger_ressource_datagouv(url_ressource, chemin_stage)
+    except (RuntimeError, urllib.error.URLError, OSError) as exc:
+        if os.path.exists(chemin_stage):
+            os.remove(chemin_stage)
+        return jsonify(erreur=f"Téléchargement impossible : {exc}"), 502
+
+    avec_entete = str(donnees.get("avec_entete", "true")).lower() != "false"
+    nom_fichier = donnees.get("nom_fichier") or "ressource.csv"
+    return _analyser_fichier_stage(jeton, chemin_stage, avec_entete, nom_fichier)
+
+
+# =============================================================================
+# ENDPOINT : TEST DE CONNEXION AU PROXY DATA.GOUV.FR (§5.6)
+# =============================================================================
+# Seule route du fichier avec un contrôle de profil explicite dans le corps :
+# les autres routes s'appuient soit sur les GRANT PostgreSQL (via
+# connexion_catalogue/base), soit n'ont besoin d'aucune restriction - cette
+# action déclenche un appel réseau sortant depuis l'orchestrateur lui-même,
+# sans passage par PostgreSQL, donc sans GRANT possible à cet effet.
+@app.route("/datagouv/tester-proxy", methods=["POST"])
+def tester_proxy_datagouv():
+    if g.claims.get("profil") != "administrateur":
+        return jsonify(erreur="Réservé aux administrateurs"), 403
+
+    donnees = request.get_json(force=True) or {}
+    proxy_url = donnees.get("proxy_url") or ""
+    debut = time.monotonic()
+    try:
+        with _opener_datagouv(proxy_url).open("https://www.data.gouv.fr/api/1/datasets/?page_size=1", timeout=10):
+            pass
+    except (urllib.error.URLError, OSError) as exc:
+        # Un échec de test est un résultat normal à afficher, pas une erreur
+        # serveur : toujours 200, jamais de 500/502 ici.
+        return jsonify(ok=False, erreur=str(exc))
+    return jsonify(ok=True, duree_ms=int((time.monotonic() - debut) * 1000))
 
 
 def _analyser_fichier_stage(jeton, chemin_stage, avec_entete, nom_fichier):
@@ -1521,15 +1649,22 @@ def contenu_apercu(id_job, nom_fichier):
 # NOTIFICATIONS PAR MAIL (§9, §10)
 # =============================================================================
 def envoyer_notification(email_destinataire, sujet, corps):
+    # Lu à chaque envoi plutôt que mémorisé au démarrage (§5.6) : ce réglage
+    # est modifiable à chaud par un administrateur (panneau Administration,
+    # tableau des quotas - "smtp_hote"/"smtp_port"/"smtp_expediteur" sont de
+    # simples entrées de public.parametres, aucun bloc dédié nécessaire côté
+    # front) - sans redémarrage du service à chaque changement d'adresse.
     message = EmailMessage()
     message["Subject"] = sujet
-    message["From"] = SMTP_EXPEDITEUR
+    message["From"] = lire_parametre("smtp_expediteur", "sillon@sillon.local")
     message["To"] = email_destinataire
     message.set_content(corps)
     try:
-        with smtplib.SMTP(SMTP_HOTE, SMTP_PORT, timeout=10) as serveur:
+        smtp_hote = lire_parametre("smtp_hote", "localhost")
+        smtp_port = int(lire_parametre("smtp_port", "25"))
+        with smtplib.SMTP(smtp_hote, smtp_port, timeout=10) as serveur:
             serveur.send_message(message)
-    except OSError as exc:
+    except (OSError, ValueError) as exc:
         app.logger.warning("Échec d'envoi de la notification à %s : %s", email_destinataire, exc)
 
 

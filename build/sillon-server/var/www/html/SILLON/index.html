@@ -132,6 +132,13 @@
 
         <!-- ============================== ONGLET IMPORT ============================== -->
         <div id="panneau-import" class="fr-tabs__panel" role="tabpanel" tabindex="0" hidden>
+            <div class="fr-mb-3w">
+                <button class="fr-btn fr-btn--secondary fr-icon-download-cloud-line fr-btn--icon-left"
+                        aria-controls="modal-datagouv" data-fr-opened="true">
+                    Importer depuis data.gouv.fr
+                </button>
+            </div>
+            <hr class="fr-mb-3w">
             <div class="fr-upload-group" id="zone-depot-csv">
                 <label class="fr-label" for="champ-fichier-csv">Fichier CSV à importer (glisser-déposer possible)</label>
                 <input class="fr-upload" type="file" id="champ-fichier-csv" accept=".csv,.txt">
@@ -469,6 +476,17 @@
             <h2 class="fr-h5 fr-mt-4w">Quotas</h2>
             <div id="conteneur-quotas"></div>
 
+            <h2 class="fr-h5 fr-mt-4w">Proxy sortant (data.gouv.fr)</h2>
+            <div class="fr-input-group">
+                <label class="fr-label" for="admin-proxy-datagouv">Adresse du proxy HTTP</label>
+                <input class="fr-input" type="text" id="admin-proxy-datagouv" placeholder="http://proxy.exemple.local:3128">
+            </div>
+            <ul class="fr-btns-group fr-btns-group--inline">
+                <li><button class="fr-btn fr-btn--secondary" onclick="Administration.enregistrerProxyDatagouv()">Enregistrer</button></li>
+                <li><button class="fr-btn fr-btn--tertiary" onclick="Administration.testerProxyDatagouv()">Tester la connexion</button></li>
+            </ul>
+            <div id="admin-proxy-datagouv-resultat" class="fr-mt-1w"></div>
+
             <h2 class="fr-h5 fr-mt-4w">Journal d'audit (50 dernières actions)</h2>
             <table class="fr-table">
                 <caption>Audit</caption>
@@ -587,6 +605,31 @@
                         <ul class="fr-btns-group fr-btns-group--inline">
                             <li><button class="fr-btn fr-icon-send-plane-line fr-btn--icon-left" onclick="Scripts.lancerDepuisEditeur()">Lancer le script</button></li>
                         </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</dialog>
+
+<dialog aria-labelledby="modal-datagouv-titre" id="modal-datagouv" class="fr-modal" role="dialog">
+    <div class="fr-container fr-container--fluid fr-container-md">
+        <div class="fr-grid-row fr-grid-row--center">
+            <div class="fr-col-12 fr-col-md-10 fr-col-lg-8">
+                <div class="fr-modal__body">
+                    <div class="fr-modal__header">
+                        <button class="fr-btn--close fr-btn" aria-controls="modal-datagouv">Fermer</button>
+                    </div>
+                    <div class="fr-modal__content">
+                        <h1 id="modal-datagouv-titre" class="fr-modal__title">Importer depuis data.gouv.fr</h1>
+                        <div class="fr-search-bar" role="search">
+                            <label class="fr-label" for="datagouv-recherche">Mot-clé</label>
+                            <input class="fr-input" type="search" id="datagouv-recherche"
+                                   placeholder="ex. démographie, DVF, éducation…"
+                                   onkeydown="if(event.key==='Enter') Datagouv.rechercher()">
+                            <button class="fr-btn fr-icon-refresh-line fr-btn--icon-left" onclick="Datagouv.rechercher()">Actualiser</button>
+                        </div>
+                        <div id="datagouv-resultats" class="fr-mt-3w"></div>
                     </div>
                 </div>
             </div>

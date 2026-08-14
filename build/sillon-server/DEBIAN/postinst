@@ -73,6 +73,27 @@ if [ "$DB_EXISTE" = "1" ]; then
         WHERE j.utilisateur_id = public._id_courant();
     " >/dev/null
 
+    # Migration : proxy HTTP sortant pour l'import depuis data.gouv.fr
+    # (datagouv_proxy_url, §5.1) - absent des installations antérieures à
+    # son introduction. Même motif que la migration ci-dessus (INSERT ...
+    # ON CONFLICT DO NOTHING plutôt qu'un schema.sql rejoué en entier).
+    sudo -u postgres psql -d "$DB_NAME" -c "
+        INSERT INTO public.parametres (cle, valeur) VALUES ('datagouv_proxy_url', '')
+        ON CONFLICT (cle) DO NOTHING;
+    " >/dev/null
+
+    # Migration : serveur de mail sortant (smtp_hote/smtp_port/smtp_expediteur,
+    # §9/§10) - jusqu'ici configurable uniquement via des variables
+    # d'environnement jamais renseignées par ce paquet, donc jamais
+    # modifiable en pratique. Même motif que les migrations ci-dessus.
+    sudo -u postgres psql -d "$DB_NAME" -c "
+        INSERT INTO public.parametres (cle, valeur) VALUES
+            ('smtp_hote', 'localhost'),
+            ('smtp_port', '25'),
+            ('smtp_expediteur', 'sillon@sillon.local')
+        ON CONFLICT (cle) DO NOTHING;
+    " >/dev/null
+
     # Les secrets existants sont conservés tels quels (§12.3) : les
     # régénérer invaliderait toutes les sessions actives et romprait la
     # connexion des paquets déjà installés (sillon-orchestrateur, sillon-worker).

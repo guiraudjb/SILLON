@@ -51,15 +51,21 @@ sudo -u postgres psql -d "$DB_NAME" -c \
 # 2. JETON DU COMPTE DEMO, SANS PASSER PAR /api/rpc/login
 # =====================================================================
 # Même mécanisme que sillon-tutoriel/postinst (auth.sign_jwt(), voir sa
-# docstring dédiée) - un jeton de 4h30 ici plutôt que l'heure habituelle,
-# le temps que le téléchargement puis l'import (potentiellement plusieurs
+# docstring dédiée) - un jeton de 12h ici plutôt que l'heure habituelle, le
+# temps que le téléchargement puis l'import (potentiellement plusieurs
 # heures pour ~43,9 millions de lignes) puissent aller au bout sans que le
-# script ne se retrouve avec un jeton expiré en cours de route.
+# script ne se retrouve avec un jeton expiré en cours de route. Porté de
+# 4h30 à 12h après un incident constaté en pratique (§ voir vérification
+# d'idempotence ci-dessous) : sur une machine lente, le seul téléchargement
+# + réduction a pris environ 2h, puis la construction des index GIN
+# trigram (une par colonne Texte) plus de 5h - largement au-delà des 4h30
+# initialement prévues, pourtant déjà bien plus généreuses que le jeton
+# d'une session normale.
 JETON=$(sudo -u postgres psql -d "$DB_NAME" -tAc "
     SELECT auth.sign_jwt(
         json_build_object(
             'role', u.role_pg, 'profil', u.profil, 'user_id', u.id, 'email', u.email,
-            'exp', extract(epoch from now())::integer + 16200
+            'exp', extract(epoch from now())::integer + 43200
         ),
         (SELECT valeur FROM auth.secrets WHERE cle = 'jwt_secret')
     )
@@ -69,8 +75,29 @@ JETON=$(sudo -u postgres psql -d "$DB_NAME" -tAc "
 # =====================================================================
 # 3. TELECHARGEMENT, REDUCTION ET IMPORT DU JEU DE DONNEES SIRENE
 # =====================================================================
-echo "Téléchargement et import du jeu de données Sirene (peut prendre plusieurs heures selon la machine et la bande passante)..."
-python3 /usr/share/sillon-demo-sirene/preparer_sirene.py --url https://localhost --jeton "$JETON"
+# Idempotence (correctif post-incident) : un précédent postinst peut avoir
+# mené le téléchargement + la réduction + l'import à bien (job "termine"
+# côté orchestrateur) tout en échouant lui-même juste après - par exemple
+# si le jeton ci-dessus a expiré pendant l'attente de fin de job sur une
+# machine lente (constaté en pratique : 4h30 pas toujours suffisant pour
+# ~43,9 millions de lignes + une douzaine d'index GIN trigram). Sans cette
+# vérification, relancer ce postinst (dpkg --configure) retéléchargerait
+# inutilement 2,86 Go puis échouerait sur une collision de table (409, non
+# gérée par preparer_sirene.py) au lieu de simplement constater le succès
+# déjà acquis.
+NOM_PG_DEMO=$(sudo -u postgres psql -d "$DB_NAME" -tAc \
+    "SELECT b.nom_pg FROM public.bases b JOIN public.utilisateurs u ON u.id = b.proprietaire_id WHERE u.email = '$DEMO_EMAIL';")
+DEJA_IMPORTE=""
+if [ -n "$NOM_PG_DEMO" ]; then
+    DEJA_IMPORTE=$(sudo -u postgres psql -d "$NOM_PG_DEMO" -tAc \
+        "SELECT 1 FROM pg_class WHERE relname = 'sirene_etablissements' AND relkind = 'r';" 2>/dev/null || true)
+fi
+if [ "$DEJA_IMPORTE" = "1" ]; then
+    echo "Table sirene_etablissements déjà présente dans la base du compte demo : import ignoré (reprise après un précédent postinst interrompu)."
+else
+    echo "Téléchargement et import du jeu de données Sirene (peut prendre plusieurs heures selon la machine et la bande passante)..."
+    python3 /usr/share/sillon-demo-sirene/preparer_sirene.py --url https://localhost --jeton "$JETON"
+fi
 
 # =====================================================================
 # 4. SCRIPTS EMPAQUETES EN ARCHIVE TELECHARGEABLE (§12.8)

@@ -1121,6 +1121,81 @@ const Import = {
 };
 
 // =============================================================================
+// IMPORT DEPUIS DATA.GOUV.FR (§5.1) - modale ouverte depuis l'onglet Import
+// =============================================================================
+// N'importe jamais directement : /import/datagouv/apercu prépare le fichier
+// dans STAGING_DIR exactement comme /import/apercu (upload manuel), puis
+// délègue à Import.afficherAssistant - tout le reste (relecture des types,
+// contrôle de cohérence, Import.valider) est le pipeline existant, réutilisé
+// tel quel, sans aucune modification.
+const Datagouv = {
+    async rechercher() {
+        const motCle = document.getElementById("datagouv-recherche").value.trim();
+        const conteneur = document.getElementById("datagouv-resultats");
+        conteneur.innerHTML = "Recherche en cours…";
+        try {
+            const { resultats } = await appelJson(`/orchestrateur/datagouv/recherche?q=${encodeURIComponent(motCle)}`);
+            Datagouv.afficherResultats(resultats);
+        } catch (erreur) {
+            afficherErreur(conteneur, erreur);
+        }
+    },
+
+    afficherResultats(datasets) {
+        const conteneur = document.getElementById("datagouv-resultats");
+        if (datasets.length === 0) {
+            conteneur.innerHTML = '<p class="fr-text--sm">Aucun jeu de données trouvé.</p>';
+            return;
+        }
+        conteneur.innerHTML = datasets.map((jeu, i) => `
+            <div class="fr-card fr-card--sm fr-mb-2w">
+                <div class="fr-card__body">
+                    <div class="fr-card__content">
+                        <h3 class="fr-card__title">${echapper(jeu.titre || "(sans titre)")}</h3>
+                        <p class="fr-card__desc fr-text--sm">
+                            ${jeu.organisation ? `<strong>${echapper(jeu.organisation)}</strong> — ` : ""}
+                            ${echapper(jeu.description || "")}
+                        </p>
+                        ${jeu.ressources_csv.length === 0
+                            ? '<p class="fr-text--sm fr-text--disabled">Aucun fichier CSV disponible pour ce jeu de données.</p>'
+                            : `<ul class="fr-text--sm">${jeu.ressources_csv.map((r, j) => `
+                                <li class="fr-mb-1w">
+                                    ${echapper(r.titre || "ressource.csv")}
+                                    ${r.taille ? ` (${Datagouv.formaterTaille(r.taille)})` : " (taille inconnue)"}
+                                    <button class="fr-btn fr-btn--sm fr-btn--tertiary fr-ml-1w" onclick="Datagouv.importerRessource(${i}, ${j})">Importer cette ressource</button>
+                                </li>`).join("")}</ul>`}
+                    </div>
+                </div>
+            </div>`).join("");
+        Etat.derniersResultatsDatagouv = datasets;
+    },
+
+    formaterTaille(octets) {
+        if (octets >= 1024 * 1024 * 1024) return `${(octets / (1024 * 1024 * 1024)).toFixed(1)} Go`;
+        if (octets >= 1024 * 1024) return `${(octets / (1024 * 1024)).toFixed(1)} Mo`;
+        return `${Math.round(octets / 1024)} Ko`;
+    },
+
+    async importerRessource(indexJeu, indexRessource) {
+        const ressource = Etat.derniersResultatsDatagouv[indexJeu].ressources_csv[indexRessource];
+        const conteneur = document.getElementById("datagouv-resultats");
+        conteneur.innerHTML = "Téléchargement de la ressource en cours…";
+        try {
+            const apercu = await appelJson("/orchestrateur/import/datagouv/apercu", {
+                method: "POST",
+                body: JSON.stringify({ url_ressource: ressource.url, nom_fichier: ressource.titre || "ressource.csv" }),
+            });
+            Etat.dernierApercu = apercu;
+            Import.afficherAssistant(apercu, apercu.nom_fichier);
+            document.getElementById("resultat-import").innerHTML = "";
+            Modales.fermer(document.getElementById("modal-datagouv"));
+        } catch (erreur) {
+            afficherErreur(conteneur, erreur);
+        }
+    },
+};
+
+// =============================================================================
 // ONGLET SCRIPTS (§5.4)
 // =============================================================================
 const Scripts = {
@@ -2571,6 +2646,7 @@ const Administration = {
     async charger() {
         Administration.chargerUtilisateurs();
         Administration.chargerQuotas();
+        Administration.chargerProxyDatagouv();
         Administration.chargerAudit();
     },
 
@@ -2640,6 +2716,39 @@ const Administration = {
             method: "PATCH",
             body: JSON.stringify({ valeur }),
         }).catch((erreur) => alert(erreur.message));
+    },
+
+    // Champ séparé de la boucle générique des quotas ci-dessus (pour porter
+    // le bouton de test) : "datagouv_proxy_url" continue de toute façon à
+    // apparaître aussi, automatiquement, dans le tableau générique - sans
+    // conséquence, la modification y est équivalente (même endpoint).
+    async chargerProxyDatagouv() {
+        const parametres = await appelJson("/api/parametres?cle=eq.datagouv_proxy_url").catch(() => []);
+        document.getElementById("admin-proxy-datagouv").value = parametres[0]?.valeur || "";
+    },
+
+    async enregistrerProxyDatagouv() {
+        const valeur = document.getElementById("admin-proxy-datagouv").value.trim();
+        await appelJson("/api/parametres?cle=eq.datagouv_proxy_url", {
+            method: "PATCH",
+            body: JSON.stringify({ valeur }),
+        }).catch((erreur) => alert(erreur.message));
+    },
+
+    async testerProxyDatagouv() {
+        const conteneur = document.getElementById("admin-proxy-datagouv-resultat");
+        conteneur.innerHTML = "Test en cours…";
+        try {
+            const resultat = await appelJson("/orchestrateur/datagouv/tester-proxy", {
+                method: "POST",
+                body: JSON.stringify({ proxy_url: document.getElementById("admin-proxy-datagouv").value.trim() }),
+            });
+            conteneur.innerHTML = resultat.ok
+                ? `<div class="fr-alert fr-alert--success fr-alert--sm">Connexion réussie (${resultat.duree_ms} ms).</div>`
+                : `<div class="fr-alert fr-alert--error fr-alert--sm">Échec : ${echapper(resultat.erreur)}</div>`;
+        } catch (erreur) {
+            afficherErreur(conteneur, erreur);
+        }
     },
 
     async chargerAudit() {

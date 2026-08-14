@@ -8,8 +8,8 @@
 
 | Champ | Valeur |
 |---|---|
-| Version | 1.4 |
-| Date | 12 août 2026 |
+| Version | 1.6 |
+| Date | 14 août 2026 |
 | Statut | Avant-projet — en cours de validation |
 | Périmètre | Direction locale — hors lac de données national |
 | Stack technique | PostgreSQL 17, PostgREST, Nginx, DSFR — architecture sans framework applicatif lourd côté front |
@@ -172,6 +172,12 @@ Concrètement, chaque compte créé par l'administrateur déclenche automatiquem
 
 L'utilisateur peut revenir en arrière à toute étape de l'assistant sans avoir à re-déposer le fichier.
 
+**Import depuis data.gouv.fr**
+
+En complément du dépôt manuel, un bouton « Importer depuis data.gouv.fr » ouvre une modale de recherche dans le catalogue public de data.gouv.fr (recherche par mot-clé, appel direct à l'API de recherche de data.gouv.fr depuis l'orchestrateur, éventuellement via le proxy sortant configuré en §5.6). Pour chaque jeu de données trouvé, seules les ressources déclarées au format CSV sont proposées à l'import, avec leur taille si l'API la communique. Le choix d'une ressource déclenche son téléchargement côté serveur (avec le même garde-fou de taille que le dépôt manuel, §11) puis rouvre exactement le même assistant qu'un dépôt de fichier (étapes 2 à 9 ci-dessus, sans distinction ensuite entre les deux origines).
+
+L'accès à cette fonctionnalité suit le même profil que l'import manuel (§3) ; l'application réelle du droit reste la création du job d'import, jamais un simple masquage d'affichage.
+
 ### 5.2 Onglet « Bases »
 
 Liste en deux sections :
@@ -229,6 +235,8 @@ La base personnelle est sélectionnée automatiquement comme base active dès la
 - Vue d'ensemble des bases existantes tous utilisateurs confondus, à des fins de supervision (métadonnées uniquement — taille, date de création, propriétaire — sans accès aux données elles-mêmes).
 - Consultation du journal d'audit, avec filtre par utilisateur, par type d'action et par période, et export de la liste des comptes et de leurs droits.
 - Réglage des quotas globaux et, si besoin, dérogations par utilisateur.
+- Réglage du proxy HTTP sortant utilisé pour l'import depuis data.gouv.fr (§5.1) : champ modifiable uniquement par un compte administrateur, vide par défaut (accès direct), avec un bouton dédié pour tester la connexion sans attendre une première recherche depuis l'onglet Import.
+- Réglage du serveur de mail sortant (adresse, port, expéditeur) utilisé pour les notifications de fin de traitement asynchrone (§9, §10) : modifiable à chaud par un compte administrateur, sans redémarrage des services.
 
 ### 5.7 Onglet « Carto »
 

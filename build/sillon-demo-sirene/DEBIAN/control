@@ -1,5 +1,5 @@
 Package: sillon-demo-sirene
-Version: 0.1.0
+Version: 0.1.1
 Architecture: all
 Maintainer: Administrateur SILLON <admin@sillon.local>
 Depends: sillon-tutoriel, python3

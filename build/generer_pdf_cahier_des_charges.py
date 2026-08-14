@@ -30,6 +30,7 @@ RACINE = ICI.parent
 SOURCE_MD = RACINE / "SILLON_cahier_des_charges.md"
 DOC_DIR = ICI / "sillon-server/var/www/html/SILLON/Documentation"
 ANCIEN_PDF_GLOB = "Cahier des charges SILLON v*.pdf"
+ANCIEN_ODT_GLOB = "Cahier des charges SILLON v*.odt"
 
 
 def rendre_diagrammes_mermaid(corps_md, repertoire_images):
@@ -83,8 +84,10 @@ def main():
 
         # Anciennes versions retirées avant génération de la nouvelle,
         # pour ne jamais publier deux PDF "Cahier des charges" à des
-        # numéros de version différents en même temps.
-        for ancien in DOC_DIR.glob(ANCIEN_PDF_GLOB):
+        # numéros de version différents en même temps (.odt inclus, sinon
+        # laissé orphelin - constaté en pratique après un premier passage
+        # de ce script qui ne purgeait que le PDF).
+        for ancien in list(DOC_DIR.glob(ANCIEN_PDF_GLOB)) + list(DOC_DIR.glob(ANCIEN_ODT_GLOB)):
             ancien.unlink()
 
         markdown_vers_pdf(corps_md, pdf_cible, titre="Cahier des charges SILLON")
