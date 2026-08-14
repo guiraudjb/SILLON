@@ -87,8 +87,15 @@ def corriger_bordures_tableaux(chemin_odt):
 
 
 def markdown_vers_pdf(corps_md, pdf_cible, repertoire_ressources=None, titre=None):
-    """Convertit une chaîne Markdown en PDF, via un .odt intermédiaire
-    jetable (créé et supprimé dans le répertoire du PDF cible)."""
+    """Convertit une chaîne Markdown en PDF, via un .odt intermédiaire.
+
+    Le .odt est conservé à côté du PDF (même nom, extension différente) -
+    document LibreOffice Writer réellement consultable/modifiable, pas un
+    fichier de travail jetable comme l'était le HTML de l'ancienne
+    convention. La source Markdown reste néanmoins l'unique source de
+    vérité : ce .odt est entièrement régénéré (écrasé) à chaque exécution
+    de ce script, jamais lu ni fusionné - toute modification faite
+    directement dedans serait perdue au prochain "generer_pdf_*.py"."""
     corps_md = preparer_images_markdown(corps_md)
 
     pdf_cible = Path(pdf_cible)
@@ -104,16 +111,13 @@ def markdown_vers_pdf(corps_md, pdf_cible, repertoire_ressources=None, titre=Non
     if titre:
         commande_pandoc += ["--metadata", f"title={titre}"]
 
-    try:
-        subprocess.run(commande_pandoc, input=corps_md, check=True, capture_output=True, text=True)
-        corriger_bordures_tableaux(chemin_odt)
-        subprocess.run(
-            [
-                "soffice", "--headless", "--convert-to", "pdf",
-                "--outdir", str(pdf_cible.parent), str(chemin_odt),
-            ],
-            check=True, capture_output=True, text=True,
-        )
-        chemin_odt.with_suffix(".pdf").rename(pdf_cible)
-    finally:
-        chemin_odt.unlink(missing_ok=True)
+    subprocess.run(commande_pandoc, input=corps_md, check=True, capture_output=True, text=True)
+    corriger_bordures_tableaux(chemin_odt)
+    subprocess.run(
+        [
+            "soffice", "--headless", "--convert-to", "pdf",
+            "--outdir", str(pdf_cible.parent), str(chemin_odt),
+        ],
+        check=True, capture_output=True, text=True,
+    )
+    chemin_odt.with_suffix(".pdf").rename(pdf_cible)
