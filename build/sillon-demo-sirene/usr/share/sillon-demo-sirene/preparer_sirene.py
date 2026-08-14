@@ -307,7 +307,7 @@ def importer_sirene(client, chemin_csv, base_id):
     ]
 
     corps = {
-        "jeton": apercu["jeton"], "nom_table": NOM_TABLE, "colonnes": colonnes,
+        "jeton": apercu["jeton"], "nom_fichier": apercu.get("nom_fichier"), "nom_table": NOM_TABLE, "colonnes": colonnes,
         "encodage": apercu["encodage_detecte"], "delimiteur": apercu["delimiteur_detecte"],
         "avec_entete": True, "remplacer": True,
     }

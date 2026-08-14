@@ -939,6 +939,7 @@ const Import = {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     jeton: apercu.jeton,
+                    nom_fichier: apercu.nom_fichier,
                     base_id: baseId ? Number(baseId) : null,
                     nom_table: document.getElementById("import-nom-table").value.trim(),
                     colonnes: Import.colonnesSaisies(),
@@ -1114,12 +1115,13 @@ const Suivi = {
     // second "pour investigation" seulement) - jamais un message Postgres
     // brut affiché en première lecture.
     _celluleDetail(job) {
-        if (!job.message_erreur && !job.message_utilisateur) return "";
+        const nomFichier = job.nom_fichier ? `<span class="fr-text--sm">${echapper(job.nom_fichier)}</span>` : "";
+        if (!job.message_erreur && !job.message_utilisateur) return nomFichier;
         const principal = echapper(job.message_utilisateur || job.message_erreur);
-        if (job.message_utilisateur && job.message_erreur && job.message_erreur !== job.message_utilisateur) {
-            return `${principal}<details class="fr-mt-1w"><summary class="fr-text--xs">Détail technique</summary><code class="fr-text--xs">${echapper(job.message_erreur)}</code></details>`;
-        }
-        return principal;
+        const detail = job.message_utilisateur && job.message_erreur && job.message_erreur !== job.message_utilisateur
+            ? `<details class="fr-mt-1w"><summary class="fr-text--xs">Détail technique</summary><code class="fr-text--xs">${echapper(job.message_erreur)}</code></details>`
+            : "";
+        return `${nomFichier}${nomFichier ? "<br>" : ""}${principal}${detail}`;
     },
 
     async annuler(idJob) {

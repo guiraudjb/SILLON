@@ -632,7 +632,7 @@ def apercu_import():
         raise
 
     avec_entete = request.form.get("avec_entete", "true").lower() != "false"
-    return _analyser_fichier_stage(jeton, chemin_stage, avec_entete)
+    return _analyser_fichier_stage(jeton, chemin_stage, avec_entete, fichier.filename)
 
 
 # =============================================================================
@@ -676,10 +676,10 @@ def apercu_import_local():
     os.rename(chemin_source, chemin_stage)
 
     avec_entete = str(donnees.get("avec_entete", "true")).lower() != "false"
-    return _analyser_fichier_stage(jeton, chemin_stage, avec_entete)
+    return _analyser_fichier_stage(jeton, chemin_stage, avec_entete, os.path.basename(chemin_source))
 
 
-def _analyser_fichier_stage(jeton, chemin_stage, avec_entete):
+def _analyser_fichier_stage(jeton, chemin_stage, avec_entete, nom_fichier):
     taille_max_mo = int(lire_parametre("taille_max_csv_mo", "2048"))
     if os.path.getsize(chemin_stage) > taille_max_mo * 1024 * 1024:
         os.remove(chemin_stage)
@@ -722,6 +722,7 @@ def _analyser_fichier_stage(jeton, chemin_stage, avec_entete):
 
     return jsonify({
         "jeton": jeton,
+        "nom_fichier": nom_fichier,
         "encodage_detecte": encodage,
         "delimiteur_detecte": delimiteur,
         "avec_entete": avec_entete,
@@ -916,6 +917,7 @@ def valider_import():
     donnees = request.get_json(force=True)
     jeton = donnees.get("jeton")
     base_id = donnees.get("base_id")
+    nom_fichier = donnees.get("nom_fichier")
     nom_table = normaliser_identifiant(donnees.get("nom_table") or "")
     colonnes = donnees.get("colonnes") or []
     encodage = donnees.get("encodage") or "utf-8"
@@ -1014,6 +1016,7 @@ def valider_import():
                 (base_id, psycopg2.extras.Json({
                     "chemin_fichier": chemin_fichier,
                     "nom_table": nom_table,
+                    "nom_fichier": nom_fichier,
                     "colonnes": colonnes,
                     "encodage": encodage,
                     "delimiteur": delimiteur,
@@ -1093,6 +1096,7 @@ def deposer_script():
                 "SELECT public.creer_job(%s, %s, %s::jsonb)",
                 (type_job, base_id, psycopg2.extras.Json({
                     "chemin_script": chemin_script,
+                    "nom_fichier": fichier.filename,
                     "nom_pg": nom_pg,
                     "role_pg": g.claims["role"],
                 })),

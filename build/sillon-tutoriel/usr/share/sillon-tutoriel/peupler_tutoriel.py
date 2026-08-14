@@ -166,7 +166,7 @@ def importer_table(client, nom_fichier, nom_table, base_id):
     ]
 
     corps = {
-        "jeton": apercu["jeton"], "nom_table": nom_table, "colonnes": colonnes,
+        "jeton": apercu["jeton"], "nom_fichier": apercu.get("nom_fichier"), "nom_table": nom_table, "colonnes": colonnes,
         "encodage": apercu["encodage_detecte"], "delimiteur": apercu["delimiteur_detecte"],
         "avec_entete": True, "remplacer": True,
     }

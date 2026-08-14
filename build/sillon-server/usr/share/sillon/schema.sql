@@ -645,6 +645,10 @@ CREATE OR REPLACE VIEW public.vue_mes_jobs AS
 SELECT
     j.id, j.type, j.statut, j.base_id, j.date_creation, j.date_debut, j.date_fin,
     j.message_erreur, j.message_utilisateur, j.chemin_resultat,
+    -- Nom du script déposé ou du fichier CSV importé (§5.5), jamais le
+    -- reste de "payload" (chemin serveur, rôle PostgreSQL personnel...) -
+    -- seule cette valeur a un sens à afficher à l'utilisateur.
+    j.payload->>'nom_fichier' AS nom_fichier,
     CASE WHEN j.statut = 'en_attente' THEN (
         SELECT count(*) FROM public.jobs j2
         WHERE j2.statut IN ('en_attente', 'en_cours')
