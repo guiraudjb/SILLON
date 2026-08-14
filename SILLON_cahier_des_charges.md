@@ -211,7 +211,7 @@ Liste en deux sections :
 
 ### 5.5 Onglet « Suivi »
 
-- Vue consolidée de tous les jobs de l'utilisateur, tous types confondus (imports, requêtes longues, scripts, créations ou suppressions de base), filtrable par type et par statut.
+- Vue consolidée de tous les jobs de l'utilisateur, tous types confondus (imports, requêtes longues, scripts, créations ou suppressions de base), filtrable par type et par statut, rafraîchie automatiquement toutes les 10 secondes tant que cet onglet reste affiché.
 - Pour un dépôt de script ou un import CSV : nom du fichier concerné affiché en colonne Détail, pour distinguer d'un coup d'œil plusieurs traitements du même type dans la liste.
 - Statuts affichés : en attente, en cours, terminé, erreur, annulé — avec, pour un job en attente, une estimation de sa position dans la file.
 - Annulation possible tant que le job est en attente ou en cours.

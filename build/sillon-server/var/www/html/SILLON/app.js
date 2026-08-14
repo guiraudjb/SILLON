@@ -106,6 +106,7 @@ const Auth = {
     },
 
     async deconnecter() {
+        Suivi.arreterAutoRafraichissement();
         await appel("/api/rpc/logout", { method: "POST" }).catch(() => {});
         // Remet l'état à zéro : sans ça, la base sélectionnée (et la liste
         // des bases) d'une session précédente reste affichée après
@@ -182,7 +183,12 @@ function basculerOnglet(nomOnglet) {
         panneau.hidden = !actif;
         panneau.classList.toggle("fr-tabs__panel--selected", actif);
     });
-    if (nomOnglet === "suivi") Suivi.rafraichir();
+    if (nomOnglet === "suivi") {
+        Suivi.rafraichir();
+        Suivi.demarrerAutoRafraichissement();
+    } else {
+        Suivi.arreterAutoRafraichissement();
+    }
     if (nomOnglet === "administration") Administration.charger();
     if (nomOnglet === "scripts") {
         Scripts.remplirSelecteurBase();
@@ -1051,7 +1057,21 @@ const Scripts = {
 // =============================================================================
 const Suivi = {
     _intervallesJournal: {},
+    _intervalleAuto: null,
     _jobsCache: [],
+
+    // Actif uniquement pendant que l'onglet Suivi est affiché (démarré/
+    // arrêté depuis basculerOnglet()) : jamais de requête périodique en
+    // arrière-plan sur un autre onglet, pour rien.
+    demarrerAutoRafraichissement() {
+        Suivi.arreterAutoRafraichissement();
+        Suivi._intervalleAuto = setInterval(() => Suivi.rafraichir(), 10000);
+    },
+
+    arreterAutoRafraichissement() {
+        clearInterval(Suivi._intervalleAuto);
+        Suivi._intervalleAuto = null;
+    },
 
     // Vue consolidée, tous types confondus (§5.5) : le filtrage par type et
     // par statut se fait côté client sur ce cache plutôt que par un nouvel
