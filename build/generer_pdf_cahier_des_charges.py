@@ -119,7 +119,7 @@ def main():
         subprocess.run(
             [
                 "google-chrome", "--headless", "--disable-gpu", "--no-sandbox",
-                f"--print-to-pdf={pdf_cible}", "--print-to-pdf-no-header",
+                f"--print-to-pdf={pdf_cible}", "--no-pdf-header-footer",
                 str(html_temporaire),
             ],
             check=True, capture_output=True, text=True,
