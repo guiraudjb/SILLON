@@ -63,3 +63,78 @@ code {
     outline: 2px dashed var(--sillon-accent);
     outline-offset: 4px;
 }
+
+/* Notifications ponctuelles (Carto/Graphiques/Diagrammes) : AfficherToast()
+   dans app.js. Pas d'équivalent DSFR natif pour un feedback transitoire
+   sans conteneur de résultat associé. */
+#toast-container {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    z-index: 2000;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    pointer-events: none;
+}
+
+.sillon-toast {
+    pointer-events: auto;
+    min-width: 300px;
+    max-width: 400px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+    animation: sillon-toast-entree 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+    transition: opacity 0.3s ease, transform 0.3s ease;
+    margin: 0;
+}
+
+.sillon-toast.sillon-toast-sortie {
+    opacity: 0;
+    transform: translateX(50px);
+}
+
+@keyframes sillon-toast-entree {
+    from { transform: translateX(100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+}
+
+/* Onglets Carto/Graphiques : bloc de sélection de la source de données
+   (DonneesVisu.creerSelecteur), commun aux deux onglets. */
+.sillon-source-donnees {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem;
+    background: var(--background-alt-grey);
+    border-radius: 4px;
+}
+
+/* Nuancier de couleurs DSFR (Carto : dégradé personnalisé) */
+.sillon-nuancier {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+}
+
+.sillon-nuancier button {
+    width: 1.75rem;
+    height: 1.75rem;
+    border-radius: 2px;
+    border: 2px solid transparent;
+    cursor: pointer;
+    padding: 0;
+}
+
+.sillon-nuancier button[aria-pressed="true"] {
+    border-color: var(--sillon-accent);
+}
+
+/* Nuancier à 2 niveaux (Carto : dégradé personnalisé) : teinte puis
+   nuance de cette teinte - la 2e rangée n'apparaît qu'après le choix
+   d'une teinte, un espacement la distingue de la 1re. */
+.sillon-nuancier-nuances:not(:empty) {
+    margin-top: 0.6rem;
+    padding-top: 0.6rem;
+    border-top: 1px dashed var(--border-default-grey);
+}

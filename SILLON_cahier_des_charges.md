@@ -230,6 +230,33 @@ La base personnelle est sélectionnée automatiquement comme base active dès la
 - Consultation du journal d'audit, avec filtre par utilisateur, par type d'action et par période, et export de la liste des comptes et de leurs droits.
 - Réglage des quotas globaux et, si besoin, dérogations par utilisateur.
 
+### 5.7 Onglet « Carto »
+
+- Accessible à tous les utilisateurs (pas de restriction de profil), pour produire manuellement une carte choroplèthe à partir de données par code INSEE, sans passer par un script.
+- Source des données : dépôt d'un fichier CSV local, ou réutilisation du résultat de la dernière requête de lecture exécutée dans l'onglet Travaux — au choix, sans avoir à réimporter les données dans une base.
+- Échelles disponibles, avec sélection en cascade (région puis département puis EPCI ou commune selon l'échelle) : monde, France métropolitaine, région, département, EPCI, commune.
+- Colonne « code INSEE » et colonne de valeur choisies explicitement par l'utilisateur parmi les colonnes du jeu de données ; la colonne choisie comme code INSEE est systématiquement exclue des colonnes proposables comme valeur (elle ne représente jamais une grandeur à cartographier) ; mode de calcul : somme brute, part en pourcentage, ratio entre deux colonnes, ou évolution entre deux colonnes.
+- Étiquettes optionnelles (nom, valeur, ou les deux) avec répartition automatique évitant les recouvrements ; réglage fin une fois activées : taille, filtre par nom ou code (liste de valeurs), filtre avancé sur une autre colonne agrégée (opérateur de comparaison et seuil), et deux curseurs pilotant la répartition automatique (aération, répulsion).
+- Coloration : palette par défaut (Bleu France), deux dégradés divergents prédéfinis, ou dégradé personnalisé à deux couleurs choisies dans un nuancier à deux niveaux (une teinte du système de design de l'État, puis une nuance de cette teinte, de la plus claire à la plus soutenue) pour chacune des deux bornes du dégradé.
+- Légende de colorimétrie optionnelle.
+- Export de la carte en image PNG.
+
+### 5.8 Onglet « Graphiques »
+
+- Accessible à tous les utilisateurs, pour produire manuellement un graphique à partir de données tabulaires, sans passer par un script.
+- Même mécanisme de source de données qu'en §5.7 (CSV déposé ou résultat de la dernière requête SQL) : première colonne interprétée comme les étiquettes, colonnes suivantes comme autant de séries.
+- Types de graphique : barres, barres horizontales, ligne, anneau, aires polaires, radar.
+- Couleurs des séries choisies parmi les couleurs illustratives du système de design de l'État.
+- Tableau de données équivalent au graphique, masqué visuellement mais accessible aux technologies d'assistance (RGAA), généré automatiquement à chaque rendu.
+- Export du graphique en image PNG.
+
+### 5.9 Onglet « Diagrammes »
+
+- Accessible à tous les utilisateurs, éditeur de diagrammes Mermaid en texte libre avec aperçu en direct (mise à jour automatique après une courte pause de saisie).
+- Bibliothèque de modèles de départ pré-remplis (processus métier, séquence, architecture, planning, matrice de risques, etc.) pour ne jamais partir d'une page blanche.
+- Export du diagramme en image PNG (repli au format SVG si la conversion échoue).
+- Pas de génération automatique depuis un fichier CSV sur cet onglet : la syntaxe Mermaid ne s'y prête pas nativement, contrairement aux onglets Carto et Graphiques.
+
 ---
 
 ## 6. Modèle de données (catalogue applicatif)
