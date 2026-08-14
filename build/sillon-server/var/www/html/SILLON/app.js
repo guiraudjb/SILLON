@@ -1181,16 +1181,65 @@ const Datagouv = {
         const conteneur = document.getElementById("datagouv-resultats");
         conteneur.innerHTML = "Téléchargement de la ressource en cours…";
         try {
-            const apercu = await appelJson("/orchestrateur/import/datagouv/apercu", {
+            const reponse = await appel("/orchestrateur/import/datagouv/apercu", {
                 method: "POST",
+                headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ url_ressource: ressource.url, nom_fichier: ressource.titre || "ressource.csv" }),
             });
-            Etat.dernierApercu = apercu;
-            Import.afficherAssistant(apercu, apercu.nom_fichier);
-            document.getElementById("resultat-import").innerHTML = "";
-            Modales.fermer(document.getElementById("modal-datagouv"));
+            if (!reponse.ok) {
+                // Erreur renvoyée avant l'entrée dans le flux (ex. URL
+                // manquante, 400) : corps JSON classique, pas de ligne NDJSON.
+                const corps = await reponse.json().catch(() => ({}));
+                throw new Error(corps.erreur || `Erreur HTTP ${reponse.status}`);
+            }
+
+            // Lecture en flux (NDJSON : une ligne = un évènement JSON) plutôt
+            // qu'un .json() unique en fin de requête - affiche la progression
+            // du téléchargement au fur et à mesure (volume, vitesse), pas
+            // seulement le résultat final une fois terminé.
+            const lecteur = reponse.body.getReader();
+            const decodeur = new TextDecoder();
+            let tampon = "";
+            while (true) {
+                const { done, value } = await lecteur.read();
+                if (done) break;
+                tampon += decodeur.decode(value, { stream: true });
+                let indexSaut;
+                while ((indexSaut = tampon.indexOf("\n")) >= 0) {
+                    const ligne = tampon.slice(0, indexSaut);
+                    tampon = tampon.slice(indexSaut + 1);
+                    if (!ligne.trim()) continue;
+                    const evenement = JSON.parse(ligne);
+
+                    if (evenement.type === "progression") {
+                        Datagouv.afficherProgression(conteneur, evenement);
+                    } else if (evenement.type === "erreur") {
+                        throw new Error(evenement.message);
+                    } else if (evenement.type === "resultat") {
+                        const { type, ...apercu } = evenement;
+                        Etat.dernierApercu = apercu;
+                        Import.afficherAssistant(apercu, apercu.nom_fichier);
+                        document.getElementById("resultat-import").innerHTML = "";
+                        Modales.fermer(document.getElementById("modal-datagouv"));
+                        return;
+                    }
+                }
+            }
         } catch (erreur) {
             afficherErreur(conteneur, erreur);
+        }
+    },
+
+    afficherProgression(conteneur, { recu_octets, total_octets, vitesse_octets_s }) {
+        const recu = Datagouv.formaterTaille(recu_octets);
+        const vitesse = `${Datagouv.formaterTaille(vitesse_octets_s)}/s`;
+        if (total_octets) {
+            const pourcentage = Math.min(100, Math.round((recu_octets / total_octets) * 100));
+            conteneur.innerHTML = `
+                <p>Téléchargement de la ressource en cours… ${recu} / ${Datagouv.formaterTaille(total_octets)} (${pourcentage} %) — ${vitesse}</p>
+                <progress value="${recu_octets}" max="${total_octets}" style="width:100%"></progress>`;
+        } else {
+            conteneur.innerHTML = `<p>Téléchargement de la ressource en cours… ${recu} — ${vitesse}</p>`;
         }
     },
 };

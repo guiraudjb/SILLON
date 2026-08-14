@@ -143,8 +143,13 @@ def _opener_datagouv(proxy_url=None):
     return urllib.request.build_opener()
 
 
-def _telecharger_ressource_datagouv(url, chemin_cible):
-    """Télécharge une ressource CSV data.gouv.fr en flux vers chemin_cible.
+def _telecharger_ressource_datagouv_flux(url, chemin_cible):
+    """Télécharge une ressource CSV data.gouv.fr en flux vers chemin_cible,
+    en produisant un évènement de progression toutes les ~300 ms (§5.1) -
+    consommé par /import/datagouv/apercu pour afficher volume reçu/attendu
+    et vitesse côté modale pendant le téléchargement, plutôt qu'un simple
+    message statique sans retour (constaté gênant en usage réel sur une
+    ressource de plusieurs dizaines de Mo).
 
     Garde-fou de taille appliqué pendant le téléchargement (par blocs d'1 Mo,
     §12/§13 - jamais de fichier entier en mémoire) et non a posteriori
@@ -154,16 +159,38 @@ def _telecharger_ressource_datagouv(url, chemin_cible):
     confirmation."""
     taille_max_octets = int(lire_parametre("taille_max_csv_mo", "2048")) * 1024 * 1024
     opener = _opener_datagouv()
-    with opener.open(url, timeout=60) as reponse, open(chemin_cible, "wb") as sortie:
-        recu = 0
-        while True:
-            bloc = reponse.read(1024 * 1024)
-            if not bloc:
-                break
-            recu += len(bloc)
-            if recu > taille_max_octets:
-                raise RuntimeError(f"Ressource trop volumineuse (limite : {taille_max_octets // (1024 * 1024)} Mo)")
-            sortie.write(bloc)
+    debut = time.monotonic()
+    with opener.open(url, timeout=60) as reponse:
+        entete_taille = reponse.headers.get("Content-Length")
+        taille_totale = int(entete_taille) if entete_taille and entete_taille.isdigit() else None
+        with open(chemin_cible, "wb") as sortie:
+            recu = 0
+            dernier_evenement = 0.0
+            while True:
+                bloc = reponse.read(1024 * 1024)
+                if not bloc:
+                    break
+                recu += len(bloc)
+                if recu > taille_max_octets:
+                    raise RuntimeError(f"Ressource trop volumineuse (limite : {taille_max_octets // (1024 * 1024)} Mo)")
+                sortie.write(bloc)
+                maintenant = time.monotonic()
+                # Un évènement au plus tous les ~300 ms (pas à chaque bloc
+                # d'1 Mo) : suffisant pour une barre de progression fluide,
+                # sans multiplier inutilement les lignes envoyées sur une
+                # connexion rapide.
+                if maintenant - dernier_evenement >= 0.3:
+                    dernier_evenement = maintenant
+                    yield {
+                        "recu_octets": recu,
+                        "total_octets": taille_totale,
+                        "vitesse_octets_s": recu / (maintenant - debut) if maintenant > debut else 0,
+                    }
+    yield {
+        "recu_octets": recu,
+        "total_octets": taille_totale,
+        "vitesse_octets_s": recu / max(time.monotonic() - debut, 0.001),
+    }
 
 
 # =============================================================================
@@ -670,7 +697,8 @@ def apercu_import():
         raise
 
     avec_entete = request.form.get("avec_entete", "true").lower() != "false"
-    return _analyser_fichier_stage(jeton, chemin_stage, avec_entete, fichier.filename)
+    resultat, code = _analyser_fichier_stage(jeton, chemin_stage, avec_entete, fichier.filename)
+    return jsonify(resultat), code
 
 
 # =============================================================================
@@ -714,7 +742,8 @@ def apercu_import_local():
     os.rename(chemin_source, chemin_stage)
 
     avec_entete = str(donnees.get("avec_entete", "true")).lower() != "false"
-    return _analyser_fichier_stage(jeton, chemin_stage, avec_entete, os.path.basename(chemin_source))
+    resultat, code = _analyser_fichier_stage(jeton, chemin_stage, avec_entete, os.path.basename(chemin_source))
+    return jsonify(resultat), code
 
 
 # =============================================================================
@@ -755,30 +784,50 @@ def rechercher_datagouv():
 # ENDPOINT : APERCU D'IMPORT - TELECHARGEMENT DEPUIS DATA.GOUV.FR (§5.1)
 # =============================================================================
 # Même rôle que /import/apercu et /import/apercu_local ci-dessus : prépare un
-# fichier dans STAGING_DIR puis délègue entièrement à _analyser_fichier_stage.
-# Tout ce qui suit (assistant de relecture des colonnes, contrôle de
-# cohérence, /import/valider, bascule synchrone/file d'attente) est le
-# pipeline d'import CSV existant, totalement inchangé - il ne sait jamais
-# d'où vient le fichier stagé.
+# fichier dans STAGING_DIR puis délègue à _analyser_fichier_stage. Tout ce
+# qui suit (assistant de relecture des colonnes, contrôle de cohérence,
+# /import/valider, bascule synchrone/file d'attente) est le pipeline d'import
+# CSV existant, totalement inchangé - il ne sait jamais d'où vient le fichier
+# stagé.
+#
+# Réponse en flux NDJSON (une ligne JSON par évènement) plutôt qu'un JSON
+# unique en fin de requête : un évènement "progression" toutes les ~300 ms
+# pendant le téléchargement (volume reçu/attendu, vitesse), puis un seul
+# évènement final "resultat" (même contenu qu'un /import/apercu classique)
+# ou "erreur". Nécessite "proxy_buffering off" côté Nginx pour cette route
+# précise (sillon-server, sites-available/sillon), sans quoi le flux
+# arriverait d'un bloc une fois le téléchargement terminé - même limite déjà
+# documentée pour /sql/export (streaming serveur, pas forcément perçu comme
+# tel côté client).
 @app.route("/import/datagouv/apercu", methods=["POST"])
 def apercu_import_datagouv():
     donnees = request.get_json(force=True)
     url_ressource = donnees.get("url_ressource")
     if not url_ressource:
         return jsonify(erreur="URL de ressource manquante"), 400
+    avec_entete = str(donnees.get("avec_entete", "true")).lower() != "false"
+    nom_fichier = donnees.get("nom_fichier") or "ressource.csv"
 
     jeton = uuid.uuid4().hex
     chemin_stage = os.path.join(STAGING_DIR, f"{jeton}.csv")
-    try:
-        _telecharger_ressource_datagouv(url_ressource, chemin_stage)
-    except (RuntimeError, urllib.error.URLError, OSError) as exc:
-        if os.path.exists(chemin_stage):
-            os.remove(chemin_stage)
-        return jsonify(erreur=f"Téléchargement impossible : {exc}"), 502
 
-    avec_entete = str(donnees.get("avec_entete", "true")).lower() != "false"
-    nom_fichier = donnees.get("nom_fichier") or "ressource.csv"
-    return _analyser_fichier_stage(jeton, chemin_stage, avec_entete, nom_fichier)
+    def evenements():
+        try:
+            for progression in _telecharger_ressource_datagouv_flux(url_ressource, chemin_stage):
+                yield json.dumps({"type": "progression", **progression}) + "\n"
+        except (RuntimeError, urllib.error.URLError, OSError) as exc:
+            if os.path.exists(chemin_stage):
+                os.remove(chemin_stage)
+            yield json.dumps({"type": "erreur", "message": f"Téléchargement impossible : {exc}"}) + "\n"
+            return
+
+        resultat, code = _analyser_fichier_stage(jeton, chemin_stage, avec_entete, nom_fichier)
+        if code != 200:
+            yield json.dumps({"type": "erreur", "message": resultat.get("erreur", "Erreur inconnue")}) + "\n"
+        else:
+            yield json.dumps({"type": "resultat", **resultat}) + "\n"
+
+    return Response(stream_with_context(evenements()), mimetype="application/x-ndjson")
 
 
 # =============================================================================
@@ -808,10 +857,14 @@ def tester_proxy_datagouv():
 
 
 def _analyser_fichier_stage(jeton, chemin_stage, avec_entete, nom_fichier):
+    """Renvoie (donnees, code_http) - un dict brut, jamais un objet Response :
+    contrairement à ses trois appelants (tous des routes Flask classiques),
+    /import/datagouv/apercu doit pouvoir insérer ce résultat dans un flux
+    NDJSON plutôt que le renvoyer tel quel (§5.1)."""
     taille_max_mo = int(lire_parametre("taille_max_csv_mo", "2048"))
     if os.path.getsize(chemin_stage) > taille_max_mo * 1024 * 1024:
         os.remove(chemin_stage)
-        return jsonify(erreur=f"Fichier trop volumineux (> {taille_max_mo} Mo)"), 413
+        return {"erreur": f"Fichier trop volumineux (> {taille_max_mo} Mo)"}, 413
 
     with open(chemin_stage, "rb") as f:
         echantillon_brut = f.read(1_000_000)
@@ -837,7 +890,7 @@ def _analyser_fichier_stage(jeton, chemin_stage, avec_entete, nom_fichier):
 
     if entetes is None:
         os.remove(chemin_stage)
-        return jsonify(erreur="Fichier vide"), 400
+        return {"erreur": "Fichier vide"}, 400
 
     colonnes = []
     for i, nom in enumerate(entetes):
@@ -848,7 +901,7 @@ def _analyser_fichier_stage(jeton, chemin_stage, avec_entete, nom_fichier):
             "type_suggere": suggerer_type(valeurs_colonne),
         })
 
-    return jsonify({
+    return {
         "jeton": jeton,
         "nom_fichier": nom_fichier,
         "encodage_detecte": encodage,
@@ -857,7 +910,7 @@ def _analyser_fichier_stage(jeton, chemin_stage, avec_entete, nom_fichier):
         "nb_lignes_totales": nb_lignes,
         "colonnes": colonnes,
         "apercu": echantillon,
-    })
+    }, 200
 
 
 # =============================================================================

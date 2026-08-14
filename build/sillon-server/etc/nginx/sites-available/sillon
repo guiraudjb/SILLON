@@ -77,6 +77,28 @@ server {
         return 403;
     }
 
+    # Réponse en flux (évènements de progression du téléchargement, §5.1) :
+    # sans "proxy_buffering off", Nginx accumule toute la réponse avant de
+    # la relayer au navigateur (comportement par défaut), ce qui annulerait
+    # l'intérêt même de ce flux - la barre de progression n'apparaîtrait
+    # qu'une fois le téléchargement déjà terminé. "location =" (préfixe
+    # exact) prioritaire sur le bloc générique ci-dessous, donc dupliqué ici
+    # avec la même extraction du jeton.
+    location = /orchestrateur/import/datagouv/apercu {
+        set $auth_header "";
+        if ($http_cookie ~* "sillon_token=([^;]+)") {
+            set $auth_header "Bearer $1";
+        }
+        proxy_set_header Authorization $auth_header;
+        proxy_pass http://127.0.0.1:5000/import/datagouv/apercu;
+        proxy_set_header Host $host;
+        proxy_hide_header X-Powered-By;
+        server_tokens off;
+        proxy_buffering off;
+        proxy_read_timeout 35m;
+        proxy_send_timeout 35m;
+    }
+
     # Même extraction pour l'orchestrateur : il a besoin du jeton pour
     # basculer sur le rôle personnel de l'appelant (§4.3, §4.4).
     location /orchestrateur/ {

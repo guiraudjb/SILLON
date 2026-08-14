@@ -8,7 +8,7 @@
 
 | Champ | Valeur |
 |---|---|
-| Version | 1.6 |
+| Version | 1.7 |
 | Date | 14 août 2026 |
 | Statut | Avant-projet — en cours de validation |
 | Périmètre | Direction locale — hors lac de données national |
@@ -174,7 +174,7 @@ L'utilisateur peut revenir en arrière à toute étape de l'assistant sans avoir
 
 **Import depuis data.gouv.fr**
 
-En complément du dépôt manuel, un bouton « Importer depuis data.gouv.fr » ouvre une modale de recherche dans le catalogue public de data.gouv.fr (recherche par mot-clé, appel direct à l'API de recherche de data.gouv.fr depuis l'orchestrateur, éventuellement via le proxy sortant configuré en §5.6). Pour chaque jeu de données trouvé, seules les ressources déclarées au format CSV sont proposées à l'import, avec leur taille si l'API la communique. Le choix d'une ressource déclenche son téléchargement côté serveur (avec le même garde-fou de taille que le dépôt manuel, §11) puis rouvre exactement le même assistant qu'un dépôt de fichier (étapes 2 à 9 ci-dessus, sans distinction ensuite entre les deux origines).
+En complément du dépôt manuel, un bouton « Importer depuis data.gouv.fr » ouvre une modale de recherche dans le catalogue public de data.gouv.fr (recherche par mot-clé, appel direct à l'API de recherche de data.gouv.fr depuis l'orchestrateur, éventuellement via le proxy sortant configuré en §5.6). Pour chaque jeu de données trouvé, seules les ressources déclarées au format CSV sont proposées à l'import, avec leur taille si l'API la communique. Le choix d'une ressource déclenche son téléchargement côté serveur (avec le même garde-fou de taille que le dépôt manuel, §11), avec un retour de progression pendant le téléchargement (volume reçu, volume total si connu, vitesse), puis rouvre exactement le même assistant qu'un dépôt de fichier (étapes 2 à 9 ci-dessus, sans distinction ensuite entre les deux origines).
 
 L'accès à cette fonctionnalité suit le même profil que l'import manuel (§3) ; l'application réelle du droit reste la création du job d'import, jamais un simple masquage d'affichage.
 
