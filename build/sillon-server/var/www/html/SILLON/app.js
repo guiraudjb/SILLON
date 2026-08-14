@@ -219,13 +219,21 @@ function basculerOnglet(nomOnglet) {
 // préféré à "showModal()" pour ne pas cumuler le ::backdrop natif avec la
 // surcouche déjà peinte par le CSS de DSFR (--modal, arrière-plan opaque).
 const Modales = {
-    ouvrir(modale) {
-        modale.show();
+    // showModal() plutôt que show() (RGAA) : seule showModal() piège le
+    // focus clavier à l'intérieur de la modale et rend le reste de la page
+    // inerte pour les technologies d'assistance - show() laissait la
+    // tabulation atteindre le contenu masqué derrière, constaté en
+    // pratique. Le déclencheur est mémorisé pour restituer le focus à sa
+    // fermeture, plutôt que de le laisser perdu sur <body>.
+    ouvrir(modale, declencheur) {
+        modale._declencheur = declencheur || document.activeElement;
+        modale.showModal();
         modale.classList.add("fr-modal--opened");
     },
     fermer(modale) {
         modale.classList.remove("fr-modal--opened");
         modale.close();
+        modale._declencheur?.focus();
     },
     init() {
         document.querySelectorAll("[data-fr-opened]").forEach((declencheur) => {
@@ -269,6 +277,15 @@ const Bases = {
             Etat.bases = [];
         }
         Bases.rendre();
+
+        // Base personnelle active par défaut si elle existe déjà (§4.4) :
+        // seulement tant qu'aucune sélection n'a encore été faite dans
+        // cette session, pour ne jamais écraser un choix délibéré (par
+        // exemple une base partagée) au fil des rafraîchissements.
+        if (!Etat.baseSelectionnee) {
+            const basePersonnelle = Etat.bases.find((b) => b.je_suis_proprietaire);
+            if (basePersonnelle) Bases.selectionner(basePersonnelle.id);
+        }
     },
 
     rendre() {
@@ -1032,16 +1049,89 @@ const Scripts = {
             || '<option value="">Aucune base disponible pour l\'exécution de scripts</option>';
     },
 
-    async deposer() {
-        const conteneur = document.getElementById("resultat-scripts");
-        const fichier = document.getElementById("champ-fichier-script").files[0];
-        const baseId = document.getElementById("scripts-base-cible").value;
-        if (!fichier || !baseId) return afficherErreur(conteneur, new Error("Choisissez une base et un fichier .py ou .R."));
+    // Squelette de connexion commun (même contrat d'exécution que le
+    // tutoriel, §5.4 : SILLON_DSN/SILLON_RESULTATS) pré-rempli à l'ouverture
+    // d'un nouveau script, pour ne jamais partir d'une page blanche sur la
+    // partie identique d'un script à l'autre.
+    _SQUELETTES: {
+        py: `import os
+import psycopg2
+import pandas as pd
 
+dsn = os.environ["SILLON_DSN"]
+resultats = os.environ["SILLON_RESULTATS"]
+
+connexion = psycopg2.connect(dsn)
+
+# ... votre analyse, vos graphiques, vos exports ...
+
+connexion.close()
+`,
+        R: `library(DBI)
+library(RPostgreSQL)
+
+# RPostgreSQL n'accepte pas directement la chaîne de connexion SILLON_DSN
+# (format clé=valeur de libpq) : on l'analyse nous-mêmes.
+analyser_dsn <- function(dsn) {
+  valeurs <- list()
+  for (paire in strsplit(trimws(dsn), "\\\\s+")[[1]]) {
+    cle_valeur <- strsplit(paire, "=", fixed = TRUE)[[1]]
+    valeurs[[cle_valeur[1]]] <- cle_valeur[2]
+  }
+  valeurs
+}
+
+parametres <- analyser_dsn(Sys.getenv("SILLON_DSN"))
+resultats <- Sys.getenv("SILLON_RESULTATS")
+
+connexion <- dbConnect(
+  PostgreSQL(),
+  host = parametres$host, port = as.integer(parametres$port),
+  dbname = parametres$dbname, user = parametres$user, password = parametres$password
+)
+
+# ... votre analyse, vos graphiques, vos exports ...
+
+dbDisconnect(connexion)
+`,
+    },
+
+    // Lit le fichier choisi en local (FileReader, jamais uploadé tel quel)
+    // pour permettre de le visualiser et éventuellement le modifier avant
+    // l'envoi réel. Sans fichier choisi : même modale, ouverte avec le
+    // squelette de connexion Python plutôt qu'une page blanche.
+    async ouvrirEditeur() {
+        const fichier = document.getElementById("champ-fichier-script").files[0];
+        if (!fichier) return Scripts.nouveauScript("py");
+        document.getElementById("editeur-script-nom").value = fichier.name;
+        document.getElementById("editeur-script-contenu").value = await fichier.text();
+        Modales.ouvrir(document.getElementById("modal-editeur-script"));
+    },
+
+    nouveauScript(langage) {
+        document.getElementById("editeur-script-nom").value = langage === "R" ? "script.R" : "script.py";
+        document.getElementById("editeur-script-contenu").value = Scripts._SQUELETTES[langage];
+        Modales.ouvrir(document.getElementById("modal-editeur-script"));
+    },
+
+    async lancerDepuisEditeur() {
+        const conteneur = document.getElementById("resultat-scripts");
+        const baseId = document.getElementById("scripts-base-cible").value;
+        const nomFichier = document.getElementById("editeur-script-nom").value.trim();
+        const contenu = document.getElementById("editeur-script-contenu").value;
+        if (!baseId) return afficherErreur(conteneur, new Error("Choisissez une base cible."));
+        if (!/\.(py|R)$/i.test(nomFichier)) {
+            return afficherErreur(conteneur, new Error("Le nom du fichier doit se terminer par .py ou .R."));
+        }
+
+        // Un Blob construit à partir du contenu (potentiellement modifié)
+        // de la modale, jamais le File d'origine : c'est le texte affiché
+        // à l'écran qui doit partir, pas le fichier initialement choisi.
         const donnees = new FormData();
-        donnees.append("fichier", fichier);
+        donnees.append("fichier", new Blob([contenu], { type: "text/plain" }), nomFichier);
         donnees.append("base_id", baseId);
 
+        Modales.fermer(document.getElementById("modal-editeur-script"));
         conteneur.innerHTML = "Envoi du script…";
         try {
             const resultat = await appelJson("/orchestrateur/scripts/deposer", { method: "POST", body: donnees });
@@ -1059,6 +1149,16 @@ const Suivi = {
     _intervallesJournal: {},
     _intervalleAuto: null,
     _jobsCache: [],
+    _jobsFiltres: [],
+    _page: 0,
+    _TAILLE_PAGE: 10,
+    // Identifiants des jobs dont le panneau Journal/Aperçus est ouvert :
+    // la table est entièrement reconstruite à chaque rafraîchissement
+    // (manuel ou automatique toutes les 10s, §5.5) - sans ce suivi, un
+    // panneau ouvert se refermerait tout seul au rafraîchissement suivant,
+    // constaté en pratique.
+    _journalOuverts: new Set(),
+    _apercusOuverts: new Set(),
 
     // Actif uniquement pendant que l'onglet Suivi est affiché (démarré/
     // arrêté depuis basculerOnglet()) : jamais de requête périodique en
@@ -1090,15 +1190,59 @@ const Suivi = {
         } catch (erreur) {
             Suivi._jobsCache = [];
         }
-        Suivi.appliquerFiltres();
+        // Page conservée (un rafraîchissement, manuel ou automatique toutes
+        // les 10s, ne doit jamais ramener l'utilisateur à la page 1 s'il
+        // consultait autre chose) - seul un changement de filtre en repart.
+        Suivi.appliquerFiltres(false);
     },
 
-    appliquerFiltres() {
+    appliquerFiltres(reinitialiserPage = true) {
         const filtreType = document.getElementById("suivi-filtre-type").value;
         const filtreStatut = document.getElementById("suivi-filtre-statut").value;
-        const jobs = Suivi._jobsCache.filter((job) =>
+        Suivi._jobsFiltres = Suivi._jobsCache.filter((job) =>
             (!filtreType || job.type === filtreType) && (!filtreStatut || job.statut === filtreStatut));
-        Suivi._afficher(jobs);
+        if (reinitialiserPage) Suivi._page = 0;
+        Suivi._afficherPage();
+    },
+
+    // Pagination purement cliente (§5.5) : la liste complète tient déjà en
+    // mémoire (_jobsCache, un seul appel serveur par rafraîchissement),
+    // pas besoin d'aller-retour supplémentaire juste pour changer de page.
+    _afficherPage() {
+        const nbPages = Math.max(1, Math.ceil(Suivi._jobsFiltres.length / Suivi._TAILLE_PAGE));
+        Suivi._page = Math.min(Suivi._page, nbPages - 1);
+        const debut = Suivi._page * Suivi._TAILLE_PAGE;
+        Suivi._afficher(Suivi._jobsFiltres.slice(debut, debut + Suivi._TAILLE_PAGE));
+
+        // Structure du composant "Pagination" du DSFR (nav + liste), pas de
+        // simples boutons juxtaposés (RGAA) : regroupe explicitement les
+        // contrôles pour les technologies d'assistance plutôt que de les
+        // laisser flotter sans lien entre eux dans la page. <button>
+        // plutôt que <a href="#"> : ce n'est jamais une vraie navigation
+        // d'URL, seulement un changement d'état côté client.
+        const pagination = document.getElementById("suivi-pagination");
+        pagination.innerHTML = nbPages <= 1 ? "" : `
+            <nav role="navigation" class="fr-pagination" aria-label="Pagination des traitements">
+                <ul class="fr-pagination__list">
+                    <li>
+                        <button class="fr-pagination__link fr-pagination__link--prev fr-pagination__link--lg-label" ${Suivi._page === 0 ? "disabled" : ""} onclick="Suivi.pagePrecedente()">Page précédente</button>
+                    </li>
+                    <li><span class="fr-text--sm fr-mx-2w">Page ${Suivi._page + 1} / ${nbPages} (${Suivi._jobsFiltres.length} traitement(s))</span></li>
+                    <li>
+                        <button class="fr-pagination__link fr-pagination__link--next fr-pagination__link--lg-label" ${Suivi._page >= nbPages - 1 ? "disabled" : ""} onclick="Suivi.pageSuivante()">Page suivante</button>
+                    </li>
+                </ul>
+            </nav>`;
+    },
+
+    pagePrecedente() {
+        Suivi._page = Math.max(0, Suivi._page - 1);
+        Suivi._afficherPage();
+    },
+
+    pageSuivante() {
+        Suivi._page += 1;
+        Suivi._afficherPage();
     },
 
     _LIBELLES_STATUT: {
@@ -1128,6 +1272,17 @@ const Suivi = {
             ${estScript(job.type) ? `<tr class="ligne-journal" id="journal-${job.id}" hidden><td colspan="5"></td></tr>` : ""}
             ${estScript(job.type) ? `<tr class="ligne-apercu" id="apercu-${job.id}" hidden><td colspan="5"></td></tr>` : ""}`).join("")
             || `<tr><td colspan="5">Aucun traitement pour l'instant.</td></tr>`;
+
+        // Rouvre les panneaux qui l'étaient avant cette reconstruction
+        // (cf. commentaire sur _journalOuverts/_apercusOuverts) - la ligne
+        // n'existe que si le job concerné apparaît sur la page actuellement
+        // affichée, jamais supposée présente sans vérifier.
+        for (const idJob of Suivi._journalOuverts) {
+            if (document.getElementById(`journal-${idJob}`)) Suivi.afficherJournal(idJob);
+        }
+        for (const idJob of Suivi._apercusOuverts) {
+            if (document.getElementById(`apercu-${idJob}`)) Suivi.afficherApercus(idJob);
+        }
     },
 
     // Message utilisateur reformulé en avant, détail technique replié
@@ -1156,10 +1311,12 @@ const Suivi = {
         const ligne = document.getElementById(`journal-${idJob}`);
         ligne.hidden = !ligne.hidden;
         if (ligne.hidden) {
+            Suivi._journalOuverts.delete(idJob);
             clearInterval(Suivi._intervallesJournal[idJob]);
             delete Suivi._intervallesJournal[idJob];
             return;
         }
+        Suivi._journalOuverts.add(idJob);
         await Suivi.rafraichirJournal(idJob);
         Suivi._intervallesJournal[idJob] = setInterval(() => Suivi.rafraichirJournal(idJob), 3000);
     },
@@ -1194,7 +1351,11 @@ const Suivi = {
     async afficherApercus(idJob) {
         const ligne = document.getElementById(`apercu-${idJob}`);
         ligne.hidden = !ligne.hidden;
-        if (ligne.hidden) return;
+        if (ligne.hidden) {
+            Suivi._apercusOuverts.delete(idJob);
+            return;
+        }
+        Suivi._apercusOuverts.add(idJob);
 
         const cellule = document.querySelector(`#apercu-${idJob} td`);
         cellule.innerHTML = `<p class="fr-text--sm">Chargement…</p>`;

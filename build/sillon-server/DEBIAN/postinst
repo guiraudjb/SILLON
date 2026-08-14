@@ -52,19 +52,23 @@ if [ "$DB_EXISTE" = "1" ]; then
 
     # Migration : colonne nom_fichier de vue_mes_jobs (§5.5) - CREATE OR
     # REPLACE VIEW est sans risque à rejouer (contrairement à l'INSERT
-    # ci-dessus), inutile d'y consacrer un correctif ciblé séparé.
+    # ci-dessus), inutile d'y consacrer un correctif ciblé séparé. Colonne
+    # ajoutée en dernière position (jamais au milieu) : CREATE OR REPLACE
+    # VIEW n'autorise à ajouter une colonne qu'à la fin de la liste,
+    # constaté en pratique (PostgreSQL refuse sinon de renommer une colonne
+    # existante de la vue).
     sudo -u postgres psql -d "$DB_NAME" -c "
         CREATE OR REPLACE VIEW public.vue_mes_jobs AS
         SELECT
             j.id, j.type, j.statut, j.base_id, j.date_creation, j.date_debut, j.date_fin,
             j.message_erreur, j.message_utilisateur, j.chemin_resultat,
-            j.payload->>'nom_fichier' AS nom_fichier,
             CASE WHEN j.statut = 'en_attente' THEN (
                 SELECT count(*) FROM public.jobs j2
                 WHERE j2.statut IN ('en_attente', 'en_cours')
                   AND auth.groupe_file(j2.type) = auth.groupe_file(j.type)
                   AND j2.date_creation < j.date_creation
-            ) END AS position_file
+            ) END AS position_file,
+            j.payload->>'nom_fichier' AS nom_fichier
         FROM public.jobs j
         WHERE j.utilisateur_id = public._id_courant();
     " >/dev/null

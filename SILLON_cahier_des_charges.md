@@ -178,6 +178,8 @@ Liste en deux sections :
 - **Mes bases** (profil agent) : la base personnelle, sa taille, la liste des tables, les utilisateurs avec qui elle est partagée.
 - **Bases partagées avec moi** : bases d'autres agents auxquelles l'utilisateur a été autorisé, avec le nom du propriétaire.
 
+La base personnelle est sélectionnée automatiquement comme base active dès la connexion si elle existe déjà, pour ne jamais imposer une sélection manuelle systématique sur le cas le plus courant — sans jamais écraser un choix explicite fait ensuite par l'utilisateur (une base partagée, par exemple) au fil des rafraîchissements de la session.
+
 **Fiche d'une table** : nombre de lignes, liste des colonnes et de leurs types, date et taille du dernier import, avec un aperçu des premières lignes.
 
 **Actions disponibles**
@@ -201,6 +203,7 @@ Liste en deux sections :
 ### 5.4 Onglet « Scripts »
 
 - Dépôt d'un fichier `.py` ou `.R`, taille maximale définie en §11.
+- Visualisation et modification du contenu avant lancement (fichier déposé ou script écrit directement dans l'interface) : le fichier n'est jamais envoyé tel quel sans passer par cette étape de relecture. Sans fichier choisi, le squelette de connexion commun (variables d'environnement §5.4 ci-dessous) est pré-rempli pour le langage choisi, afin de ne jamais partir d'une page blanche sur la partie identique d'un script à l'autre.
 - Sélection de la base cible parmi celles accessibles à l'utilisateur avec exécution de script autorisée.
 - Contrat d'exécution : le script reçoit une chaîne de connexion à la base cible via une variable d'environnement dédiée, scopée au rôle de l'utilisateur qui soumet le job — jamais d'identifiants génériques ou élevés. Un répertoire de sortie conventionnel est mis à disposition du script pour y déposer les fichiers destinés à être récupérés par l'utilisateur (résultats, graphiques, exports).
 - La liste des librairies disponibles dans l'environnement d'exécution est affichée dans l'interface avant le dépôt, pour éviter les échecs liés à une dépendance manquante.
@@ -211,7 +214,7 @@ Liste en deux sections :
 
 ### 5.5 Onglet « Suivi »
 
-- Vue consolidée de tous les jobs de l'utilisateur, tous types confondus (imports, requêtes longues, scripts, créations ou suppressions de base), filtrable par type et par statut, rafraîchie automatiquement toutes les 10 secondes tant que cet onglet reste affiché.
+- Vue consolidée de tous les jobs de l'utilisateur, tous types confondus (imports, requêtes longues, scripts, créations ou suppressions de base), filtrable par type et par statut, rafraîchie automatiquement toutes les 10 secondes tant que cet onglet reste affiché, paginée par 10 traitements — un rafraîchissement (manuel ou automatique) ne modifie jamais la page consultée ni ne referme un panneau Journal ou Aperçus déjà ouvert.
 - Pour un dépôt de script ou un import CSV : nom du fichier concerné affiché en colonne Détail, pour distinguer d'un coup d'œil plusieurs traitements du même type dans la liste.
 - Statuts affichés : en attente, en cours, terminé, erreur, annulé — avec, pour un job en attente, une estimation de sa position dans la file.
 - Annulation possible tant que le job est en attente ou en cours.

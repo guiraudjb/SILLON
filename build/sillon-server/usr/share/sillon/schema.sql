@@ -645,16 +645,20 @@ CREATE OR REPLACE VIEW public.vue_mes_jobs AS
 SELECT
     j.id, j.type, j.statut, j.base_id, j.date_creation, j.date_debut, j.date_fin,
     j.message_erreur, j.message_utilisateur, j.chemin_resultat,
-    -- Nom du script déposé ou du fichier CSV importé (§5.5), jamais le
-    -- reste de "payload" (chemin serveur, rôle PostgreSQL personnel...) -
-    -- seule cette valeur a un sens à afficher à l'utilisateur.
-    j.payload->>'nom_fichier' AS nom_fichier,
     CASE WHEN j.statut = 'en_attente' THEN (
         SELECT count(*) FROM public.jobs j2
         WHERE j2.statut IN ('en_attente', 'en_cours')
           AND auth.groupe_file(j2.type) = auth.groupe_file(j.type)
           AND j2.date_creation < j.date_creation
-    ) END AS position_file
+    ) END AS position_file,
+    -- Nom du script déposé ou du fichier CSV importé (§5.5), jamais le
+    -- reste de "payload" (chemin serveur, rôle PostgreSQL personnel...) -
+    -- seule cette valeur a un sens à afficher à l'utilisateur. En dernière
+    -- position : CREATE OR REPLACE VIEW n'autorise à ajouter une colonne
+    -- qu'à la fin de la liste, jamais à la réordonner (constaté en
+    -- pratique - PostgreSQL refuse sinon avec "ne peut pas modifier le nom
+    -- de la colonne ... de la vue").
+    j.payload->>'nom_fichier' AS nom_fichier
 FROM public.jobs j
 WHERE j.utilisateur_id = public._id_courant();
 
