@@ -10,5 +10,8 @@ PLUME (même auteur) :
   l'onglet Carto, échelle « Monde ».
 - graphique.csv : petit jeu de données catégoriel à plusieurs séries —
   pour l'onglet Graphiques.
+- frise.csv : jalons fictifs d'un programme (date/étape, titre,
+  description) — pour l'onglet Représentations DSFR, type « Frise
+  chronologique ».
 
 Données fictives, à des fins de démonstration uniquement.

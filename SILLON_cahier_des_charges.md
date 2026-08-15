@@ -8,8 +8,8 @@
 
 | Champ | Valeur |
 |---|---|
-| Version | 1.9 |
-| Date | 14 août 2026 |
+| Version | 2.1 |
+| Date | 15 août 2026 |
 | Statut | Avant-projet — en cours de validation |
 | Périmètre | Direction locale — hors lac de données national |
 | Stack technique | PostgreSQL 17, PostgREST, Nginx, DSFR — architecture sans framework applicatif lourd côté front |
@@ -266,6 +266,18 @@ La base personnelle est sélectionnée automatiquement comme base active dès la
 - Bibliothèque de modèles de départ pré-remplis (processus métier, séquence, architecture, planning, matrice de risques, etc.) pour ne jamais partir d'une page blanche.
 - Export du diagramme en image PNG (repli au format SVG si la conversion échoue).
 - Pas de génération automatique depuis un fichier CSV sur cet onglet : la syntaxe Mermaid ne s'y prête pas nativement, contrairement aux onglets Carto et Graphiques.
+
+### 5.10 Onglet « Représentations DSFR »
+
+- Accessible à tous les utilisateurs, pour produire manuellement cinq types de blocs visuels du Système de Design de l'État, édités par formulaire avec aperçu en direct (pas de bouton « Actualiser », ces rendus étant légers) : mise en exergue, chiffre clé, citation, tableau, frise chronologique.
+- Mise en exergue : titre et texte.
+- Chiffre clé : valeur mise en avant (ex. « +42 % ») et texte explicatif.
+- Citation : texte, auteur, fonction, portrait optionnel (à gauche, à droite ou absent) avec dépôt d'image.
+- Tableau : nombre de colonnes et de lignes, style d'en-tête (colonnes, lignes, les deux, ou aucun), contenu de chaque cellule saisi dans une grille dédiée — alimentable soit manuellement, soit par dépôt d'un fichier CSV ou par le résultat de la dernière requête SQL exécutée dans l'onglet Travaux (même sélecteur commun que Carto et Graphiques).
+- Frise chronologique : dépôt d'un fichier CSV (colonnes date, titre, description optionnelle), titre général optionnel, orientation horizontale ou verticale, sélection des étapes à afficher.
+- Palette de couleurs DSFR partagée avec les onglets Carto et Graphiques (18 teintes du système de design de l'État).
+- Export de la représentation choisie en image PNG.
+- Fichiers d'exemple téléchargeables depuis la modale « À propos » (frise chronologique).
 
 ---
 

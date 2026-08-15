@@ -167,3 +167,225 @@ code {
 @keyframes sillon-spinner-rotation {
     to { transform: rotate(360deg); }
 }
+
+/* Onglet Représentations DSFR : styles portés depuis PLUME
+   (/var/www/html/PLUME/styles.css), scopés sous #representations-apercu
+   pour ne jamais affecter les autres usages de .fr-callout/.fr-table
+   ailleurs dans SILLON (Bases, Administration, Suivi...). Les couleurs
+   --theme-main/--theme-sun/--theme-bg sont posées en variables CSS locales
+   à ce conteneur par Representations.actualiserApercu() (app.js), jamais
+   globales contrairement à PLUME. --theme-sun-80 (mélange précalculé en JS,
+   pas de color-mix() CSS : html2canvas 1.4.1 ne sait pas parser cette
+   fonction et lève "Attempting to parse an unsupported color function" au
+   moment du téléchargement PNG). */
+
+/* border-left plutôt que box-shadow:inset (liseré équivalent) :
+   html2canvas 1.4.1 rend mal les box-shadow inset, constaté en pratique
+   sur ce composant (grand aplat de couleur au lieu d'un simple liseré
+   de 0.25rem, visible uniquement dans l'image téléchargée). */
+#representations-apercu .fr-callout {
+    border: none;
+    border-left: 0.25rem solid var(--theme-main);
+    background-color: var(--theme-bg);
+}
+
+/* Citation */
+#representations-apercu .plume-citation--avec-photo {
+    display: flex;
+    gap: 1.5rem;
+    align-items: flex-start;
+}
+
+#representations-apercu .plume-citation-photo {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+    border: 1px solid var(--border-default-grey);
+    background: #f0f0f0;
+}
+
+#representations-apercu .plume-citation-bloc {
+    margin: 0;
+    padding-left: 1.5rem;
+    border-left: 4px solid var(--theme-sun);
+    flex-grow: 1;
+}
+
+#representations-apercu .plume-citation-bloc--droite {
+    padding-left: 0;
+    padding-right: 1.5rem;
+    border-left: none;
+    border-right: 4px solid var(--theme-sun);
+    text-align: right;
+}
+
+#representations-apercu .plume-citation-bloc p {
+    font-size: 1.3rem;
+    font-style: italic;
+    font-weight: 700;
+    color: #1e1e1e;
+    margin: 0 0 0.75rem;
+    line-height: 1.4;
+}
+
+#representations-apercu .plume-citation-bloc footer {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: #666;
+}
+
+#representations-apercu .plume-citation-bloc footer span {
+    font-weight: normal;
+    font-style: italic;
+}
+
+/* Tableau : ajusté à sa largeur réelle plutôt qu'étiré sur toute la largeur
+   du conteneur (dsfr.min.css impose width:100% à .fr-table>table) - avec
+   peu de colonnes étroites, cet étirement laissait un grand vide blanc à
+   droite des colonnes, aussi bien à l'écran que dans l'image téléchargée
+   (constaté en pratique). display:inline-block sur .fr-table (au lieu du
+   display:block par défaut) fait replier sa largeur sur son contenu réel ;
+   combiné à width:auto sur <table> (qui annule le width:100% du DSFR, sinon
+   toujours relatif à un parent devenu indéterminé - constaté en pratique,
+   la largeur se serait effondrée au lieu de s'ajuster), on obtient bien la
+   largeur naturelle des colonnes, sans vide résiduel. */
+#representations-apercu .fr-table {
+    display: inline-block;
+}
+
+#representations-apercu .fr-table>table {
+    width: auto;
+}
+
+#representations-apercu .fr-table table thead th,
+#representations-apercu .fr-table table tbody th {
+    background-color: var(--theme-sun-80);
+    color: #ffffff;
+    font-weight: 700;
+    padding: 0.75rem;
+    border: 1px solid var(--border-default-grey);
+    text-align: center;
+}
+
+#representations-apercu .fr-table table tbody th {
+    text-align: left;
+}
+
+#representations-apercu .fr-table table td {
+    padding: 0.5rem;
+    border: 1px solid var(--border-default-grey);
+    text-align: left;
+}
+
+#representations-apercu .fr-table table tbody tr:nth-child(even) {
+    background-color: var(--background-alt-grey);
+}
+
+/* Frise chronologique */
+#representations-apercu .plume-timeline-titre-general {
+    color: var(--theme-sun);
+    text-align: center;
+    margin: 0 0 1.5rem;
+}
+
+#representations-apercu .plume-timeline-horizontal,
+#representations-apercu .plume-timeline-vertical {
+    font-family: "Marianne", Arial, sans-serif;
+}
+
+#representations-apercu .plume-timeline-horizontal {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    position: relative;
+}
+
+#representations-apercu .plume-timeline-horizontal::before {
+    content: "";
+    position: absolute;
+    top: 14px;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background-color: var(--border-default-grey);
+    z-index: 0;
+}
+
+#representations-apercu .plume-timeline-horizontal li {
+    position: relative;
+    flex: 1;
+    text-align: center;
+    padding: 2.5rem 0.5rem 0;
+    z-index: 1;
+}
+
+#representations-apercu .plume-timeline-horizontal li::before {
+    content: "";
+    position: absolute;
+    top: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 14px;
+    height: 14px;
+    background-color: var(--theme-sun);
+    border: 2px solid #fff;
+    border-radius: 50%;
+    box-sizing: border-box;
+}
+
+#representations-apercu .plume-timeline-vertical {
+    list-style: none;
+    margin: 0 0 0 1rem;
+    padding: 0;
+    border-left: 2px solid var(--border-default-grey);
+    text-align: left;
+}
+
+#representations-apercu .plume-timeline-vertical li {
+    position: relative;
+    margin: 0 0 1.5rem;
+    padding-left: 1.5rem;
+}
+
+#representations-apercu .plume-timeline-vertical li:last-child {
+    margin-bottom: 0;
+}
+
+#representations-apercu .plume-timeline-vertical li::before {
+    content: "";
+    position: absolute;
+    left: calc(-7px - 1px);
+    top: 0.25rem;
+    width: 14px;
+    height: 14px;
+    background-color: var(--theme-sun);
+    border: 2px solid #fff;
+    border-radius: 50%;
+    box-sizing: border-box;
+}
+
+#representations-apercu .plume-timeline-title {
+    display: block;
+    color: var(--theme-sun);
+    font-size: 1rem;
+    font-weight: 800;
+    margin-bottom: 0.25rem;
+}
+
+#representations-apercu .plume-timeline-event {
+    font-weight: 700;
+    font-size: 0.95rem;
+    color: #1e1e1e;
+    margin-bottom: 0.25rem;
+}
+
+#representations-apercu .plume-timeline-desc {
+    font-size: 0.85rem;
+    color: #666;
+    line-height: 1.4;
+}

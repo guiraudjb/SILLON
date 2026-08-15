@@ -297,6 +297,7 @@ function basculerOnglet(nomOnglet) {
     if (nomOnglet === "carto") Carto.init();
     if (nomOnglet === "graphiques") Graphiques.init();
     if (nomOnglet === "diagrammes") Diagrammes.init();
+    if (nomOnglet === "representations") Representations.init();
     if (nomOnglet === "scripts") {
         Scripts.remplirSelecteurBase();
         Scripts.afficherLibrairies();
@@ -2464,10 +2465,27 @@ const Carto = {
         }
 
         if (dataMap && dataMap.size > 0 && valMin !== valMax && config.showLegend !== false) {
-            const largeurLegende = 200, hauteurLegende = 12;
-            const xLegende = largeur - largeurLegende - 30, yLegende = hauteur - 30;
+            // Position/orientation choisies par l'utilisateur (§Carto
+            // position de la légende) : horizontale en bas (droite ou
+            // gauche), ou verticale centrée sur la hauteur (droite ou
+            // gauche) - la barre et le dégradé pivotent ensemble, min en
+            // bas / max en haut pour la variante verticale (lecture
+            // ascendante, convention usuelle des légendes de carte).
+            const position = config.legendPosition || "bas-droite";
+            const vertical = position === "droite" || position === "gauche";
+            const largeurLegende = vertical ? 12 : 200;
+            const hauteurLegende = vertical ? 200 : 12;
+            const marge = 30;
+            let xLegende, yLegende;
+            if (position === "bas-gauche") { xLegende = marge; yLegende = hauteur - marge; }
+            else if (position === "droite") { xLegende = largeur - largeurLegende - marge; yLegende = (hauteur - hauteurLegende) / 2; }
+            else if (position === "gauche") { xLegende = marge; yLegende = (hauteur - hauteurLegende) / 2; }
+            else { xLegende = largeur - largeurLegende - marge; yLegende = hauteur - marge; } // "bas-droite", repli par défaut
+
             const defs = svg.append("defs");
-            const degrade = defs.append("linearGradient").attr("id", "carto-degrade").attr("x1", "0%").attr("x2", "100%");
+            const degrade = defs.append("linearGradient").attr("id", "carto-degrade")
+                .attr("x1", "0%").attr("y1", vertical ? "100%" : "0%")
+                .attr("x2", vertical ? "0%" : "100%").attr("y2", "0%");
 
             if (config.palette === "custom" && config.customColors && config.customColors.length >= 2) {
                 const interpolateur = d3.interpolateRgbBasis(config.customColors);
@@ -2492,8 +2510,13 @@ const Carto = {
 
             const legende = svg.append("g").attr("transform", `translate(${xLegende}, ${yLegende})`);
             legende.append("rect").attr("width", largeurLegende).attr("height", hauteurLegende).style("fill", "url(#carto-degrade)").style("stroke", "#ccc");
-            legende.append("text").attr("x", 0).attr("y", -6).style("font-size", "0.75rem").text(Carto._formatNombre.format(valMin));
-            legende.append("text").attr("x", largeurLegende).attr("y", -6).attr("text-anchor", "end").style("font-size", "0.75rem").text(Carto._formatNombre.format(valMax));
+            if (vertical) {
+                legende.append("text").attr("x", largeurLegende / 2).attr("y", hauteurLegende + 14).attr("text-anchor", "middle").style("font-size", "0.75rem").text(Carto._formatNombre.format(valMin));
+                legende.append("text").attr("x", largeurLegende / 2).attr("y", -6).attr("text-anchor", "middle").style("font-size", "0.75rem").text(Carto._formatNombre.format(valMax));
+            } else {
+                legende.append("text").attr("x", 0).attr("y", -6).style("font-size", "0.75rem").text(Carto._formatNombre.format(valMin));
+                legende.append("text").attr("x", largeurLegende).attr("y", -6).attr("text-anchor", "end").style("font-size", "0.75rem").text(Carto._formatNombre.format(valMax));
+            }
         }
         return true;
     },
@@ -2546,6 +2569,7 @@ const Carto = {
                 title: document.getElementById("carto-titre").value,
                 labelType: document.getElementById("carto-etiquettes").value,
                 showLegend: document.getElementById("carto-legende").checked,
+                legendPosition: document.getElementById("carto-legende-position")?.value || "bas-droite",
                 palette: paletteVal,
                 customColors: paletteVal === "custom" ? [Carto._couleurDepart, Carto._couleurArrivee] : null,
                 labelSize: parseFloat(document.getElementById("carto-etiquettes-taille")?.value) || 10,
@@ -2902,6 +2926,371 @@ const Diagrammes = {
             image.onerror = () => rejeter(new Error("Génération PNG échouée."));
             image.src = dataUrl;
         });
+    },
+};
+
+// =============================================================================
+// ONGLET REPRÉSENTATIONS DSFR (§5.10)
+// =============================================================================
+// Port de cinq blocs "projections" DSFR de PLUME (js/components.js) : mise
+// en exergue, chiffre clé, citation, tableau, frise chronologique. Dans
+// PLUME, ces blocs sont insérés dans un document contenteditable plus large
+// et édités en place (clic + frappe) - seule la Frise y a déjà un vrai
+// "Studio" (formulaire + aperçu live). SILLON n'a pas de document éditable
+// dans lequel insérer ces blocs : les cinq types sont donc uniformément
+// pilotés par formulaire (texte simple, pas de mise en forme riche) plutôt
+// que par édition en place, sur le modèle déjà établi par Carto/Graphiques/
+// Diagrammes (formulaire + aperçu + téléchargement).
+const Representations = {
+    _initialise: false,
+    // Avatar par défaut de la Citation (SVG gris, repris tel quel de PLUME)
+    // si aucun portrait n'est chargé.
+    _avatarParDefaut: "data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='80' viewBox='0 0 24 24' fill='none' stroke='%23ccc' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='8' r='5'/%3E%3Cpath d='M20 21a8 8 0 0 0-16 0'/%3E%3C/svg%3E",
+    _photoCitation: null,
+    _valeursTableau: [],
+    _donneesFrise: null,
+    _colonnesFrise: null,
+
+    init() {
+        if (Representations._initialise) return;
+        Representations._initialise = true;
+
+        const selPalette = document.getElementById("repr-palette");
+        selPalette.innerHTML = Object.entries(PALETTE_LABELS_DSFR)
+            .map(([cle, libelle]) => `<option value="${cle}"${cle === "marianne" ? " selected" : ""}>${echapper(libelle)}</option>`)
+            .join("");
+        selPalette.addEventListener("change", Representations.actualiserApercu);
+
+        // Écoute "live" sur les champs texte (pas de bouton Actualiser
+        // séparé : ces rendus sont légers, contrairement à Carto qui charge
+        // un fond de carte volumineux) - cohérent avec les Studios déjà
+        // réactifs de PLUME (Citation/Tableau/Frise).
+        [
+            "repr-exergue-titre", "repr-exergue-texte",
+            "repr-chiffre-valeur", "repr-chiffre-texte",
+            "repr-citation-texte", "repr-citation-auteur", "repr-citation-fonction",
+            "repr-frise-titre", "repr-frise-orientation",
+        ].forEach((id) => document.getElementById(id).addEventListener("input", Representations.actualiserApercu));
+
+        document.getElementById("repr-tableau-entete").addEventListener("change", Representations.actualiserApercu);
+        document.getElementById("repr-tableau-colonnes").addEventListener("input", Representations.regenererGrilleTableau);
+        document.getElementById("repr-tableau-lignes").addEventListener("input", Representations.regenererGrilleTableau);
+        document.getElementById("repr-citation-fichier").addEventListener("change", Representations._chargerPhotoCitation);
+        document.getElementById("repr-frise-fichier").addEventListener("change", Representations.importerCsvFrise);
+        DonneesVisu.creerSelecteur("repr-tableau-source-donnees", (donnees) => Representations._chargerDonneesTableau(donnees));
+
+        Representations.regenererGrilleTableau();
+        Representations.actualiserChampsVisibles();
+    },
+
+    actualiserChampsVisibles() {
+        const type = document.getElementById("repr-type").value;
+        ["exergue", "chiffre", "citation", "tableau", "frise"].forEach((t) => {
+            document.getElementById(`repr-champs-${t}`).hidden = t !== type;
+        });
+        Representations.actualiserApercu();
+    },
+
+    actualiserAffichagePhoto() {
+        const style = document.getElementById("repr-citation-photo").value;
+        document.getElementById("repr-citation-upload-groupe").hidden = style === "none";
+        Representations.actualiserApercu();
+    },
+
+    _chargerPhotoCitation(evenement) {
+        const fichier = evenement.target.files[0];
+        if (!fichier) return;
+        // Même limite que PLUME (components.js) : un portrait n'a pas
+        // besoin d'être plus lourd, et une image trop grande ralentirait
+        // inutilement la rasterisation html2canvas au téléchargement.
+        if (fichier.size > 2 * 1024 * 1024) {
+            afficherToast("Image trop lourde", "Veuillez choisir un portrait de moins de 2 Mo.", "error");
+            evenement.target.value = "";
+            return;
+        }
+        const lecteur = new FileReader();
+        lecteur.onload = (evt) => {
+            Representations._photoCitation = evt.target.result;
+            Representations.actualiserApercu();
+        };
+        lecteur.readAsDataURL(fichier);
+    },
+
+    // Redimensionne la grille de cellules en conservant les valeurs déjà
+    // saisies (jamais de remise à zéro complète) : contrairement à PLUME,
+    // qui édite les cellules d'un tableau HTML directement en place
+    // (contenteditable), SILLON n'a pas de document éditable - cette grille
+    // de champs <input> en est l'équivalent formulaire.
+    regenererGrilleTableau() {
+        const nbColonnes = Math.max(1, Math.min(15, parseInt(document.getElementById("repr-tableau-colonnes").value) || 1));
+        const nbLignes = Math.max(1, Math.min(50, parseInt(document.getElementById("repr-tableau-lignes").value) || 1));
+        const anciennes = Representations._valeursTableau;
+        const valeurs = [];
+        for (let i = 0; i < nbLignes; i++) {
+            const ligne = [];
+            for (let j = 0; j < nbColonnes; j++) ligne.push(anciennes[i]?.[j] ?? "");
+            valeurs.push(ligne);
+        }
+        Representations._valeursTableau = valeurs;
+        Representations._construireGrilleTableau();
+    },
+
+    // Alimente la grille depuis le sélecteur commun CSV/SQL (DonneesVisu,
+    // même comportement que Carto/Graphiques) : la 1re ligne insérée est
+    // l'en-tête (noms de colonnes), le style d'en-tête est présélectionné
+    // en conséquence.
+    _chargerDonneesTableau(donnees) {
+        const nbColonnes = Math.max(1, Math.min(15, donnees.colonnes.length));
+        const nbLignes = Math.max(1, Math.min(50, donnees.lignes.length + 1));
+        document.getElementById("repr-tableau-colonnes").value = nbColonnes;
+        document.getElementById("repr-tableau-lignes").value = nbLignes;
+        document.getElementById("repr-tableau-entete").value = "colonnes";
+
+        const toutesLesLignes = [donnees.colonnes, ...donnees.lignes];
+        Representations._valeursTableau = toutesLesLignes
+            .slice(0, nbLignes)
+            .map((ligne) => ligne.slice(0, nbColonnes).map((val) => (val === null || val === undefined) ? "" : String(val)));
+        Representations._construireGrilleTableau();
+    },
+
+    _construireGrilleTableau() {
+        const valeurs = Representations._valeursTableau;
+        const grille = document.getElementById("repr-tableau-grille");
+        grille.innerHTML = `<table style="border-collapse:collapse;">${valeurs.map((ligne, i) => `
+            <tr>${ligne.map((val, j) => `
+                <td style="padding:2px;"><input class="fr-input fr-input--sm" style="width:6rem;" data-ligne="${i}" data-colonne="${j}" value="${echapper(val)}"></td>`).join("")}</tr>`).join("")}</table>`;
+        grille.querySelectorAll("input").forEach((champ) => {
+            champ.addEventListener("input", () => {
+                Representations._valeursTableau[Number(champ.dataset.ligne)][Number(champ.dataset.colonne)] = champ.value;
+                Representations.actualiserApercu();
+            });
+        });
+        Representations.actualiserApercu();
+    },
+
+    async importerCsvFrise(evenement) {
+        const fichier = evenement.target.files[0];
+        if (!fichier) return;
+        try {
+            // 3 premières colonnes = date / titre / description (optionnelle),
+            // même déduction que insertTimelineFromCSV() de PLUME.
+            const { colonnes, lignes } = await DonneesVisu._analyserCsv(fichier);
+            if (colonnes.length < 2) {
+                afficherToast("Fichier incomplet", "Le CSV doit contenir au moins 2 colonnes (date, titre).", "error");
+                return;
+            }
+            Representations._colonnesFrise = { date: colonnes[0], titre: colonnes[1], description: colonnes[2] || null };
+            Representations._donneesFrise = lignes.map((ligne) => {
+                const objet = {};
+                colonnes.forEach((c, i) => { objet[c] = ligne[i]; });
+                return objet;
+            });
+
+            const filtres = document.getElementById("repr-frise-filtres");
+            filtres.innerHTML = Representations._donneesFrise.map((ligne, i) => `
+                <div class="fr-checkbox-group fr-checkbox-group--sm">
+                    <input type="checkbox" id="repr-frise-filtre-${i}" checked>
+                    <label class="fr-label" for="repr-frise-filtre-${i}">${echapper(String(ligne[Representations._colonnesFrise.date] ?? `Étape ${i + 1}`))}</label>
+                </div>`).join("");
+            filtres.querySelectorAll("input").forEach((c) => c.addEventListener("change", Representations.actualiserApercu));
+
+            Representations.actualiserApercu();
+        } catch (erreur) {
+            afficherToast("Fichier illisible", erreur.message || String(erreur), "error");
+        }
+    },
+
+    // Équivalent de color-mix(in srgb, hex1, hex2 poidsHex2*100%) mais
+    // calculé en JS (voir actualiserApercu()) plutôt qu'en CSS.
+    _melangerHex(hex1, hex2, poidsHex2) {
+        const versRgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+        const [r1, g1, b1] = versRgb(hex1);
+        const [r2, g2, b2] = versRgb(hex2);
+        const melanger = (a, b) => Math.round(a * (1 - poidsHex2) + b * poidsHex2);
+        return `rgb(${melanger(r1, r2)}, ${melanger(g1, g2)}, ${melanger(b1, b2)})`;
+    },
+
+    // Couleurs posées en variables CSS locales au conteneur d'aperçu
+    // (jamais globales, contrairement à PLUME) : évite tout effet de bord
+    // sur le reste de l'interface SILLON si plusieurs représentations aux
+    // palettes différentes étaient un jour affichées simultanément.
+    actualiserApercu() {
+        const conteneur = document.getElementById("representations-apercu");
+        const type = document.getElementById("repr-type").value;
+        const palette = PALETTES_DSFR[document.getElementById("repr-palette").value] || PALETTES_DSFR.marianne;
+        conteneur.style.setProperty("--theme-main", palette.main);
+        conteneur.style.setProperty("--theme-sun", palette.sun);
+        conteneur.style.setProperty("--theme-bg", palette.bg);
+        // Mélange précalculé ici plutôt qu'avec color-mix() en CSS :
+        // html2canvas 1.4.1 ne sait pas parser cette fonction et fait
+        // échouer le téléchargement PNG du Tableau (constaté en pratique).
+        conteneur.style.setProperty("--theme-sun-80", Representations._melangerHex(palette.sun, "#ffffff", 0.2));
+
+        if (type === "exergue") conteneur.innerHTML = Representations._rendreExergue();
+        else if (type === "chiffre") conteneur.innerHTML = Representations._rendreChiffre();
+        else if (type === "citation") conteneur.innerHTML = Representations._rendreCitation();
+        else if (type === "tableau") conteneur.innerHTML = Representations._rendreTableau();
+        else if (type === "frise") conteneur.innerHTML = Representations._rendreFrise();
+    },
+
+    // Fidèle à insertCallout() de PLUME (components.js) - classe DSFR
+    // officielle .fr-callout, style porté dans styles.css.
+    _rendreExergue() {
+        const titre = document.getElementById("repr-exergue-titre").value;
+        const texte = document.getElementById("repr-exergue-texte").value;
+        return `<div class="fr-callout"><h3 class="fr-callout__title">${echapper(titre)}</h3><p class="fr-callout__text">${echapper(texte)}</p></div>`;
+    },
+
+    // Fidèle à insertChiffreCle() de PLUME - tout le style est inline dans
+    // le bloc lui-même côté PLUME, reproduit tel quel ici (pas de règle
+    // dédiée dans styles.css).
+    _rendreChiffre() {
+        const valeur = document.getElementById("repr-chiffre-valeur").value;
+        const texte = document.getElementById("repr-chiffre-texte").value;
+        return `
+            <div class="plume-chiffre" style="display:flex; align-items:center; gap:1.5rem; padding:1.5rem; background-color:var(--theme-bg); border-radius:4px; border-left:4px solid var(--theme-sun);">
+                <div style="font-size:3.5rem; font-weight:800; color:var(--theme-sun); line-height:1; min-width:max-content;">${echapper(valeur)}</div>
+                <div style="font-size:1.1rem; font-weight:500; color:#1e1e1e; line-height:1.4;"><p style="margin:0;">${echapper(texte)}</p></div>
+            </div>`;
+    },
+
+    // Fidèle à renderPreview() de insertCitation() (PLUME) - classe custom
+    // .plume-citation + <blockquote>, style porté dans styles.css.
+    _rendreCitation() {
+        const texte = document.getElementById("repr-citation-texte").value;
+        const auteur = document.getElementById("repr-citation-auteur").value;
+        const fonction = document.getElementById("repr-citation-fonction").value;
+        const stylePhoto = document.getElementById("repr-citation-photo").value;
+        const avecPhoto = stylePhoto !== "none";
+        const photoADroite = stylePhoto === "right";
+
+        const blocTexte = `
+            <blockquote class="plume-citation-bloc${photoADroite ? " plume-citation-bloc--droite" : ""}">
+                <p>« ${echapper(texte)} »</p>
+                <footer>— ${echapper(auteur)}, <span>${echapper(fonction)}</span></footer>
+            </blockquote>`;
+
+        if (!avecPhoto) return `<div class="plume-citation">${blocTexte}</div>`;
+
+        const img = `<img src="${Representations._photoCitation || Representations._avatarParDefaut}" alt="Portrait de ${echapper(auteur)}" class="plume-citation-photo">`;
+        return `<div class="plume-citation plume-citation--avec-photo">${photoADroite ? blocTexte + img : img + blocTexte}</div>`;
+    },
+
+    // Fidèle à la structure générée par insertTable() de PLUME - classe
+    // DSFR officielle .fr-table, style porté dans styles.css. <caption>
+    // ajoutée (RGAA §5.6/§5.7, absente de la version PLUME) : cohérent avec
+    // l'audit accessibilité déjà mené sur SILLON.
+    _rendreTableau() {
+        const entete = document.getElementById("repr-tableau-entete").value;
+        const enteteColonnes = entete === "colonnes" || entete === "colonnes-lignes";
+        const enteteLignes = entete === "lignes" || entete === "colonnes-lignes";
+        const valeurs = Representations._valeursTableau;
+
+        const rangees = valeurs.map((ligne, i) => {
+            const cellules = ligne.map((val, j) => {
+                if (i === 0 && enteteColonnes) return `<th scope="col">${echapper(val)}</th>`;
+                if (j === 0 && enteteLignes) return `<th scope="row">${echapper(val)}</th>`;
+                return `<td>${echapper(val)}</td>`;
+            }).join("");
+            return `<tr>${cellules}</tr>`;
+        });
+
+        const corps = enteteColonnes ? rangees.slice(1) : rangees;
+        const theadHtml = enteteColonnes ? `<thead>${rangees[0]}</thead>` : "";
+        return `
+            <div class="fr-table">
+                <table>
+                    <caption class="fr-sr-only">Tableau</caption>
+                    ${theadHtml}
+                    <tbody>${corps.join("")}</tbody>
+                </table>
+            </div>`;
+    },
+
+    // Fidèle à buildTimelineHTML() de PLUME - classes custom
+    // .plume-timeline-*, style porté dans styles.css (ligne continue en
+    // pseudo-élément, pastilles). Pas de liste accessible cachée façon
+    // buildAccessibleTimelineList() de PLUME : elle y sert à rendre
+    // accessible une image déjà insérée dans un document ; ici, l'aperçu
+    // reste du HTML natif accessible tant qu'il n'est pas téléchargé (même
+    // logique que Carto/Diagrammes, sans alternative texte pour le PNG
+    // téléchargé).
+    _rendreFrise() {
+        if (!Representations._donneesFrise) {
+            return '<p class="fr-text--sm fr-text--disabled">Importez un fichier CSV pour générer la frise.</p>';
+        }
+        const titre = document.getElementById("repr-frise-titre").value;
+        const orientation = document.getElementById("repr-frise-orientation").value;
+        const { date: colDate, titre: colTitre, description: colDesc } = Representations._colonnesFrise;
+
+        const indices = [...document.querySelectorAll("#repr-frise-filtres input:checked")]
+            .map((c) => Number(c.id.replace("repr-frise-filtre-", "")));
+        const donnees = indices.map((i) => Representations._donneesFrise[i]);
+        if (donnees.length === 0) return '<p class="fr-text--sm fr-text--disabled">Aucune étape sélectionnée.</p>';
+
+        const classeListe = orientation === "horizontal" ? "plume-timeline-horizontal" : "plume-timeline-vertical";
+        const items = donnees.map((ligne) => `
+            <li>
+                <strong class="plume-timeline-title">${echapper(String(ligne[colDate] ?? ""))}</strong>
+                <div class="plume-timeline-event">${echapper(String(ligne[colTitre] ?? ""))}</div>
+                ${colDesc && ligne[colDesc] ? `<div class="plume-timeline-desc">${echapper(String(ligne[colDesc]))}</div>` : ""}
+            </li>`).join("");
+        const titreHtml = titre ? `<h3 class="plume-timeline-titre-general">${echapper(titre)}</h3>` : "";
+        return `<div>${titreHtml}<ul class="${classeListe}">${items}</ul></div>`;
+    },
+
+    // Même motif exact que Carto.telechargerPng()/Diagrammes.telecharger().
+    async telechargerImage() {
+        const conteneur = document.getElementById("representations-apercu");
+        if (!conteneur.firstElementChild) {
+            afficherToast("Aucun contenu", "Renseignez les champs avant de télécharger.", "warning");
+            return;
+        }
+        const type = document.getElementById("repr-type").value;
+        const noms = { exergue: "mise-en-exergue", chiffre: "chiffre-cle", citation: "citation", tableau: "tableau", frise: "frise-chronologique" };
+
+        // Capture du contenu réel (pas du conteneur d'aperçu lui-même : celui-ci
+        // a un min-height:400px, index.html, pour garder une hauteur confortable
+        // à l'écran même avec un contenu court comme le Tableau, ce qui ajoutait
+        // un grand bandeau blanc dans l'image téléchargée). Largeur de
+        // l'enveloppe figée à la largeur RÉELLEMENT mesurée avant tout
+        // déplacement (et non "display:inline-block" livré à lui-même) :
+        // reproduit fidèlement le rendu déjà visible à l'écran, qu'il occupe
+        // toute la largeur du conteneur (Mise en exergue, Chiffre, Citation,
+        // Frise) ou soit déjà ajusté à son contenu (Tableau, cf. styles.css)
+        // - un display:inline-block sans largeur explicite recalcule sa
+        // propre largeur une fois déplacé, ce qui rétrécit à tort un contenu
+        // court comme "Exergue"/"Contenu important." au lieu de conserver la
+        // pleine largeur affichée à l'écran (constaté en pratique). Une
+        // enveloppe temporaire (jamais visible à l'écran) ajoute une marge
+        // régulière de 10px autour, plutôt qu'un contenu collé aux bords de
+        // l'image. Marge propre de .fr-table (margin-top:1rem/margin-
+        // bottom:2.5rem, dsfr.min.css) neutralisée le temps de la capture :
+        // sans padding sur le parent direct, ces marges se seraient
+        // effondrées avec les bords de l'aperçu à l'écran (invisibles) - avec
+        // le padding de l'enveloppe, elles s'ajoutent au lieu de se résorber
+        // et gonflent l'image d'un grand vide (constaté en pratique, hauteur
+        // presque doublée).
+        const contenu = conteneur.firstElementChild;
+        const largeurContenu = contenu.getBoundingClientRect().width;
+        const margeOriginale = contenu.style.margin;
+        const enveloppe = document.createElement("div");
+        enveloppe.style.cssText = `width:${largeurContenu}px; box-sizing:content-box; padding:10px; background-color:#ffffff;`;
+        contenu.replaceWith(enveloppe);
+        contenu.style.margin = "0";
+        enveloppe.appendChild(contenu);
+        try {
+            const canvas = await html2canvas(enveloppe, { scale: 2, backgroundColor: "#ffffff", useCORS: true, logging: false });
+            const lien = document.createElement("a");
+            lien.download = `${noms[type] || "representation"}.png`;
+            lien.href = canvas.toDataURL("image/png");
+            lien.click();
+        } catch (erreur) {
+            afficherToast("Erreur", "Impossible de générer l'image.", "error");
+        } finally {
+            contenu.style.margin = margeOriginale;
+            enveloppe.replaceWith(contenu);
+        }
     },
 };
 

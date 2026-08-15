@@ -100,6 +100,7 @@
             <li role="presentation"><button class="fr-tabs__tab fr-icon-road-map-line fr-tabs__tab--icon-left" data-onglet="carto" role="tab" aria-selected="false">Carto</button></li>
             <li role="presentation"><button class="fr-tabs__tab fr-icon-bar-chart-box-line fr-tabs__tab--icon-left" data-onglet="graphiques" role="tab" aria-selected="false">Graphiques</button></li>
             <li role="presentation"><button class="fr-tabs__tab fr-icon-git-branch-line fr-tabs__tab--icon-left" data-onglet="diagrammes" role="tab" aria-selected="false">Diagrammes</button></li>
+            <li role="presentation"><button class="fr-tabs__tab fr-icon-article-line fr-tabs__tab--icon-left" data-onglet="representations" role="tab" aria-selected="false">Représentations DSFR</button></li>
             <li role="presentation" id="onglet-nav-administration" hidden><button class="fr-tabs__tab fr-icon-settings-5-line fr-tabs__tab--icon-left" data-onglet="administration" role="tab" aria-selected="false">Administration</button></li>
         </ul>
 
@@ -372,6 +373,16 @@
                     </div>
 
                     <div class="fr-input-group">
+                        <label class="fr-label" for="carto-legende-position">Position de la légende</label>
+                        <select class="fr-select" id="carto-legende-position">
+                            <option value="bas-droite">Bas à droite (horizontale)</option>
+                            <option value="bas-gauche">Bas à gauche (horizontale)</option>
+                            <option value="droite">Verticale à droite, centrée</option>
+                            <option value="gauche">Verticale à gauche, centrée</option>
+                        </select>
+                    </div>
+
+                    <div class="fr-input-group">
                         <label class="fr-label" for="carto-palette">Palette de couleurs</label>
                         <!-- Les 18 teintes DSFR (dégradés clair->soutenu) sont
                              insérées dynamiquement en tête de liste par
@@ -472,6 +483,128 @@
             </div>
         </div>
 
+        <!-- ============================== ONGLET REPRÉSENTATIONS DSFR ============================== -->
+        <div id="panneau-representations" class="fr-tabs__panel" role="tabpanel" tabindex="0" hidden>
+            <div class="fr-grid-row fr-grid-row--gutters">
+                <div class="fr-col-12 fr-col-md-5">
+                    <div class="fr-input-group">
+                        <label class="fr-label" for="repr-type">Type de représentation</label>
+                        <select class="fr-select" id="repr-type" onchange="Representations.actualiserChampsVisibles()">
+                            <option value="exergue">Mise en exergue</option>
+                            <option value="chiffre">Chiffre clé</option>
+                            <option value="citation">Citation</option>
+                            <option value="tableau">Tableau</option>
+                            <option value="frise">Frise chronologique</option>
+                        </select>
+                    </div>
+                    <div class="fr-input-group">
+                        <label class="fr-label" for="repr-palette">Palette de couleurs DSFR</label>
+                        <select class="fr-select" id="repr-palette"></select>
+                    </div>
+
+                    <div id="repr-champs-exergue">
+                        <div class="fr-input-group">
+                            <label class="fr-label" for="repr-exergue-titre">Titre</label>
+                            <input class="fr-input" type="text" id="repr-exergue-titre" value="Exergue">
+                        </div>
+                        <div class="fr-input-group">
+                            <label class="fr-label" for="repr-exergue-texte">Texte</label>
+                            <textarea class="fr-input" id="repr-exergue-texte" rows="3">Contenu important.</textarea>
+                        </div>
+                    </div>
+
+                    <div id="repr-champs-chiffre" hidden>
+                        <div class="fr-input-group">
+                            <label class="fr-label" for="repr-chiffre-valeur">Valeur</label>
+                            <input class="fr-input" type="text" id="repr-chiffre-valeur" value="+42 %">
+                        </div>
+                        <div class="fr-input-group">
+                            <label class="fr-label" for="repr-chiffre-texte">Texte explicatif</label>
+                            <textarea class="fr-input" id="repr-chiffre-texte" rows="3">Libellé du chiffre clé. Expliquez ici la signification de cette statistique.</textarea>
+                        </div>
+                    </div>
+
+                    <div id="repr-champs-citation" hidden>
+                        <div class="fr-input-group">
+                            <label class="fr-label" for="repr-citation-texte">Citation</label>
+                            <textarea class="fr-input" id="repr-citation-texte" rows="3">Saisissez la déclaration ou l'extrait de discours ici.</textarea>
+                        </div>
+                        <div class="fr-input-group">
+                            <label class="fr-label" for="repr-citation-auteur">Auteur</label>
+                            <input class="fr-input" type="text" id="repr-citation-auteur" value="Prénom Nom">
+                        </div>
+                        <div class="fr-input-group">
+                            <label class="fr-label" for="repr-citation-fonction">Fonction</label>
+                            <input class="fr-input" type="text" id="repr-citation-fonction" value="Titre ou fonction">
+                        </div>
+                        <div class="fr-input-group">
+                            <label class="fr-label" for="repr-citation-photo">Portrait de l'auteur</label>
+                            <select class="fr-select" id="repr-citation-photo" onchange="Representations.actualiserAffichagePhoto()">
+                                <option value="none" selected>Texte uniquement</option>
+                                <option value="left">Photo à gauche</option>
+                                <option value="right">Photo à droite</option>
+                            </select>
+                        </div>
+                        <div class="fr-upload-group" id="repr-citation-upload-groupe" hidden>
+                            <label class="fr-label" for="repr-citation-fichier">Image du portrait (2 Mo maximum)</label>
+                            <input class="fr-upload" type="file" id="repr-citation-fichier" accept="image/png,image/jpeg,image/webp">
+                        </div>
+                    </div>
+
+                    <div id="repr-champs-tableau" hidden>
+                        <div id="repr-tableau-source-donnees" class="fr-mb-3w"></div>
+                        <p class="fr-text--sm">Ou saisissez le contenu manuellement :</p>
+                        <div class="fr-grid-row fr-grid-row--gutters">
+                            <div class="fr-col-6">
+                                <label class="fr-label" for="repr-tableau-colonnes">Colonnes</label>
+                                <input class="fr-input" type="number" id="repr-tableau-colonnes" min="1" max="15" value="3">
+                            </div>
+                            <div class="fr-col-6">
+                                <label class="fr-label" for="repr-tableau-lignes">Lignes</label>
+                                <input class="fr-input" type="number" id="repr-tableau-lignes" min="1" max="50" value="3">
+                            </div>
+                        </div>
+                        <div class="fr-input-group">
+                            <label class="fr-label" for="repr-tableau-entete">Style d'en-tête</label>
+                            <select class="fr-select" id="repr-tableau-entete">
+                                <option value="colonnes">Colonnes</option>
+                                <option value="lignes">Lignes</option>
+                                <option value="colonnes-lignes">Colonnes et lignes</option>
+                                <option value="aucun">Aucun</option>
+                            </select>
+                        </div>
+                        <p class="fr-label">Contenu des cellules</p>
+                        <div id="repr-tableau-grille" class="fr-mb-2w"></div>
+                    </div>
+
+                    <div id="repr-champs-frise" hidden>
+                        <div class="fr-upload-group">
+                            <label class="fr-label" for="repr-frise-fichier">Fichier CSV (colonnes : date, titre, description)</label>
+                            <input class="fr-upload" type="file" id="repr-frise-fichier" accept=".csv">
+                        </div>
+                        <div class="fr-input-group">
+                            <label class="fr-label" for="repr-frise-titre">Titre (optionnel)</label>
+                            <input class="fr-input" type="text" id="repr-frise-titre" placeholder="Ex. Déploiement du projet">
+                        </div>
+                        <div class="fr-input-group">
+                            <label class="fr-label" for="repr-frise-orientation">Orientation</label>
+                            <select class="fr-select" id="repr-frise-orientation">
+                                <option value="horizontal">Horizontale</option>
+                                <option value="vertical">Verticale</option>
+                            </select>
+                        </div>
+                        <p class="fr-label">Étapes à afficher</p>
+                        <div id="repr-frise-filtres" class="fr-text--sm"></div>
+                    </div>
+
+                    <button class="fr-btn fr-btn--secondary fr-icon-download-line fr-btn--icon-left fr-mt-2w" id="repr-bouton-telecharger" onclick="Representations.telechargerImage()">Télécharger en image</button>
+                </div>
+                <div class="fr-col-12 fr-col-md-7">
+                    <div id="representations-apercu" style="min-height:400px; background:#fff; border:1px solid var(--border-default-grey); border-radius:4px; padding:1rem; overflow:auto;"></div>
+                </div>
+            </div>
+        </div>
+
         <!-- ============================== ONGLET ADMINISTRATION ============================== -->
         <div id="panneau-administration" class="fr-tabs__panel" role="tabpanel" tabindex="0" hidden>
             <h2 class="fr-h5">Comptes utilisateurs</h2>
@@ -562,15 +695,16 @@
                                 <a class="fr-link fr-icon-file-pdf-line fr-link--icon-left" href="./Documentation/Guide Administrateur SILLON.pdf" target="_blank">Guide Administrateur SILLON</a>
                             </li>
                             <li>
-                                <a class="fr-link fr-icon-file-pdf-line fr-link--icon-left" href="./Documentation/Cahier des charges SILLON v1.4.pdf" target="_blank">Cahier des charges SILLON v1.4</a>
+                                <a class="fr-link fr-icon-file-pdf-line fr-link--icon-left" href="./Documentation/Cahier des charges SILLON v2.1.pdf" target="_blank">Cahier des charges SILLON v2.1</a>
                             </li>
                         </ul>
 
-                        <!-- Onglets Carto/Graphiques ouverts à tous les utilisateurs
-                             (§5.7-5.9) : ces exemples le sont aussi, contrairement à
-                             la section Formation ci-dessous réservée au compte demo. -->
-                        <h2 class="fr-h6">Exemples de données (Carto / Graphiques)</h2>
-                        <p class="fr-text--sm">Fichiers CSV fictifs à déposer dans l'onglet Carto ou Graphiques pour s'exercer.</p>
+                        <!-- Onglets Carto/Graphiques/Représentations DSFR ouverts à tous
+                             les utilisateurs (§5.7-5.10) : ces exemples le sont aussi,
+                             contrairement à la section Formation ci-dessous réservée au
+                             compte demo. -->
+                        <h2 class="fr-h6">Exemples de données (Carto / Graphiques / Représentations DSFR)</h2>
+                        <p class="fr-text--sm">Fichiers CSV fictifs à déposer dans l'onglet Carto, Graphiques ou Représentations DSFR pour s'exercer.</p>
                         <ul class="fr-links-group">
                             <li>
                                 <a class="fr-link fr-icon-file-download-line fr-link--icon-left" href="./Documentation/exemples-donnees/france_departements.csv">Départements français (Carto — échelle Département)</a>
@@ -583,6 +717,9 @@
                             </li>
                             <li>
                                 <a class="fr-link fr-icon-file-download-line fr-link--icon-left" href="./Documentation/exemples-donnees/graphique.csv">Jeu de données catégoriel (Graphiques)</a>
+                            </li>
+                            <li>
+                                <a class="fr-link fr-icon-file-download-line fr-link--icon-left" href="./Documentation/exemples-donnees/frise.csv">Jalons d'un programme (Représentations DSFR — Frise chronologique)</a>
                             </li>
                         </ul>
 
