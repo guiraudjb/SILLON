@@ -8,7 +8,7 @@
 
 | Champ | Valeur |
 |---|---|
-| Version | 1.7 |
+| Version | 1.8 |
 | Date | 14 août 2026 |
 | Statut | Avant-projet — en cours de validation |
 | Périmètre | Direction locale — hors lac de données national |
@@ -527,7 +527,7 @@ L'application est distribuée sous forme de paquets Debian indépendants, pour p
 
 - **Volumétrie** : l'import et l'export de CSV doivent être traités en flux (streaming), sans jamais charger un fichier entier en mémoire côté navigateur ou côté serveur — condition nécessaire pour tenir la promesse de « volumétries élevées ».
 - **Disponibilité** : un job long ou en échec ne doit jamais bloquer l'interface ni les autres utilisateurs — c'est la raison d'être de la file d'attente.
-- **Accessibilité** : conformité RGAA portée par les composants du Système de Design de l'État.
+- **Accessibilité** : conformité RGAA portée par les composants du Système de Design de l'État, complétée par un audit ciblé de l'application (tests automatisés axe-core sur l'ensemble des écrans + relecture manuelle : navigation clavier, hiérarchie des titres, alternatives textuelles) — landmark principal et titre de niveau 1 uniques par écran, lien d'évitement, noms accessibles des champs générés dynamiquement (éditeur SQL, cascade géographique de l'onglet Carto, quotas d'administration), alternative des diagrammes Mermaid. Base de travail pour une future déclaration d'accessibilité, non encore rédigée à ce stade.
 - **Compatibilité** : navigateurs récents (Chrome, Firefox, Edge) — pas de support des anciens navigateurs.
 - **Protection des données personnelles** : les fichiers CSV importés peuvent contenir des données à caractère personnel. La responsabilité de la légitimité de l'import relève de l'agent qui le réalise ; SILLON n'exporte ni ne transmet aucune donnée vers un système tiers ou national.
 

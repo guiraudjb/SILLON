@@ -238,6 +238,12 @@ const Auth = {
         document.getElementById("ecran-connexion").hidden = true;
         document.getElementById("application").hidden = false;
         document.getElementById("zone-utilisateur").hidden = false;
+        // Titre de page RGAA (§9.1) : "Bases" est déjà l'onglet sélectionné
+        // par défaut dans le HTML statique (fr-tabs__panel--selected), mais
+        // basculerOnglet() - seul autre endroit qui met à jour le H1 - n'est
+        // jamais appelée pour cette sélection initiale.
+        document.getElementById("titre-onglet").textContent =
+            document.querySelector('.fr-tabs__tab[data-onglet="bases"]').textContent.trim();
         document.getElementById("libelle-utilisateur").textContent = `${Etat.utilisateur.email} (${Etat.utilisateur.profil})`;
         document.getElementById("onglet-nav-administration").hidden = Etat.utilisateur.profil !== "administrateur";
         // Section "Formation" de la modale "À propos" (guide + corrigés) :
@@ -267,6 +273,11 @@ const Auth = {
 // NAVIGATION ENTRE ONGLETS
 // =============================================================================
 function basculerOnglet(nomOnglet) {
+    // Titre de page RGAA (§9.1, index.html #titre-onglet) : le libellé du
+    // bouton d'onglet actif sert aussi de contenu au H1 unique de la page,
+    // plutôt qu'un texte dupliqué en dur ici.
+    document.getElementById("titre-onglet").textContent =
+        document.querySelector(`.fr-tabs__tab[data-onglet="${nomOnglet}"]`)?.textContent.trim() || "";
     document.querySelectorAll(".fr-tabs__tab").forEach((bouton) => {
         const actif = bouton.dataset.onglet === nomOnglet;
         bouton.setAttribute("aria-selected", actif ? "true" : "false");
@@ -410,10 +421,16 @@ const Bases = {
     },
 
     tableau(bases, proprietaire) {
+        // Colonne "Propriétaire" entièrement omise (pas seulement vidée)
+        // quand elle ne s'applique pas ("Mes bases" : toujours l'utilisateur
+        // lui-même) : un <th> vide est un obstacle RGAA (§5.6/§5.7) pour la
+        // navigation par tableau des technologies d'assistance, constaté
+        // par un audit accessibilité.
+        const colonnes = proprietaire ? 4 : 5;
         const lignes = bases.map((b) => `
             <tr>
                 <td>${echapper(b.nom_pg)}</td>
-                <td>${proprietaire ? "" : echapper(b.proprietaire_email)}</td>
+                ${proprietaire ? "" : `<td>${echapper(b.proprietaire_email)}</td>`}
                 <td>${Number(b.taille_estimee_mo || 0).toFixed(1)} Mo</td>
                 <td>${Bases.badgeAcces(b, proprietaire)}</td>
                 <td>
@@ -423,13 +440,13 @@ const Bases = {
                     ${proprietaire ? `<button class="fr-btn fr-btn--sm fr-btn--tertiary-no-outline fr-icon-delete-bin-line" onclick="Bases.supprimerBase(${b.id}, '${b.nom_pg}')">Supprimer la base</button>` : ""}
                 </td>
             </tr>
-            <tr class="ligne-tables" id="tables-${b.id}" hidden><td colspan="5"></td></tr>
-            ${proprietaire ? `<tr class="ligne-partage" id="partage-${b.id}" hidden><td colspan="5"></td></tr>` : ""}
+            <tr class="ligne-tables" id="tables-${b.id}" hidden><td colspan="${colonnes}"></td></tr>
+            ${proprietaire ? `<tr class="ligne-partage" id="partage-${b.id}" hidden><td colspan="${colonnes}"></td></tr>` : ""}
         `).join("");
 
         return `
             <table class="fr-table"><caption class="fr-sr-only">Bases</caption>
-                <thead><tr><th>Base</th><th>${proprietaire ? "" : "Propriétaire"}</th><th>Taille</th><th>Accès</th><th>Actions</th></tr></thead>
+                <thead><tr><th>Base</th>${proprietaire ? "" : "<th>Propriétaire</th>"}<th>Taille</th><th>Accès</th><th>Actions</th></tr></thead>
                 <tbody>${lignes}</tbody>
             </table>`;
     },
@@ -697,6 +714,12 @@ const Travaux = {
             },
             hintOptions: { tables: {} },
         });
+        // CodeMirror crée son propre <textarea> de capture clavier (masqué
+        // par positionnement, pas par "hidden"/display:none - donc toujours
+        // exposé aux technologies d'assistance) sans nom accessible : sans
+        // ceci, un lecteur d'écran l'annonce comme un champ de formulaire
+        // vide et sans étiquette, constaté par un audit accessibilité.
+        Travaux.editeur.getInputField().setAttribute("aria-label", "Requête SQL");
     },
 
     // Première table citée dans une clause FROM/JOIN avant le curseur :
@@ -1622,6 +1645,14 @@ const Suivi = {
             if (apercu.type === "mermaid") {
                 const { svg } = await mermaid.render(`svg-${idJob}-${indice}`, texte);
                 conteneur.innerHTML = svg;
+                // Contrairement à l'aperçu de l'onglet Diagrammes (source
+                // Mermaid déjà affichée en texte juste à côté), rien
+                // d'autre ici ne représente ce diagramme en texte : un
+                // aria-label franc (annonce sans prétendre décrire le
+                // contenu) plutôt qu'un SVG totalement silencieux pour un
+                // lecteur d'écran (RGAA §1), constaté par un audit
+                // accessibilité.
+                conteneur.querySelector("svg")?.setAttribute("aria-label", `Diagramme Mermaid : ${apercu.nom}`);
             } else if (apercu.type === "csv") {
                 conteneur.innerHTML = Suivi._tableauDepuisCSV(texte);
             }
@@ -1951,6 +1982,12 @@ const Carto = {
             s.className = "fr-select fr-mb-1w";
             s.id = id;
             s.innerHTML = `<option value="">${texte}</option>`;
+            // Pas de <label> visible pour ces menus de cascade générés
+            // dynamiquement (le premier <option>, ex. "1. Choisir la
+            // région", en joue déjà le rôle visuel) - aria-label indispensable
+            // pour un nom accessible malgré tout (RGAA §11.1), constaté
+            // manquant par un audit accessibilité.
+            s.setAttribute("aria-label", texte);
             return s;
         };
 
@@ -2754,7 +2791,7 @@ const Administration = {
         const parametres = await appelJson("/api/parametres?order=cle.asc").catch(() => []);
         document.getElementById("conteneur-quotas").innerHTML = parametres.map((p) => `
             <div class="fr-input-group fr-input-group--sm" style="display:inline-block; margin-right:1rem;">
-                <label class="fr-label">${echapper(p.cle)}</label>
+                <label class="fr-label" for="quota-${p.cle}">${echapper(p.cle)}</label>
                 <input class="fr-input" type="text" value="${echapper(p.valeur)}" id="quota-${p.cle}"
                     onchange="Administration.modifierQuota('${p.cle}', this.value)">
             </div>`).join("");
