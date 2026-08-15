@@ -1793,7 +1793,7 @@ const DonneesVisu = {
 const Carto = {
     _initialise: false,
     _donnees: null,
-    _geo: { charge: false, communes: [], epci: [], regionsMonde: [], comVersDep: new Map() },
+    _geo: { charge: false, communes: [], epci: [], regionsMonde: [], comVersDep: new Map(), comVersReg: new Map(), comVersEpci: new Map() },
     _regToDeps: new Map(),
     _dernierConfig: null,
     _derniereCarteDonnees: null,
@@ -1823,8 +1823,17 @@ const Carto = {
         Carto._initialise = true;
         DonneesVisu.creerSelecteur("carto-source-donnees", (donnees) => Carto._chargerDonnees(donnees));
         Carto._construireNuanciers();
+        // Les 18 teintes DSFR comme dégradés continus, en plus des options
+        // déjà présentes en dur dans le HTML (divergent x2, personnalisée) -
+        // même motif que Graphiques.init() (PALETTE_LABELS_DSFR), "marianne"
+        // présélectionnée pour rester cohérent avec l'ancien comportement
+        // par défaut ("Bleu France").
+        const optionsDsfr = Object.entries(PALETTE_LABELS_DSFR)
+            .map(([cle, libelle]) => `<option value="${cle}"${cle === "marianne" ? " selected" : ""}>${echapper(libelle)}</option>`)
+            .join("");
+        document.getElementById("carto-palette").insertAdjacentHTML("afterbegin", optionsDsfr);
         await Carto._chargerReferentiels();
-        Carto.actualiserCascade();
+        Carto.actualiserCadrage();
     },
 
     async _chargerReferentiels() {
@@ -1838,7 +1847,21 @@ const Carto = {
             Carto._geo.communes = communes;
             Carto._geo.epci = epci;
             Carto._geo.regionsMonde = mondes || [];
-            communes.forEach((c) => Carto._geo.comVersDep.set(Carto._colonneSure(c, "COM"), Carto._colonneSure(c, "DEP")));
+            communes.forEach((c) => {
+                const com = Carto._colonneSure(c, "COM");
+                Carto._geo.comVersDep.set(com, Carto._colonneSure(c, "DEP"));
+                Carto._geo.comVersReg.set(com, Carto._colonneSure(c, "REG"));
+            });
+            // Table commune -> EPCI (agrégation des données utilisateur par
+            // EPCI, §détail EPCI) : distincte de comVersDep/comVersReg, tirée
+            // de EPCI_2025.csv (déjà chargé pour le filtre géographique de
+            // l'échelle EPCI) plutôt que de v_commune_2025.csv, qui ne porte
+            // pas cette information.
+            epci.forEach((e) => {
+                const com = Carto._colonneSure(e, "CODGEO");
+                const codeEpci = Carto._colonneSure(e, "EPCI");
+                if (com && codeEpci) Carto._geo.comVersEpci.set(com, codeEpci);
+            });
             communes.forEach((c) => {
                 const reg = Carto._colonneSure(c, "REG"), dep = Carto._colonneSure(c, "DEP");
                 if (reg && dep) {
@@ -1971,9 +1994,10 @@ const Carto = {
 
     // Cascade région → département → EPCI/commune (§ports depuis
     // insertCarte()/updateUI() de PLUME) : reconstruite à chaque
-    // changement d'échelle.
+    // changement de cadrage (zone affichée - distincte du détail, la maille
+    // dessinée : §Carto cadrage/détail).
     actualiserCascade() {
-        const echelle = document.getElementById("carto-echelle").value;
+        const cadrage = document.getElementById("carto-cadrage").value;
         const cascade = document.getElementById("carto-cascade");
         cascade.innerHTML = "";
 
@@ -1991,7 +2015,7 @@ const Carto = {
             return s;
         };
 
-        if (echelle === "world") {
+        if (cadrage === "world") {
             const sel = creerSelect("carto-sel-monde", "Monde entier");
             sel.innerHTML = `<option value="all">Monde entier</option><option value="auto">Cadrage automatique sur les données</option>`;
             const categories = [...new Set(Carto._geo.regionsMonde.map((r) => r.category))];
@@ -2006,7 +2030,7 @@ const Carto = {
                 sel.appendChild(groupe);
             });
             cascade.appendChild(sel);
-        } else if (echelle !== "national") {
+        } else if (cadrage !== "national") {
             const selRegion = creerSelect("carto-sel-region", "1. Choisir la région");
             Object.entries(Carto.REGIONS_DICT).forEach(([code, nom]) => {
                 const opt = document.createElement("option");
@@ -2016,17 +2040,17 @@ const Carto = {
             cascade.appendChild(selRegion);
 
             let selDept, selEpci, selCommune;
-            if (["departement", "epci", "commune"].includes(echelle)) {
+            if (["departement", "epci", "commune"].includes(cadrage)) {
                 selDept = creerSelect("carto-sel-departement", "2. Choisir le département");
                 selDept.disabled = true;
                 cascade.appendChild(selDept);
             }
-            if (echelle === "epci") {
+            if (cadrage === "epci") {
                 selEpci = creerSelect("carto-sel-epci", "3. Choisir l'EPCI");
                 selEpci.disabled = true;
                 cascade.appendChild(selEpci);
             }
-            if (echelle === "commune") {
+            if (cadrage === "commune") {
                 selCommune = creerSelect("carto-sel-commune", "3. Choisir la commune");
                 selCommune.disabled = true;
                 cascade.appendChild(selCommune);
@@ -2093,10 +2117,44 @@ const Carto = {
         }
     },
 
+    // Options de détail (maille dessinée et coloriée) valables pour chaque
+    // cadrage (zone affichée) - matrice actée avec l'utilisateur : un
+    // "détail EPCI" dessine des communes coloriées par leur EPCI plutôt que
+    // des contours d'EPCI fusionnés (pas de topojson.merge, choix assumé
+    // pour rester simple).
+    DETAILS_PAR_CADRAGE: {
+        national: [["departement", "Département"], ["region", "Région"], ["epci", "EPCI"], ["commune", "Commune"]],
+        region: [["departement", "Département"], ["commune", "Commune"]],
+        departement: [["commune", "Commune"], ["epci", "EPCI"]],
+        epci: [["commune", "Commune"]],
+        commune: [["commune", "Commune"]],
+        world: [],
+    },
+
+    actualiserOptionsDetail() {
+        const cadrage = document.getElementById("carto-cadrage").value;
+        const options = Carto.DETAILS_PAR_CADRAGE[cadrage] || [];
+        const groupe = document.getElementById("carto-detail-groupe");
+        groupe.hidden = options.length <= 1;
+        document.getElementById("carto-detail").innerHTML = options
+            .map(([valeur, libelle]) => `<option value="${valeur}">${libelle}</option>`).join("");
+    },
+
+    // Point d'entrée du <select> Cadrage (index.html) : reconstruit à la
+    // fois la cascade géographique (région/département/EPCI/commune, pour
+    // choisir la zone précise) et les options de détail disponibles pour ce
+    // cadrage - deux aspects indépendants, mais tous deux déclenchés par le
+    // même changement de cadrage.
+    actualiserCadrage() {
+        Carto.actualiserCascade();
+        Carto.actualiserOptionsDetail();
+    },
+
     // Port de computeValorAggregation (map.js) : agrège les lignes de
-    // données par code INSEE, jusqu'à l'échelle cible (remonte à la
-    // maille département pour les échelles national/région).
-    _calculerAgregation(donneesBrutes, echelleCible, modeCalcul, colCode, col1, col2) {
+    // données par code INSEE, jusqu'au détail cible (la maille dessinée -
+    // §Carto cadrage/détail, distincte du cadrage qui ne filtre qu'une zone
+    // sans changer la maille d'agrégation).
+    _calculerAgregation(donneesBrutes, detailCible, modeCalcul, colCode, col1, col2) {
         const agregees = new Map();
         let totalGlobalCol1 = 0;
         donneesBrutes.forEach((ligne) => {
@@ -2104,9 +2162,15 @@ const Carto = {
             if (!codeSource) return;
             if (codeSource.length === 1 || codeSource.length === 4) codeSource = "0" + codeSource;
             let codeCible = codeSource;
-            if (echelleCible === "national" || echelleCible === "region") {
+            if (detailCible === "departement") {
                 codeCible = codeSource.length >= 4 ? Carto._geo.comVersDep.get(codeSource) : codeSource;
+            } else if (detailCible === "region") {
+                codeCible = codeSource.length >= 4 ? Carto._geo.comVersReg.get(codeSource) : codeSource;
+            } else if (detailCible === "epci") {
+                codeCible = codeSource.length >= 4 ? Carto._geo.comVersEpci.get(codeSource) : codeSource;
             }
+            // detailCible === "commune" : codeCible reste codeSource, déjà à
+            // la bonne maille (aucune remontée à faire).
             if (!codeCible) return;
             if (!agregees.has(codeCible)) agregees.set(codeCible, { val1: 0, val2: 0 });
             const acc = agregees.get(codeCible);
@@ -2162,9 +2226,14 @@ const Carto = {
         const forcePhysique = config.physStrength ?? 0.15, paddingPhysique = config.physPadding ?? 4;
         const ratioPhysique = 0.62, tailleEtiquette = config.labelSize ?? 10;
 
-        let fichierJson = "./donnees-geo/commune_2025.json";
-        if (["national", "region"].includes(config.scale)) fichierJson = "./donnees-geo/departement_2025.json";
-        if (config.scale === "world") fichierJson = "./donnees-geo/world_2025.json";
+        // Le fond de carte dépend du détail (maille dessinée), jamais du
+        // cadrage (zone affichée) : une carte "France entière" peut aussi
+        // bien dessiner des départements, des régions ou des communes.
+        let fichierJson;
+        if (config.cadrage === "world") fichierJson = "./donnees-geo/world_2025.json";
+        else if (config.detail === "departement") fichierJson = "./donnees-geo/departement_2025.json";
+        else if (config.detail === "region") fichierJson = "./donnees-geo/region_2025.json";
+        else fichierJson = "./donnees-geo/commune_2025.json"; // détail "commune" ou "epci" (communes coloriées par leur EPCI)
 
         let geoJSON;
         try {
@@ -2180,54 +2249,82 @@ const Carto = {
             features = geoJSON.features || [];
         }
 
-        let epciValides = new Set();
-        if (config.scale === "epci" && config.epci) {
-            Carto._geo.epci.forEach((e) => { if (Carto._colonneSure(e, "EPCI") === String(config.epci)) epciValides.add(Carto._colonneSure(e, "CODGEO")); });
-        }
-
         const obtenirIso = (d) => String(d.id || d.properties.iso_a3 || d.properties.ISO3 || d.properties.ADM0_A3 || "");
 
+        // Filtre de ciblage : piloté par le cadrage (zone affichée), jamais
+        // par le détail - les propriétés nécessaires (région, département,
+        // EPCI d'appartenance) sont déjà présentes sur chaque feature du
+        // fond de carte communal/départemental, pas besoin d'une table de
+        // correspondance côté client ici (contrairement à l'agrégation des
+        // données utilisateur, cf. _calculerAgregation).
+        //
+        // Une sélection de zone incomplète (région/département/EPCI/commune
+        // pas encore choisie dans la cascade) renvoie false ci-dessous,
+        // jamais true par défaut : featuresCiblees reste alors vide et la
+        // fonction s'arrête au "return false" qui suit, déclenchant le
+        // message "Sélection incomplète" (actualiserApercu). Avant ce
+        // correctif, un cadrage "commune" sans commune choisie retombait
+        // silencieusement sur "aucune restriction" et dessinait la France
+        // entière au niveau communal - constaté en pratique.
         let featuresCiblees = features.filter((f) => {
             const p = f.properties;
-            const codeReg = String(p.code_insee_de_la_region || p.code_insee_region || p.reg || "");
-            const codeDep = String(p.code_insee_du_departement || p.code_insee_departement || p.dep || "");
-            const codeCom = String(p.code_insee || p.code || "");
 
-            if (config.scale === "region" && config.region) return codeReg === String(config.region);
-            if (config.scale === "departement" && config.dept) return codeDep === String(config.dept);
-            if (config.scale === "epci" && config.epci) return epciValides.has(codeCom);
-            if (config.scale === "commune" && config.commune) return codeCom === String(config.commune);
-
-            if (config.scale === "world" && config.worldRegion && config.worldRegion !== "all") {
+            if (config.cadrage === "world") {
+                if (!config.worldRegion || config.worldRegion === "all") return true;
                 if (config.worldRegion === "auto" && dataMap) return dataMap.has(obtenirIso(f));
                 const reg = Carto._geo.regionsMonde.find((r) => r.code === config.worldRegion);
                 return reg ? reg.countries.includes(obtenirIso(f)) : true;
             }
-            return true;
+            if (config.cadrage === "national") return true;
+
+            const codeReg = String(p.code_insee_de_la_region || "");
+            const codeDep = String(p.code_insee_du_departement || "");
+            const codeCom = String(p.code_insee || "");
+            const codeEpci = String(p.codes_siren_des_epci || "");
+
+            if (config.cadrage === "region") return config.region ? codeReg === String(config.region) : false;
+            if (config.cadrage === "departement") return config.dept ? codeDep === String(config.dept) : false;
+            if (config.cadrage === "epci") return config.epci ? codeEpci === String(config.epci) : false;
+            if (config.cadrage === "commune") return config.commune ? codeCom === String(config.commune) : false;
+            return false;
         });
 
         if (featuresCiblees.length === 0) return false;
 
         const svg = d3.select(conteneur).append("svg").attr("width", largeur).attr("height", hauteur);
-        let projection = config.scale === "world"
+        let projection = config.cadrage === "world"
             ? d3.geoMercator().scale(1).translate([0, 0])
             : d3.geoConicConformal().center([2.45, 46.2]).scale(1).translate([0, 0]);
         const chemin = d3.geoPath().projection(projection);
 
         let featuresCamera = featuresCiblees;
-        if (config.scale === "world") {
+        if (config.cadrage === "world") {
             const geants = ["FRA", "RUS", "USA", "ATA"];
             const camerasFiltrees = featuresCiblees.filter((f) => !geants.includes(obtenirIso(f)));
             if (camerasFiltrees.length > 0) featuresCamera = camerasFiltrees;
-        } else if (config.scale === "national") {
+        } else if (config.cadrage === "national") {
+            // Limite connue : n'exclut du cadrage caméra que les départements
+            // et communes ultramarins (code_insee préfixé "97") - un détail
+            // "région" n'est pas concerné, les régions d'outre-mer étant
+            // codées "01"-"06" (Carto.REGIONS_DICT), sans préfixe commun
+            // avec la métropole à filtrer aussi simplement.
             featuresCamera = featuresCiblees.filter((f) => !String(f.properties.code_insee || "").startsWith("97"));
         }
 
+        // Bandeau de titre réservé (§Carto, titre superposé à la carte pour
+        // un titre long, constaté en usage réel) : la carte est bornée pour
+        // tenir entièrement sous cette hauteur, jamais juste approximée par
+        // une translation comme auparavant (qui ne garantissait rien - une
+        // forme pouvait déjà toucher le haut du cadre selon son ratio
+        // largeur/hauteur). Le débordement horizontal d'un titre trop long
+        // est traité séparément, cf. taille de police adaptative plus bas.
+        const hauteurBandeauTitre = 40;
+        const hauteurDisponible = hauteur - hauteurBandeauTitre;
         const limites = chemin.bounds({ type: "FeatureCollection", features: featuresCamera });
-        const echelleCarte = 0.85 / Math.max((limites[1][0] - limites[0][0]) / largeur, (limites[1][1] - limites[0][1]) / hauteur);
+        const echelleCarte = 0.85 / Math.max((limites[1][0] - limites[0][0]) / largeur, (limites[1][1] - limites[0][1]) / hauteurDisponible);
         const translation = [
             (largeur - echelleCarte * (limites[1][0] + limites[0][0])) / 2,
-            ((hauteur - 40) - echelleCarte * (limites[1][1] + limites[0][1])) / 2,
+            hauteurBandeauTitre + (hauteurDisponible - echelleCarte * (limites[1][1] + limites[0][1])) / 2,
         ];
         projection.scale(echelleCarte).translate(translation);
 
@@ -2241,21 +2338,40 @@ const Carto = {
         let echelleCouleur;
         if (config.palette === "custom" && config.customColors && config.customColors.length >= 2) {
             echelleCouleur = d3.scaleSequential(d3.interpolateRgbBasis(config.customColors)).domain([valMin, valMax]);
-        } else if (config.palette && config.palette !== "default" && Carto.PALETTE_SCALES[config.palette]) {
+        } else if (config.palette && Carto.PALETTE_SCALES[config.palette]) {
             echelleCouleur = d3.scaleSequential(Carto.PALETTE_SCALES[config.palette]).domain([valMin, valMax]);
+        } else if (config.palette && PALETTES_DSFR[config.palette]) {
+            // Une des 18 teintes DSFR choisies directement dans la liste
+            // (§Carto palettes DSFR) : dégradé continu clair (bg) -> soutenu
+            // (sun) de cette seule teinte, même principe que le repli
+            // ci-dessous (jusqu'ici câblé en dur sur "marianne" uniquement).
+            const p = PALETTES_DSFR[config.palette];
+            echelleCouleur = d3.scaleLinear().domain([valMin, valMax]).range([p.bg, p.sun]);
         } else {
             echelleCouleur = d3.scaleLinear().domain([valMin, valMax]).range([couleurFond, couleurPrincipale]);
         }
 
         let featuresRendues = features;
-        if (["departement", "epci", "commune"].includes(config.scale)) featuresRendues = featuresCiblees;
+        if (config.cadrage !== "national" && config.cadrage !== "world") featuresRendues = featuresCiblees;
+
+        // Clé de jointure avec les données agrégées : le seul cas où cadrage
+        // et détail divergent est le détail "epci", qui dessine des communes
+        // (fond de carte communal) mais doit chercher la couleur avec le
+        // code EPCI de la commune, pas son propre code commune - dataMap est
+        // alors indexée par EPCI (_calculerAgregation appelée avec detail
+        // "epci").
+        const codeDonnees = (d) => {
+            if (config.cadrage === "world") return obtenirIso(d);
+            if (config.detail === "epci") return String(d.properties.codes_siren_des_epci || "");
+            return String(d.properties.code_insee || "");
+        };
 
         const g = svg.append("g");
 
         g.selectAll("path").data(featuresRendues).enter().append("path")
             .attr("d", chemin)
             .attr("fill", (d) => {
-                const code = String(config.scale === "world" ? obtenirIso(d) : (d.properties.code_insee || d.properties.code || ""));
+                const code = codeDonnees(d);
                 if (!featuresCiblees.includes(d)) return "#f8f9fa";
                 return dataMap?.has(code) ? echelleCouleur(dataMap.get(code)) : "#e5e5e5";
             })
@@ -2268,8 +2384,8 @@ const Carto = {
             featuresCiblees.forEach((d) => {
                 const centroide = chemin.centroid(d);
                 if (isNaN(centroide[0])) return;
-                const code = String(config.scale === "world" ? obtenirIso(d) : (d.properties.code_insee || d.properties.code || ""));
-                const nom = config.scale === "world"
+                const code = codeDonnees(d);
+                const nom = config.cadrage === "world"
                     ? (d.properties.name_fr || d.properties.name || d.properties.NAME || "")
                     : (d.properties.nom_officiel || d.properties.nom || d.properties.NOM || d.properties.libgeo || d.properties.LIBGEO || d.properties.nom_com || d.properties.nom_commune || d.properties.nom_dept || d.properties.nom_reg || d.properties.libelle || "");
                 const valeurBrute = dataMap?.has(code) ? dataMap.get(code) : 0;
@@ -2325,7 +2441,27 @@ const Carto = {
                 });
         }
 
-        svg.append("text").attr("x", 20).attr("y", 35).style("font-weight", "bold").style("font-size", "1.1rem").style("fill", couleurPrincipale).text(config.title);
+        // Taille de police adaptative (§Carto, titre superposé à la carte) :
+        // réduite si nécessaire pour tenir dans la largeur disponible (marge
+        // de 20px de chaque côté), jamais agrandie au-delà de la taille de
+        // base pour un titre court. getComputedTextLength() mesure le texte
+        // une fois posé au DOM à la taille de base, pour en déduire le
+        // facteur d'échelle exact plutôt que d'estimer une largeur de
+        // caractère moyenne.
+        const TAILLE_TITRE_BASE_REM = 1.1;
+        const TAILLE_TITRE_MIN_REM = 0.7;
+        const texteTitre = svg.append("text").attr("x", 20).attr("y", 35)
+            .style("font-weight", "bold").style("font-size", `${TAILLE_TITRE_BASE_REM}rem`)
+            .style("fill", couleurPrincipale).text(config.title);
+        const largeurDisponibleTitre = largeur - 40;
+        const largeurTitreMesuree = texteTitre.node().getComputedTextLength();
+        if (largeurTitreMesuree > largeurDisponibleTitre) {
+            const tailleAdaptee = Math.max(
+                TAILLE_TITRE_MIN_REM,
+                TAILLE_TITRE_BASE_REM * (largeurDisponibleTitre / largeurTitreMesuree),
+            );
+            texteTitre.style("font-size", `${tailleAdaptee}rem`);
+        }
 
         if (dataMap && dataMap.size > 0 && valMin !== valMax && config.showLegend !== false) {
             const largeurLegende = 200, hauteurLegende = 12;
@@ -2336,9 +2472,19 @@ const Carto = {
             if (config.palette === "custom" && config.customColors && config.customColors.length >= 2) {
                 const interpolateur = d3.interpolateRgbBasis(config.customColors);
                 for (let i = 0; i <= 10; i++) degrade.append("stop").attr("offset", `${i * 10}%`).attr("stop-color", interpolateur(i / 10));
-            } else if (config.palette !== "default" && Carto.PALETTE_SCALES[config.palette]) {
+            } else if (config.palette && Carto.PALETTE_SCALES[config.palette]) {
                 const interpolateur = Carto.PALETTE_SCALES[config.palette];
                 for (let i = 0; i <= 10; i++) degrade.append("stop").attr("offset", `${i * 10}%`).attr("stop-color", interpolateur(i / 10));
+            } else if (config.palette && PALETTES_DSFR[config.palette]) {
+                // Une des 18 teintes DSFR (§Carto palettes DSFR) : même
+                // dégradé bg->sun que celui réellement appliqué aux formes
+                // de la carte (echelleCouleur ci-dessus) - oublié à l'ajout
+                // des palettes DSFR, la légende gardait le dégradé "Bleu
+                // France" par défaut quelle que soit la teinte choisie,
+                // constaté en usage réel.
+                const p = PALETTES_DSFR[config.palette];
+                degrade.append("stop").attr("offset", "0%").attr("stop-color", p.bg);
+                degrade.append("stop").attr("offset", "100%").attr("stop-color", p.sun);
             } else {
                 degrade.append("stop").attr("offset", "0%").attr("stop-color", couleurFond);
                 degrade.append("stop").attr("offset", "100%").attr("stop-color", couleurPrincipale);
@@ -2354,44 +2500,78 @@ const Carto = {
 
     async actualiserApercu() {
         const conteneur = document.getElementById("carto-apercu");
-        const echelle = document.getElementById("carto-echelle").value;
-        let dataMap = null;
-        let filterDataMap = null;
-        const colonneFiltre = document.getElementById("carto-filtre-colonne")?.value;
-        if (Carto._donnees) {
-            const colCode = document.getElementById("carto-col-code").value;
-            const modeCalcul = document.getElementById("carto-mode-calcul").value;
-            const col1 = document.getElementById("carto-col-1").value;
-            const col2 = document.getElementById("carto-col-2").value;
-            const lignesObjets = Carto._lignesEnObjets();
-            dataMap = Carto._calculerAgregation(lignesObjets, echelle, modeCalcul, colCode, col1, col2);
-            if (colonneFiltre) filterDataMap = Carto._calculerAgregation(lignesObjets, echelle, "simple", colCode, colonneFiltre);
+        const boutonActualiser = document.getElementById("carto-bouton-actualiser");
+        const boutonTelecharger = document.getElementById("carto-bouton-telecharger");
+        // Génération potentiellement longue (fond de carte communal, ~22 Mo,
+        // §détail commune/EPCI) : indicateur de chargement et boutons
+        // désactivés le temps du traitement, pour ne jamais laisser
+        // l'utilisateur relancer un second calcul par-dessus le premier
+        // (constaté en pratique : une course entre deux appels concurrents
+        // peut afficher un message d'erreur périmé après un rendu pourtant
+        // réussi, cf. correctif du sélecteur Détail).
+        boutonActualiser.disabled = true;
+        boutonTelecharger.disabled = true;
+        conteneur.innerHTML = `
+            <div class="sillon-chargement" role="status" aria-live="polite">
+                <span class="sillon-spinner" aria-hidden="true"></span>
+                <p>Génération de la carte en cours…</p>
+            </div>`;
+        try {
+            const cadrage = document.getElementById("carto-cadrage").value;
+            // "commune" par défaut (cadrage Monde/Commune, #carto-detail-groupe
+            // masqué et donc vide) : c'est la maille déjà correcte dans ces deux
+            // cas (aucune agrégation à faire, cf. _calculerAgregation).
+            const detail = document.getElementById("carto-detail").value || "commune";
+            let dataMap = null;
+            let filterDataMap = null;
+            const colonneFiltre = document.getElementById("carto-filtre-colonne")?.value;
+            if (Carto._donnees) {
+                const colCode = document.getElementById("carto-col-code").value;
+                const modeCalcul = document.getElementById("carto-mode-calcul").value;
+                const col1 = document.getElementById("carto-col-1").value;
+                const col2 = document.getElementById("carto-col-2").value;
+                const lignesObjets = Carto._lignesEnObjets();
+                dataMap = Carto._calculerAgregation(lignesObjets, detail, modeCalcul, colCode, col1, col2);
+                if (colonneFiltre) filterDataMap = Carto._calculerAgregation(lignesObjets, detail, "simple", colCode, colonneFiltre);
+            }
+            const paletteVal = document.getElementById("carto-palette").value;
+            const config = {
+                cadrage,
+                detail,
+                worldRegion: document.getElementById("carto-sel-monde")?.value,
+                region: document.getElementById("carto-sel-region")?.value,
+                dept: document.getElementById("carto-sel-departement")?.value,
+                epci: document.getElementById("carto-sel-epci")?.value,
+                commune: document.getElementById("carto-sel-commune")?.value,
+                title: document.getElementById("carto-titre").value,
+                labelType: document.getElementById("carto-etiquettes").value,
+                showLegend: document.getElementById("carto-legende").checked,
+                palette: paletteVal,
+                customColors: paletteVal === "custom" ? [Carto._couleurDepart, Carto._couleurArrivee] : null,
+                labelSize: parseFloat(document.getElementById("carto-etiquettes-taille")?.value) || 10,
+                labelFilterNames: document.getElementById("carto-etiquettes-filtre-noms")?.value,
+                physPadding: parseFloat(document.getElementById("carto-etiquettes-aeration")?.value) || 4,
+                physStrength: parseFloat(document.getElementById("carto-etiquettes-repulsion")?.value) || 0.15,
+                filterOperator: document.getElementById("carto-filtre-operateur")?.value,
+                filterThreshold: parseFloat(document.getElementById("carto-filtre-valeur")?.value),
+                filterDataMap,
+            };
+            Carto._dernierConfig = config;
+            Carto._derniereCarteDonnees = dataMap;
+            const succes = await Carto._dessinerCarte(conteneur, config, dataMap);
+            if (!succes) {
+                // _dessinerCarte a déjà vidé le conteneur avant son propre
+                // retour anticipé (sélection incomplète) - sauf en cas
+                // d'échec du fetch du fond de carte (erreur réseau), seul
+                // chemin où l'indicateur de chargement resterait sinon
+                // affiché indéfiniment.
+                conteneur.innerHTML = "";
+                afficherToast("Sélection incomplète", "Précisez la zone géographique à cartographier.", "warning");
+            }
+        } finally {
+            boutonActualiser.disabled = false;
+            boutonTelecharger.disabled = false;
         }
-        const paletteVal = document.getElementById("carto-palette").value;
-        const config = {
-            scale: echelle,
-            worldRegion: document.getElementById("carto-sel-monde")?.value,
-            region: document.getElementById("carto-sel-region")?.value,
-            dept: document.getElementById("carto-sel-departement")?.value,
-            epci: document.getElementById("carto-sel-epci")?.value,
-            commune: document.getElementById("carto-sel-commune")?.value,
-            title: document.getElementById("carto-titre").value,
-            labelType: document.getElementById("carto-etiquettes").value,
-            showLegend: document.getElementById("carto-legende").checked,
-            palette: paletteVal,
-            customColors: paletteVal === "custom" ? [Carto._couleurDepart, Carto._couleurArrivee] : null,
-            labelSize: parseFloat(document.getElementById("carto-etiquettes-taille")?.value) || 10,
-            labelFilterNames: document.getElementById("carto-etiquettes-filtre-noms")?.value,
-            physPadding: parseFloat(document.getElementById("carto-etiquettes-aeration")?.value) || 4,
-            physStrength: parseFloat(document.getElementById("carto-etiquettes-repulsion")?.value) || 0.15,
-            filterOperator: document.getElementById("carto-filtre-operateur")?.value,
-            filterThreshold: parseFloat(document.getElementById("carto-filtre-valeur")?.value),
-            filterDataMap,
-        };
-        Carto._dernierConfig = config;
-        Carto._derniereCarteDonnees = dataMap;
-        const succes = await Carto._dessinerCarte(conteneur, config, dataMap);
-        if (!succes) afficherToast("Sélection incomplète", "Précisez la zone géographique à cartographier.", "warning");
     },
 
     async telechargerPng() {

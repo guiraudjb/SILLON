@@ -1,5 +1,5 @@
 Package: sillon-server
-Version: 0.1.7
+Version: 0.1.12
 Architecture: amd64
 Maintainer: Administrateur SILLON <admin@sillon.local>
 Depends: postgresql-17, nginx, openssl, sudo, fail2ban

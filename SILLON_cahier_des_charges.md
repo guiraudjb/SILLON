@@ -8,7 +8,7 @@
 
 | Champ | Valeur |
 |---|---|
-| Version | 1.8 |
+| Version | 1.9 |
 | Date | 14 août 2026 |
 | Statut | Avant-projet — en cours de validation |
 | Périmètre | Direction locale — hors lac de données national |
@@ -242,10 +242,10 @@ La base personnelle est sélectionnée automatiquement comme base active dès la
 
 - Accessible à tous les utilisateurs (pas de restriction de profil), pour produire manuellement une carte choroplèthe à partir de données par code INSEE, sans passer par un script.
 - Source des données : dépôt d'un fichier CSV local, ou réutilisation du résultat de la dernière requête de lecture exécutée dans l'onglet Travaux — au choix, sans avoir à réimporter les données dans une base.
-- Échelles disponibles, avec sélection en cascade (région puis département puis EPCI ou commune selon l'échelle) : monde, France métropolitaine, région, département, EPCI, commune.
+- Cadrage (zone affichée) et détail (maille dessinée et coloriée) choisis indépendamment : France métropolitaine (détail département, région, EPCI ou commune), région choisie en cascade (détail département ou commune), département choisi en cascade (détail commune ou EPCI), EPCI choisi en cascade (détail commune), commune choisie en cascade, ou monde (échelle à part, sans détail). Le détail EPCI dessine les communes membres coloriées par la valeur agrégée de leur EPCI d'appartenance, sans fusionner leurs contours.
 - Colonne « code INSEE » et colonne de valeur choisies explicitement par l'utilisateur parmi les colonnes du jeu de données ; la colonne choisie comme code INSEE est systématiquement exclue des colonnes proposables comme valeur (elle ne représente jamais une grandeur à cartographier) ; mode de calcul : somme brute, part en pourcentage, ratio entre deux colonnes, ou évolution entre deux colonnes.
 - Étiquettes optionnelles (nom, valeur, ou les deux) avec répartition automatique évitant les recouvrements ; réglage fin une fois activées : taille, filtre par nom ou code (liste de valeurs), filtre avancé sur une autre colonne agrégée (opérateur de comparaison et seuil), et deux curseurs pilotant la répartition automatique (aération, répulsion).
-- Coloration : palette par défaut (Bleu France), deux dégradés divergents prédéfinis, ou dégradé personnalisé à deux couleurs choisies dans un nuancier à deux niveaux (une teinte du système de design de l'État, puis une nuance de cette teinte, de la plus claire à la plus soutenue) pour chacune des deux bornes du dégradé.
+- Coloration : une des 18 teintes du système de design de l'État en dégradé continu (même jeu de couleurs que l'onglet Graphiques), deux dégradés divergents prédéfinis, ou dégradé personnalisé à deux couleurs choisies dans un nuancier à deux niveaux (une teinte, puis une nuance de cette teinte, de la plus claire à la plus soutenue) pour chacune des deux bornes du dégradé.
 - Légende de colorimétrie optionnelle.
 - Export de la carte en image PNG.
 - Fichiers d'exemple (départements, communes, pays du monde) téléchargeables depuis la modale « À propos », pour s'exercer sans avoir de jeu de données personnel sous la main.

@@ -273,8 +273,8 @@
                     </div>
 
                     <div class="fr-input-group">
-                        <label class="fr-label" for="carto-echelle">Échelle</label>
-                        <select class="fr-select" id="carto-echelle" onchange="Carto.actualiserCascade()">
+                        <label class="fr-label" for="carto-cadrage">Cadrage</label>
+                        <select class="fr-select" id="carto-cadrage" onchange="Carto.actualiserCadrage()">
                             <option value="world">Monde</option>
                             <option value="national">France métropolitaine</option>
                             <option value="region">Région</option>
@@ -282,6 +282,14 @@
                             <option value="epci">EPCI</option>
                             <option value="commune">Commune</option>
                         </select>
+                    </div>
+                    <!-- Peuplé dynamiquement par Carto.actualiserOptionsDetail()
+                         selon le cadrage choisi ci-dessus (matrice cadrage/détail,
+                         cahier des charges §5.7) - masqué pour Monde/Commune, qui
+                         n'offrent aucun choix de détail réel. -->
+                    <div class="fr-input-group" id="carto-detail-groupe">
+                        <label class="fr-label" for="carto-detail">Détail</label>
+                        <select class="fr-select" id="carto-detail"></select>
                     </div>
                     <div id="carto-cascade" class="fr-mb-2w"></div>
 
@@ -365,8 +373,12 @@
 
                     <div class="fr-input-group">
                         <label class="fr-label" for="carto-palette">Palette de couleurs</label>
+                        <!-- Les 18 teintes DSFR (dégradés clair->soutenu) sont
+                             insérées dynamiquement en tête de liste par
+                             Carto.init() (PALETTE_LABELS_DSFR, "marianne"
+                             présélectionnée) - seules les options qui n'en
+                             font pas partie restent en dur ici. -->
                         <select class="fr-select" id="carto-palette" onchange="Carto.actualiserPalette()">
-                            <option value="default">Bleu France (par défaut)</option>
                             <option value="divergentDescending">Divergent (vert → jaune → rouge)</option>
                             <option value="divergentAscending">Divergent (rouge → jaune → vert)</option>
                             <option value="custom">Palette personnalisée…</option>
@@ -380,8 +392,8 @@
                     </div>
 
                     <ul class="fr-btns-group fr-btns-group--inline fr-mt-3w">
-                        <li><button class="fr-btn fr-icon-refresh-line fr-btn--icon-left" onclick="Carto.actualiserApercu()">Actualiser la carte</button></li>
-                        <li><button class="fr-btn fr-btn--secondary fr-icon-download-line fr-btn--icon-left" onclick="Carto.telechargerPng()">Télécharger en PNG</button></li>
+                        <li><button class="fr-btn fr-icon-refresh-line fr-btn--icon-left" id="carto-bouton-actualiser" onclick="Carto.actualiserApercu()">Actualiser la carte</button></li>
+                        <li><button class="fr-btn fr-btn--secondary fr-icon-download-line fr-btn--icon-left" id="carto-bouton-telecharger" onclick="Carto.telechargerPng()">Télécharger en PNG</button></li>
                     </ul>
                 </div>
 

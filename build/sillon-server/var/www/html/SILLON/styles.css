@@ -138,3 +138,32 @@ code {
     padding-top: 0.6rem;
     border-top: 1px dashed var(--border-default-grey);
 }
+
+/* Indicateur de chargement (Carto : génération de la carte, potentiellement
+   longue - fond de carte communal ~22 Mo) : le DSFR ne fournit aucun
+   composant ni animation de ce type (vérifié dans dsfr.min.css, aucune
+   règle @keyframes) - construit ici en ne réutilisant que ses jetons de
+   couleur, pour rester visuellement cohérent avec le reste de l'interface. */
+.sillon-chargement {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    min-height: 300px;
+    padding: 2rem;
+    text-align: center;
+}
+
+.sillon-spinner {
+    width: 2.5rem;
+    height: 2.5rem;
+    border: 4px solid var(--background-alt-grey);
+    border-top-color: var(--sillon-accent);
+    border-radius: 50%;
+    animation: sillon-spinner-rotation 0.8s linear infinite;
+}
+
+@keyframes sillon-spinner-rotation {
+    to { transform: rotate(360deg); }
+}
