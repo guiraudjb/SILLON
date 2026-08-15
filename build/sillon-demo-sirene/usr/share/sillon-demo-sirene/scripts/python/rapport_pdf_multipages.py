@@ -24,9 +24,13 @@ curseur = connexion.cursor()
 curseur.execute("SELECT COUNT(*), COUNT(*) FILTER (WHERE etat_administratif = 'A') FROM sirene_etablissements")
 total, actifs = curseur.fetchone()
 
+# date_creation <= CURRENT_DATE : quelques lignes du stock Sirene brut
+# portent une date de création aberrante (ex. l'an 5015), constaté en
+# pratique - sans cette borne haute, la courbe s'écrase illisible.
 par_annee = pd.read_sql("""
     SELECT EXTRACT(YEAR FROM date_creation)::int AS annee, COUNT(*) AS nb
-    FROM sirene_etablissements WHERE date_creation >= '2000-01-01' GROUP BY annee ORDER BY annee
+    FROM sirene_etablissements
+    WHERE date_creation >= '2000-01-01' AND date_creation <= CURRENT_DATE GROUP BY annee ORDER BY annee
 """, connexion)
 
 top_departements = pd.read_sql("""

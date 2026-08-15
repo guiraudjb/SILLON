@@ -40,9 +40,13 @@ par_tranche <- dbGetQuery(connexion, "
   GROUP BY tranche ORDER BY tranche
 ")
 
+# date_creation <= CURRENT_DATE : quelques lignes du stock Sirene brut
+# portent une date de création aberrante (ex. l'an 5015), constaté en
+# pratique - sans cette borne haute, la courbe s'écrase illisible.
 par_annee <- dbGetQuery(connexion, "
   SELECT EXTRACT(YEAR FROM date_creation)::int AS annee, COUNT(*) AS nb
-  FROM sirene_etablissements WHERE date_creation >= '1990-01-01' GROUP BY annee ORDER BY annee
+  FROM sirene_etablissements
+  WHERE date_creation >= '1990-01-01' AND date_creation <= CURRENT_DATE GROUP BY annee ORDER BY annee
 ")
 
 par_departement <- dbGetQuery(connexion, "

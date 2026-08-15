@@ -38,10 +38,15 @@ par_caractere_employeur = pd.read_sql("""
     GROUP BY categorie ORDER BY nb DESC
 """, connexion)
 
+# date_creation <= CURRENT_DATE : quelques dizaines de lignes du stock
+# Sirene brut portent une date de création manifestement erronée (ex.
+# l'an 5015), constaté en pratique - sans cette borne haute, matplotlib
+# étire l'axe des années jusqu'à ces valeurs aberrantes et la courbe
+# entière s'écrase illisible dans son coin gauche.
 creations_par_annee = pd.read_sql("""
     SELECT EXTRACT(YEAR FROM date_creation)::int AS annee, COUNT(*) AS nb
     FROM sirene_etablissements
-    WHERE date_creation IS NOT NULL AND date_creation >= '1990-01-01'
+    WHERE date_creation IS NOT NULL AND date_creation >= '1990-01-01' AND date_creation <= CURRENT_DATE
     GROUP BY annee ORDER BY annee
 """, connexion)
 

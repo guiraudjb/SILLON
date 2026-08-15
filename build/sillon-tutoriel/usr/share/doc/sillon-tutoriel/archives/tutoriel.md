@@ -586,7 +586,7 @@ Sans surprise, les chefs-lieux des petites régions ultramarines pèsent netteme
 
 Le paquet optionnel `sillon-demo-sirene` (complémentaire de `sillon-tutoriel`, à installer séparément — voir le guide d'installation administrateur, §7.2) importe le jeu de données Sirene complet de l'INSEE (« StockEtablissement », Licence Ouverte 2.0, [data.gouv.fr](https://www.data.gouv.fr/)) dans votre base personnelle : la table **`sirene_etablissements`**, environ **43,9 millions de lignes** — un ordre de grandeur au-delà de `communes_france`. Six scripts Python et trois scripts R, déjà déposés et exécutés à l'installation de ce paquet, démontrent les mêmes possibilités que les Parties 2 et 3 mais à cette échelle. **Si ce paquet n'est pas installé, cette table n'existe pas** : passez directement à « Pour continuer ».
 
-**Règle impérative à cette échelle** : chaque script agrège côté PostgreSQL (`GROUP BY`, `COUNT`, ...) avant de rapatrier le résultat en Python/R — jamais un `SELECT * FROM sirene_etablissements` ni un `pd.read_sql("SELECT * FROM ...")` sans filtre, qui dépasserait largement le quota mémoire du conteneur d'exécution (`ram_max_conteneur_mo`, §11 du cahier des charges). Une requête déjà réduite à quelques dizaines ou centaines de lignes transite seule vers pandas/dplyr.
+**Règle impérative à cette échelle** : chaque script agrège côté PostgreSQL (`GROUP BY`, `COUNT`, ...) avant de rapatrier le résultat en Python/R — jamais un `SELECT * FROM sirene_etablissements` ni un `pd.read_sql("SELECT * FROM ...")` sans filtre, qui dépasserait largement le quota mémoire du conteneur d'exécution (`ram_max_conteneur_mo`, §11 du cahier des charges). Une requête déjà réduite à quelques dizaines ou centaines de lignes transite seule vers pandas/dplyr. Même sous cette forme agrégée, chaque requête balaie l'essentiel des 43,9 millions de lignes — la table n'est indexée qu'en recherche approchée (`GIN`/trigramme, pour un filtrage par motif), pas pour ce type de regroupement : comptez couramment plusieurs minutes par script.
 
 Colonnes de `sirene_etablissements` : `siren`, `siret`, `date_creation`, `tranche_effectifs`, `etablissement_siege` (booléen), `dep_code` (croisable avec `communes_france`/`contours_departements`), `etat_administratif` (`A` = actif), `activite_principale` (code NAF), `caractere_employeur` — volontairement réduit aux colonnes utilisées par les scripts de démonstration (chaque colonne Texte ajoute un index de recherche approchée coûteux en espace disque à la construction, §7.4).
 
@@ -594,27 +594,94 @@ Scripts téléchargeables dans `python/` et `r/` (archive `corriges-sirene.zip`,
 
 ### 4.1 Panorama des graphiques (`graphiques_couverture.py`)
 
-Quatre graphiques dans une seule image (`plt.subplots(2, 2)`) à partir de quatre requêtes agrégées : barres (établissements actifs par tranche d'effectif), camembert (part des employeurs), courbe (créations par année), barres horizontales (15 divisions NAF les plus représentées).
+Quatre graphiques dans une seule image (`plt.subplots(2, 2)`), chacun à partir d'une requête agrégée séparée : barres (établissements actifs par tranche d'effectif), camembert (part des employeurs), courbe (créations par année depuis 1990), barres horizontales (15 divisions NAF les plus représentées, à partir des deux premiers caractères du code d'activité principale).
+
+```python
+par_tranche = pd.read_sql("""
+    SELECT COALESCE(NULLIF(tranche_effectifs, ''), 'Non renseigné') AS tranche, COUNT(*) AS nb
+    FROM sirene_etablissements WHERE etat_administratif = 'A'
+    GROUP BY tranche ORDER BY tranche
+""", connexion)
+# ... trois requêtes agrégées supplémentaires (camembert, courbe, barres horizontales) ...
+
+figure, axes = plt.subplots(2, 2, figsize=(13, 10))
+axes[0, 0].bar(par_tranche["tranche"], par_tranche["nb"], color="#000091")
+axes[0, 1].pie(par_caractere_employeur["nb"], labels=par_caractere_employeur["categorie"], autopct="%1.1f%%")
+axes[1, 0].plot(creations_par_annee["annee"], creations_par_annee["nb"], color="#e1000f", marker=".")
+axes[1, 1].barh(top_secteurs["division_naf"][::-1], top_secteurs["nb"][::-1], color="#000091")
+```
+
+![Panorama Sirene : quatre graphiques agrégés sur 43,9 millions de lignes, résultat réel de graphiques_couverture.py](images/sirene_panorama_graphiques.png)
 
 ### 4.2 Tableau croisé (`tableau_pandas.py`)
 
-Tableau croisé `pandas.pivot_table` (départements × tranches d'effectif, sur les 12 départements les plus dotés), exporté en CSV et en image de tableau (`ax.table`) — utile quand le résultat doit être consulté sans tableur.
+Tableau croisé `pandas.pivot_table` (départements × tranches d'effectif, restreint aux 12 départements comptant le plus d'établissements actifs via une sous-requête), exporté en CSV et en image de tableau (`ax.table`) — utile quand le résultat doit être consulté sans tableur.
+
+```python
+tableau = pd.pivot_table(brut, index="dep_code", columns="tranche", values="nb", aggfunc="sum", fill_value=0)
+tableau["total"] = tableau.sum(axis=1)
+tableau = tableau.sort_values("total", ascending=False)
+tableau.to_csv(os.path.join(resultats, "tableau_croise_departements.csv"))
+```
+
+![Tableau croisé départements × tranches d'effectif, résultat réel de tableau_pandas.py](images/sirene_tableau_pandas.png)
 
 ### 4.3 Export Excel avec graphique natif (`export_excel.py`)
 
-Classeur `openpyxl` à trois feuilles (résumé, top secteurs NAF, par département), avec un graphique natif Excel (`openpyxl.chart.BarChart`) directement modifiable dans Excel ou LibreOffice.
+Classeur `openpyxl` à trois feuilles (résumé, top 20 secteurs NAF, par département), avec un graphique natif Excel (`openpyxl.chart.BarChart`) directement modifiable dans Excel ou LibreOffice — pas une simple image collée.
+
+```python
+graphique = BarChart()
+graphique.title = "20 divisions NAF les plus représentées (actifs)"
+donnees = Reference(feuille_secteurs, min_col=2, min_row=1, max_row=1 + len(top_secteurs))
+categories = Reference(feuille_secteurs, min_col=1, min_row=2, max_row=1 + len(top_secteurs))
+graphique.add_data(donnees, titles_from_data=True)
+graphique.set_categories(categories)
+feuille_secteurs.add_chart(graphique, "E2")
+```
+
+Résultat réel (`sirene_synthese.xlsx`, feuille « Résumé ») :
+
+| Indicateur | Valeur |
+|---|---|
+| Établissements (total) | 43 896 818 |
+| Établissements actifs | 16 715 258 |
+| Sièges actifs | 29 900 801 |
 
 ### 4.4 Rapport PDF multi-pages (`rapport_pdf_multipages.py`)
 
-`PdfPages` assemble une page de garde (texte) et deux graphiques (évolution des créations, top 10 départements) en un seul PDF.
+`PdfPages` assemble une page de garde (texte seul, `figure.text(...)` sans axes) et deux graphiques (évolution des créations depuis 2000, 10 départements les plus dotés en établissements actifs) en un seul PDF.
+
+```python
+with PdfPages(chemin_pdf) as pdf:
+    figure_garde = plt.figure(figsize=(8.27, 11.69))  # A4 portrait
+    figure_garde.text(0.5, 0.6, "Rapport Sirene", ha="center", fontsize=28, weight="bold")
+    pdf.savefig(figure_garde)
+    plt.close(figure_garde)
+    # ... une figure par page suivante, pdf.savefig() à chaque fois ...
+```
+
+![Page de garde du rapport PDF, résultat réel de rapport_pdf_multipages.py](images/sirene_rapport_pdf_page1.png)
 
 ### 4.5 Diagramme Mermaid (`diagramme_mermaid.py`)
 
-Le bac à sable n'a ni Node.js ni Chromium (§7.7/§8.7 du cahier des charges) : impossible d'y rendre une image Mermaid. Le script se contente d'écrire le **texte** Mermaid (`pie showData title ...`) dans ses résultats — SILLON le rend lui-même, côté navigateur, dès que vous ouvrez le bouton **« Aperçus »** du job dans l'onglet Suivi (à côté de « Journal » et « Télécharger »). Aucune bibliothèque supplémentaire requise, en Python comme en R : c'est la même mécanique que 4.5/5.3.
+Le bac à sable n'a ni Node.js ni Chromium (§7.7/§8.7 du cahier des charges) : impossible d'y rendre une image Mermaid. Le script se contente d'écrire le **texte** Mermaid (`pie showData title ...`) dans ses résultats — SILLON le rend lui-même, côté navigateur, dès que vous ouvrez le bouton **« Aperçus »** du job dans l'onglet Suivi (à côté de « Journal » et « Télécharger »). Aucune bibliothèque supplémentaire requise, en Python comme en R : même principe repris en 5.3.
+
+![Diagramme en secteurs rendu depuis le texte Mermaid produit par diagramme_mermaid.py](images/sirene_diagramme_mermaid.png)
 
 ### 4.6 Cartographie croisée (`carte_choroplethe.py`)
 
-Densité d'établissements actifs par département, sur les contours réels déjà importés par `sillon-tutoriel` (`contours_departements`) — les deux paquets partagent la même base personnelle, cette jointure ne nécessite donc aucun import supplémentaire.
+Densité d'établissements actifs par département, sur les contours réels déjà importés par `sillon-tutoriel` (`contours_departements`) — les deux paquets partagent la même base personnelle, cette jointure ne nécessite donc aucun import supplémentaire. Échelle **logarithmique** (`LogNorm`), pas linéaire : le nombre d'établissements par département est extrêmement asymétrique (Paris et les départements franciliens en concentrent bien plus que les départements ruraux) — une échelle linéaire écraserait la plupart des départements dans la teinte la plus claire, tous indiscernables (même défaut, et même corrigé, que la densité de population en Partie 2, exercice 2.1).
+
+```python
+collection = PatchCollection(
+    patches, array=couleurs, cmap=cm.get_cmap("Reds"),
+    norm=mcolors.LogNorm(vmin=max(min(couleurs), 1), vmax=max(couleurs)),
+    edgecolor="white", linewidth=0.3,
+)
+```
+
+![Carte choroplèthe des établissements actifs par département (échelle logarithmique), résultat réel de carte_choroplethe.py](images/sirene_carte_choroplethe.png)
 
 ---
 
@@ -624,15 +691,55 @@ Même jeu de données et même règle d'agrégation SQL qu'en Partie 4.
 
 ### 5.1 Panorama des graphiques (`graphiques_ggplot.R`)
 
-Trois graphiques ggplot2 à partir de requêtes agrégées : barres (par tranche d'effectif), courbe (créations par année), histogramme (distribution du nombre d'établissements actifs par département).
+Trois graphiques ggplot2 à partir de requêtes agrégées : barres (par tranche d'effectif), courbe (créations par année depuis 1990), histogramme (distribution du nombre d'établissements actifs par département). Comme pour la carte Python de la Partie 4, l'histogramme passe en échelle logarithmique (`scale_x_log10()`) — la distribution par département est trop asymétrique pour des tranches linéaires lisibles.
+
+```r
+graphique_departements <- ggplot(par_departement, aes(x = nb)) +
+  geom_histogram(bins = 30, fill = "#000091") +
+  scale_x_log10() +
+  theme_minimal() +
+  labs(title = "Distribution du nombre d'établissements actifs par département",
+       x = "Établissements actifs par département (échelle log)", y = "Nombre de départements")
+```
+
+![Distribution du nombre d'établissements actifs par département, résultat réel de graphiques_ggplot.R](images/sirene_ggplot_distribution.png)
 
 ### 5.2 Pipeline dplyr (`analyse_dplyr.R`)
 
-Classement des 20 divisions NAF les plus représentées (`mutate`/`arrange`/`row_number` sur un résultat déjà agrégé côté SQL), exporté en CSV.
+Classement des divisions NAF les plus représentées parmi les établissements actifs (`mutate`/`arrange`/`row_number` sur un résultat déjà agrégé côté SQL), exporté en CSV.
+
+```r
+classement <- par_secteur %>%
+  mutate(part_pct = round(100 * nb / sum(nb), 2)) %>%
+  arrange(desc(nb)) %>%
+  mutate(rang = row_number()) %>%
+  select(rang, division_naf, nb, part_pct) %>%
+  head(20)
+```
+
+Résultat réel (`classement_secteurs_naf.csv`, 5 premières lignes sur 87 divisions NAF) :
+
+| Rang | Division NAF | Établissements actifs | Part |
+|---|---|---|---|
+| 1 | 68 | 3 944 704 | 23,6 % |
+| 2 | 47 | 1 265 511 | 7,57 % |
+| 3 | 43 | 848 346 | 5,08 % |
+| 4 | 70 | 821 505 | 4,91 % |
+| 5 | 01 | 747 583 | 4,47 % |
+
+La division 68 (« Activités immobilières ») domine largement — attendu pour un fichier d'établissements actifs plutôt que d'emplois : chaque logement loué par un particulier via une société civile immobilière y compte comme un établissement à part entière.
 
 ### 5.3 Diagramme Mermaid (`diagramme_mermaid.R`)
 
-Même principe qu'en 4.5 : le script écrit le texte Mermaid (répartition employeurs/non-employeurs), rendu côté navigateur depuis l'onglet Suivi.
+Même principe qu'en 4.5 : le script écrit le texte Mermaid (répartition employeurs/non-employeurs parmi les établissements actifs), rendu côté navigateur depuis l'onglet Suivi.
+
+```r
+lignes <- c("pie showData title Établissements actifs, employeurs ou non")
+for (i in seq_len(nrow(par_caractere))) {
+  lignes <- c(lignes, sprintf('    "%s" : %d', par_caractere$categorie[i], par_caractere$nb[i]))
+}
+writeLines(lignes, file.path(resultats, "repartition_employeurs.mmd"))
+```
 
 ---
 

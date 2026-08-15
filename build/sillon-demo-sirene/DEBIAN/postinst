@@ -92,12 +92,20 @@ if [ -n "$NOM_PG_DEMO" ]; then
     DEJA_IMPORTE=$(sudo -u postgres psql -d "$NOM_PG_DEMO" -tAc \
         "SELECT 1 FROM pg_class WHERE relname = 'sirene_etablissements' AND relkind = 'r';" 2>/dev/null || true)
 fi
+# preparer_sirene.py est TOUJOURS invoqué, même table déjà importée : lui
+# seul sait aussi déposer et exécuter les scripts de démonstration
+# (deposer_scripts_exemple(), appelé dans les deux branches de son propre
+# main()) - un raccourci bash qui l'aurait court-circuité ici empêchait à
+# tort ce dépôt de jamais se produire une fois la table déjà en place à une
+# réinstallation ou mise à jour du paquet (constaté en pratique : aucun job
+# "script_python"/"script_r" pour ces scripts, quelle que soit la version
+# de sillon-demo-sirene installée par la suite).
 if [ "$DEJA_IMPORTE" = "1" ]; then
-    echo "Table sirene_etablissements déjà présente dans la base du compte demo : import ignoré (reprise après un précédent postinst interrompu)."
+    echo "Table sirene_etablissements déjà présente dans la base du compte demo : import ignoré, dépôt des scripts de démonstration uniquement."
 else
     echo "Téléchargement et import du jeu de données Sirene (peut prendre plusieurs heures selon la machine et la bande passante)..."
-    python3 /usr/share/sillon-demo-sirene/preparer_sirene.py --url https://localhost --jeton "$JETON"
 fi
+python3 /usr/share/sillon-demo-sirene/preparer_sirene.py --url https://localhost --jeton "$JETON"
 
 # =====================================================================
 # 4. SCRIPTS EMPAQUETES EN ARCHIVE TELECHARGEABLE (§12.8)

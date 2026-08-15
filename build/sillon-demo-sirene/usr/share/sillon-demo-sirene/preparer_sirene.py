@@ -338,6 +338,19 @@ def importer_sirene(client, chemin_csv, base_id):
 
 
 def deposer_scripts_exemple(client, base_id):
+    """Dépose et attend chaque script l'un après l'autre (jamais en
+    parallèle : un seul job simultané autorisé par utilisateur, §11) -
+    chacun agrège lui-même sur les ~43,9 millions de lignes de
+    sirene_etablissements, sans l'aide d'un index adapté à un GROUP BY
+    (uniquement des index GIN trigram, pensés pour la recherche approchée,
+    cf. leur commentaire dans le générateur de table) : une dizaine de
+    minutes par script est courante, constaté en pratique. delai_max_s
+    généreux en conséquence - et surtout, un dépassement interrompt
+    entièrement le dépôt plutôt que de tenter le script suivant : ce
+    dernier échouerait de toute façon immédiatement (quota d'un seul job
+    simultané, §11) tant que le précédent tourne encore réellement en
+    arrière-plan, un TimeoutError ici ne signifiant qu'un abandon de
+    l'attente côté script, pas un échec du job lui-même."""
     print("Dépôt et exécution des scripts de démonstration...")
     for sous_dossier, noms in (("python", SCRIPTS_EXEMPLE_PYTHON), ("r", SCRIPTS_EXEMPLE_R)):
         for nom_fichier in noms:
@@ -351,10 +364,11 @@ def deposer_scripts_exemple(client, base_id):
             id_job = resultat["id_job"]
             print(f"  {nom_fichier} (job n°{id_job})...")
             try:
-                job = attendre_job(client, id_job, delai_max_s=600)
+                job = attendre_job(client, id_job, delai_max_s=1800)
                 print(f"    -> {job['statut']}")
             except TimeoutError as exc:
-                print(f"  AVERTISSEMENT : {exc}", file=sys.stderr)
+                print(f"  AVERTISSEMENT : {exc} - arrêt du dépôt des scripts restants pour éviter un conflit de quota.", file=sys.stderr)
+                return
 
 
 def _deposer_petit_fichier(client, base_id, nom_fichier, contenu):

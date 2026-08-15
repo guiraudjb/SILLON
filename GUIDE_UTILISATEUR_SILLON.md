@@ -11,7 +11,7 @@ Ce guide illustre, captures d'écran réelles à l'appui, l'ensemble des fonctio
 - Le **cahier des charges**, qui détaille précisément le comportement attendu de chaque fonctionnalité.
 - Le **guide d'installation administrateur**, pour la mise en place du serveur.
 
-Les captures de ce guide ont été réalisées avec le compte de démonstration du paquet optionnel `sillon-tutoriel` (jeu de données réel de communes françaises) et avec les fichiers d'exemple pour la cartographie et les graphiques, également téléchargeables depuis la modale « À propos ».
+Les captures de ce guide ont été réalisées avec le compte de démonstration du paquet optionnel `sillon-tutoriel` (jeu de données réel de communes françaises) et avec les fichiers d'exemple pour la cartographie, les graphiques et les représentations DSFR, également téléchargeables depuis la modale « À propos ».
 
 ---
 
@@ -21,7 +21,7 @@ L'accès à SILLON se fait par adresse email professionnelle et mot de passe —
 
 ![Écran de connexion](01_connexion.jpg)
 
-Une fois connecté, la barre d'onglets s'affiche en haut de l'application. Les onglets **Bases**, **Travaux**, **Import**, **Scripts** et **Suivi** sont réservés aux données de travail ; **Carto**, **Graphiques** et **Diagrammes** permettent de produire manuellement des visualisations ; **Administration** n'apparaît que pour un compte administrateur.
+Une fois connecté, la barre d'onglets s'affiche en haut de l'application. Les onglets **Bases**, **Travaux**, **Import**, **Scripts** et **Suivi** sont réservés aux données de travail ; **Carto**, **Graphiques**, **Diagrammes** et **Représentations DSFR** permettent de produire manuellement des visualisations ; **Administration** n'apparaît que pour un compte administrateur.
 
 ---
 
@@ -62,6 +62,10 @@ Pour transformer un fichier CSV en table PostgreSQL correctement typée, sans é
 Après analyse, SILLON détecte l'encodage, le délimiteur et propose un type pour chaque colonne (Texte, Entier, Décimal, Date...) — modifiable avant validation. Un contrôle de cohérence est ensuite passé sur tout le fichier (pas seulement l'aperçu), avec la possibilité d'exclure les lignes en anomalie plutôt que d'annuler tout l'import.
 
 ![Colonnes détectées et types proposés](07_import_colonnes.jpg)
+
+Un fichier n'est pas toujours déjà sur son poste : le bouton « Importer depuis data.gouv.fr », en haut de l'onglet, ouvre une recherche par mot-clé dans le catalogue national et propose directement les ressources CSV des jeux de données trouvés. Le fichier choisi est téléchargé côté serveur (avec la vitesse et le volume déjà reçu affichés pendant le transfert) puis rejoint automatiquement la même analyse de colonnes que pour un dépôt manuel.
+
+![Recherche « population communes » depuis data.gouv.fr](25_import_datagouv.jpg)
 
 ---
 
@@ -105,17 +109,19 @@ En bas de liste, la pagination indique la page courante et le nombre total de tr
 
 Pour produire manuellement une carte choroplèthe à partir d'un jeu de données par code INSEE, sans passer par un script. La source des données est au choix : un fichier CSV déposé, ou le résultat de la dernière requête de lecture exécutée dans l'onglet Travaux.
 
-Six échelles sont disponibles (monde, France métropolitaine, région, département, EPCI, commune), avec sélection en cascade pour les échelles les plus fines. La colonne « code INSEE » est exclue des colonnes proposables comme valeur, pour ne jamais cartographier le code lui-même par erreur.
+La carte se règle en deux temps : le **cadrage** fixe l'étendue géographique globale (monde, France métropolitaine, région, département, EPCI ou commune), et le **détail** fixe le niveau réellement colorié à l'intérieur de ce cadrage — par exemple un cadrage « Région » avec un détail « Département » dessine une seule région, chaque département colorié individuellement ; un cadrage « France métropolitaine » avec un détail « EPCI » colorie tout le pays intercommunalité par intercommunalité. Les options de détail proposées dépendent du cadrage choisi, et une sélection en cascade (région puis, si besoin, département) affine le cadrage pour les échelles les plus fines. La colonne « code INSEE » est exclue des colonnes proposables comme valeur, pour ne jamais cartographier le code lui-même par erreur.
 
-![Carte choroplèthe départementale](15_carto_carte.jpg)
+![Cadrage régional, détail départemental, légende verticale à droite](23_carto_cadrage_detail.jpg)
 
 Une fois les étiquettes activées, un réglage fin est disponible : taille, filtre par nom ou code, filtre avancé sur une autre colonne, et deux curseurs pilotant la répartition automatique des étiquettes pour éviter les recouvrements.
 
-La coloration propose, en plus d'une palette par défaut et de deux dégradés divergents prédéfinis, un dégradé personnalisé construit à partir des couleurs du système de design de l'État : une teinte, puis une nuance de cette teinte, du plus clair au plus soutenu, choisies indépendamment pour les valeurs basses et les valeurs hautes.
+La légende est optionnelle et se positionne librement (bas à droite ou à gauche à l'horizontale, ou verticale centrée à droite ou à gauche) — utile pour la dégager d'une zone chargée de la carte. La coloration propose les 19 teintes du système de design de l'État en dégradé continu, deux dégradés divergents prédéfinis, ou un dégradé entièrement personnalisé construit à partir de ces mêmes teintes : une teinte, puis une nuance de cette teinte, du plus clair au plus soutenu, choisies indépendamment pour les valeurs basses et les valeurs hautes.
 
-![Nuancier de couleurs à deux niveaux](16_carto_nuancier.jpg)
+![Position de la légende et palette de couleurs DSFR](24_carto_legende_palette.jpg)
 
-La carte s'exporte ensuite en image PNG.
+![Nuancier de couleurs à deux niveaux (dégradé personnalisé)](16_carto_nuancier.jpg)
+
+La génération d'une carte peut prendre quelques secondes (le fond communal, le plus détaillé, pèse une vingtaine de mégaoctets) : un indicateur de chargement s'affiche pendant ce temps et les boutons de l'onglet sont désactivés pour éviter un double clic. La carte s'exporte ensuite en image PNG.
 
 ---
 
@@ -141,9 +147,35 @@ Le diagramme s'exporte en image PNG (repli au format SVG si la conversion échou
 
 ---
 
+## Onglet « Représentations DSFR »
+
+Pour produire manuellement cinq blocs visuels du système de design de l'État, édités par formulaire avec un aperçu mis à jour en direct (pas de bouton « Actualiser », ces rendus étant légers) et exportés en image PNG. Les 19 palettes de couleurs DSFR sont partagées avec les onglets Carto et Graphiques.
+
+**Mise en exergue** : un titre et un texte, avec un liseré de couleur.
+
+![Mise en exergue](26_representations_exergue.jpg)
+
+**Chiffre clé** : une valeur mise en avant (ex. « 34 868 ») et son texte explicatif.
+
+![Chiffre clé](27_representations_chiffre.jpg)
+
+**Citation** : le texte, l'auteur, sa fonction, et un portrait optionnel (à gauche, à droite, ou absent) déposé en image.
+
+![Citation avec portrait](28_representations_citation.jpg)
+
+**Tableau** : le contenu de chaque cellule se saisit dans une grille dédiée, qui se redimensionne en conservant les valeurs déjà saisies — ou s'alimente directement, comme pour Carto et Graphiques, depuis un fichier CSV déposé ou le résultat de la dernière requête SQL exécutée dans l'onglet Travaux.
+
+![Tableau alimenté par une requête SQL](29_representations_tableau.jpg)
+
+**Frise chronologique** : un fichier CSV (colonnes date/étape, titre, description optionnelle), orientation horizontale ou verticale, et une case à cocher par étape pour choisir celles à afficher. Un fichier d'exemple (`frise.csv`) est téléchargeable depuis la modale « À propos », aux côtés des exemples déjà disponibles pour Carto et Graphiques.
+
+![Frise chronologique](30_representations_frise.jpg)
+
+---
+
 ## Modale « À propos »
 
-Accessible à tout moment depuis l'en-tête de l'application, elle regroupe la documentation technique téléchargeable (guide administrateur, cahier des charges, ce guide utilisateur), ainsi que les fichiers d'exemple pour les onglets Carto et Graphiques.
+Accessible à tout moment depuis l'en-tête de l'application, elle regroupe la documentation technique téléchargeable (guide administrateur, cahier des charges, ce guide utilisateur), ainsi que les fichiers d'exemple pour les onglets Carto, Graphiques et Représentations DSFR.
 
 ![Modale À propos](19_a_propos.jpg)
 
@@ -162,6 +194,8 @@ Réservé aux comptes de profil administrateur, ce panneau permet de gérer l'en
 **Quotas** : réglage des limites globales de la plateforme (connexions simultanées, mémoire et CPU par conteneur de script, taille maximale des fichiers, durée maximale d'un job...).
 
 ![Réglage des quotas](21_administration_quotas.jpg)
+
+**Proxy sortant (data.gouv.fr)** : sur une plateforme sans accès Internet direct, l'adresse d'un proxy HTTP peut être enregistrée puis testée depuis cet écran, pour que l'import depuis data.gouv.fr (onglet Import) reste utilisable.
 
 **Journal d'audit** : traçabilité de toutes les actions sensibles (création de compte, création ou suppression de base ou de table, modification de mot de passe...), consultable directement depuis l'interface.
 
