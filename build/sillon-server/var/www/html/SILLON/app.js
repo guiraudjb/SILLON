@@ -1384,6 +1384,15 @@ const Datagouv = {
                         Import.afficherAssistant(apercu, apercu.nom_fichier);
                         document.getElementById("resultat-import").innerHTML = "";
                         Modales.fermer(document.getElementById("modal-datagouv"));
+                        // Fermer la modale ne réinitialise pas son contenu
+                        // (Modales.fermer se contente de la masquer) : sans
+                        // ceci, le dernier message affiché ("Analyse du
+                        // fichier en cours…") restait visible à la prochaine
+                        // ouverture de cette modale, avant toute nouvelle
+                        // recherche - constaté en pratique, ressemblant à un
+                        // blocage alors que l'import précédent avait bien
+                        // abouti.
+                        conteneur.innerHTML = "";
                         return;
                     }
                 }
