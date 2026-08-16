@@ -91,12 +91,14 @@ sudo dpkg -i sillon-demo-sirene_0.1.0_all.deb     # optionnel, nécessite un acc
 
 - **`sillon-server`** : génère les secrets applicatifs (`/etc/sillon/secrets.env`, `chmod 600 root:root`), crée la base `sillon_catalog` et y déploie le catalogue (`schema.sql`), **dimensionne le moteur PostgreSQL selon la RAM et le nombre de cœurs détectés** (`shared_buffers`, `effective_cache_size`, `maintenance_work_mem`, parallélisation, points de contrôle, `pg_stat_statements` — §7.1, redétecté et réappliqué sans effet si déjà correct à chaque réinstallation), configure l'API PostgREST (`/etc/sillon-api.conf`), génère un certificat TLS auto-signé si aucun n'est présent (`/etc/ssl/sillon/`), active le site Nginx, configure la limitation de débit et Fail2Ban sur `/api/rpc/login`, met en place la purge automatique du journal d'audit, et démarre les services `sillon-api` et `nginx`.
 
-  **À la première installation**, l'identifiant et le mot de passe administrateur initiaux s'affichent dans la sortie du `postinst` :
+  **À la première installation**, l'identifiant et le mot de passe administrateur initiaux sont écrits dans `/root/sillon-admin-initial.txt` (`chmod 600 root:root`), jamais affichés en clair sur la sortie du `postinst` — celle-ci se contente d'indiquer l'emplacement du fichier :
   ```
-  === Identifiant administrateur initial : admin@sillon.local ===
-  === Mot de passe administrateur initial : <généré aléatoirement> ===
+  === Identifiants administrateur initiaux écrits dans /root/sillon-admin-initial.txt (lecture root uniquement) ===
+  === À consulter puis à changer dès la première connexion ===
   ```
-  **Noter ce mot de passe immédiatement** : il n'est affiché qu'une seule fois et n'est stocké nulle part en clair.
+  **Consulter ce fichier immédiatement** (`sudo cat /root/sillon-admin-initial.txt`), se connecter, changer le mot de passe depuis le panneau d'administration, puis **supprimer le fichier** (`sudo rm /root/sillon-admin-initial.txt`). Ce mot de passe n'est stocké nulle part ailleurs en clair.
+
+  *(Avant la version 0.1.25 de `sillon-server`, ce mot de passe s'affichait directement dans la sortie du `postinst` — corrigé car cette sortie est généralement journalisée durablement par `apt`/`systemd`, contrairement au fichier root-only ci-dessus.)*
 
 - **`sillon-orchestrateur`** : applique les droits sur `/opt/sillon-orchestrateur`, active et démarre le service `sillon-orchestrateur` (Gunicorn, port 5000 en local).
 
@@ -214,7 +216,7 @@ Valeurs par défaut à l'installation :
 | `duree_max_job_minutes` | 30 |
 | `cpu_max_conteneur_vcpu` | 2 |
 | `ram_max_conteneur_mo` | 4096 |
-| `jobs_simultanes_par_utilisateur` | 1 |
+| `jobs_simultanes_par_utilisateur` | 4 |
 | `quota_disque_base_mo` | 20480 |
 | `work_mem_defaut_mo` | 64 |
 | `maintenance_work_mem_defaut_mo` | 256 |
@@ -280,37 +282,48 @@ Rappel : aucun mécanisme de sauvegarde n'est porté par l'application — la pr
 | `sillon-orchestrateur` refuse de s'installer | `sillon-server` non installé/configuré au préalable (`/etc/sillon/secrets.env` absent) | Installer/vérifier `sillon-server` d'abord |
 | Requêtes SQL normales, mais tous les scripts échouent (statut « erreur ») après un changement d'adresse IP ou un redémarrage du serveur | Adresse hôte détectée par le `postinst` de `sillon-worker` obsolète (§9.1) | `journalctl -u sillon-worker -n 50`, rechercher une erreur de connexion PostgreSQL |
 | Bouton « Journal » (onglet Suivi) affiche systématiquement « journal vide pour l'instant », même pour un job en cours | Corrigé (`python3 -u` / `stdbuf`, worker.py) : la sortie standard d'un interprète non attaché à un terminal était mise en tampon par blocs, jamais vidée avant la fin d'un script court — le journal réellement produit n'apparaissait qu'une fois le job déjà terminé (et donc déjà uniquement dans l'archive téléchargeable, plus dans la fenêtre « en cours ») | `sudo dpkg -i sillon-worker_0.1.0_all.deb` puis `systemctl restart sillon-worker` si une version antérieure au correctif est installée |
+| Import « depuis data.gouv.fr » échoue avec « URL de ressource non autorisée » | Depuis la version 0.1.6 de `sillon-orchestrateur`, seules les URL `http(s)://` dont l'adresse résolue est publique (ni privée/RFC 1918, ni loopback, ni lien-local) sont acceptées — protection contre le détournement de cet import vers un fichier local ou un service interne (SSRF, cf. rapport d'audit de sécurité). **Pas de restriction par nom de domaine** : les ressources data.gouv.fr sont hébergées sur des domaines tiers très divers (portails opendata régionaux, ArcGIS...), une restriction à `data.gouv.fr` casserait la quasi-totalité des imports réels — testé et corrigé en ce sens (§9, non-régression VM de test). Ce message ne devrait donc apparaître que pour une ressource pointant réellement vers une adresse privée/interne | `journalctl -u sillon-orchestrateur -n 50` |
 
 ### 9.1 Changement d'adresse IP du serveur (ou redémarrage avec IP dynamique)
 
 **Symptôme observé en pratique** : après un changement d'adresse IP (DHCP, réaffectation de VM, changement d'interface réseau) suivi ou non d'un redémarrage, les requêtes SQL de l'onglet Travaux continuent de fonctionner normalement, mais **tous** les scripts Python/R déposés échouent immédiatement (statut « erreur », sans même produire de journal d'exécution).
 
-**Cause** : les scripts s'exécutent dans un conteneur Podman rootless, qui n'a pas d'accès direct à `localhost` de l'hôte. Le réseau rootless par défaut (`pasta`) route l'alias `host.containers.internal` vers l'hôte réel, mais en réémettant la connexion avec l'adresse IP LAN de l'hôte comme adresse source (jamais `127.0.0.1`, constaté en pratique dans les journaux PostgreSQL) — c'est pourquoi le `postinst` de `sillon-worker` autorise explicitement **cette seule adresse** dans `pg_hba.conf`, détectée une fois à l'installation :
+**Cause** : les scripts s'exécutent dans un conteneur Podman rootless, qui n'a pas d'accès direct à `localhost` de l'hôte. Le réseau rootless par défaut (`pasta`) route l'alias `host.containers.internal` vers l'hôte réel, mais en réémettant la connexion avec l'adresse IP LAN de l'hôte comme adresse source (jamais `127.0.0.1`, constaté en pratique dans les journaux PostgreSQL) — c'est pourquoi le `postinst` de `sillon-worker` autorise explicitement **cette seule adresse**, détectée une fois à l'installation, à la fois dans `pg_hba.conf` (qui peut l'accepter) :
 
 ```
 host    all             all             <adresse détectée à l'installation>/32            scram-sha-256
 ```
 
-Cette détection n'est **jamais refaite automatiquement** par la suite. Si l'adresse IP du serveur change après coup, cette règle devient obsolète : PostgreSQL rejette toute connexion venant de la nouvelle adresse, donc tout script (qui doit s'y connecter via `SILLON_DSN`) échoue dès sa tentative de connexion — alors que les requêtes SQL de l'onglet Travaux, elles, transitent par l'orchestrateur en `host=localhost` et ne sont jamais concernées.
+et dans `listen_addresses` de `postgresql.conf` (sur quelle(s) interface(s) PostgreSQL écoute réellement — *depuis la version 0.1.2 de `sillon-worker`, restreint à `localhost` + cette seule adresse, plutôt qu'à `*` (toutes les interfaces) auparavant, pour ne pas exposer PostgreSQL au-delà du strict nécessaire — voir rapport d'audit de sécurité) :
+
+```
+listen_addresses = 'localhost,<adresse détectée à l'installation>'
+```
+
+Cette détection n'est **jamais refaite automatiquement** par la suite. Si l'adresse IP du serveur change après coup, ces deux réglages deviennent obsolètes : PostgreSQL n'écoute même plus sur la nouvelle adresse (donc `pg_hba.conf` n'entre jamais en jeu), donc tout script (qui doit s'y connecter via `SILLON_DSN`) échoue dès sa tentative de connexion — alors que les requêtes SQL de l'onglet Travaux, elles, transitent par l'orchestrateur en `host=localhost` et ne sont jamais concernées.
 
 **Remédiation — deux options équivalentes :**
 
-- **Réinstaller `sillon-worker`** (le plus simple, redétecte l'adresse courante et ajoute la règle manquante sans toucher au reste de la configuration) :
+- **Réinstaller `sillon-worker`** (le plus simple, redétecte l'adresse courante, ajoute la règle `pg_hba.conf` manquante et met à jour `listen_addresses` en conséquence, avec redémarrage de PostgreSQL si nécessaire — un simple `reload` ne suffit pas pour `listen_addresses`, cf. §7.1) :
 
   ```bash
-  sudo dpkg -i sillon-worker_0.1.0_all.deb
+  sudo dpkg -i sillon-worker_0.1.2_all.deb
   ```
 
-  L'ancienne règle (adresse obsolète) n'est pas supprimée — elle ne gêne pas, `pg_hba.conf` accepte plusieurs règles `host` sans conflit — mais peut être retirée manuellement par propreté si souhaité.
+  L'ancienne règle `pg_hba.conf` (adresse obsolète) n'est pas supprimée — elle ne gêne pas, `pg_hba.conf` accepte plusieurs règles `host` sans conflit — mais peut être retirée manuellement par propreté si souhaité. `listen_addresses`, lui, est remplacé (pas cumulé) par la nouvelle adresse.
 
-- **Corriger à la main**, sans reconstruire/redéployer de paquet :
+- **Corriger à la main**, sans reconstruire/redéployer de paquet — **deux réglages à modifier**, pas seulement `pg_hba.conf` :
 
   ```bash
   ADRESSE_HOTE=$(ip -4 route get 1.1.1.1 | grep -oP 'src \K\S+' | head -1)
   echo "host    all             all             ${ADRESSE_HOTE}/32            scram-sha-256" \
       | sudo tee -a /etc/postgresql/17/main/pg_hba.conf
-  sudo systemctl reload postgresql
+  sudo sed -i "s/^#\?listen_addresses.*/listen_addresses = 'localhost,${ADRESSE_HOTE}'/" \
+      /etc/postgresql/17/main/postgresql.conf
+  sudo systemctl restart postgresql
   ```
+
+  Le `restart` (pas un simple `reload`) est nécessaire ici : `listen_addresses` est à contexte « postmaster », seul un redémarrage rouvre les sockets d'écoute (§7.1).
 
 **Point de vigilance pour un serveur à adresse IP dynamique (DHCP sans bail réservé)** : ce mécanisme n'est pas auto-réparant — chaque changement d'adresse casse à nouveau les scripts jusqu'à la prochaine réinstallation ou correction manuelle. Pour un déploiement durable, préférer une **adresse IP statique ou un bail DHCP réservé** pour le serveur SILLON, ce qui élimine le problème à la source plutôt que de le corriger à chaque occurrence.
 

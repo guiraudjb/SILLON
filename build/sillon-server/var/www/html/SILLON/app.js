@@ -121,6 +121,40 @@ function afficherErreur(conteneur, erreur) {
     conteneur.innerHTML = `<div class="fr-alert fr-alert--error fr-alert--sm">${echapper(erreur.message || String(erreur))}</div>`;
 }
 
+// Indicateur de chargement générique (spinner + message), pour toute action
+// asynchrone dont la durée réelle n'est pas bornée (traitement serveur,
+// import, requête longue...) - sans lui, un texte statique ("... en
+// cours") reste affiché sans évolution visible, indiscernable d'un
+// blocage sur un traitement de plusieurs minutes (constaté en pratique,
+// import data.gouv.fr d'un gros fichier réel). Même motif que
+// Carto.actualiserApercu(), généralisé ici pour être réutilisé partout où
+// une action serveur peut prendre du temps.
+function afficherChargement(conteneur, message) {
+    conteneur.innerHTML = `
+        <div class="sillon-chargement" role="status" aria-live="polite">
+            <span class="sillon-spinner" aria-hidden="true"></span>
+            <p>${echapper(message)}</p>
+        </div>`;
+}
+
+// Désactive un bouton pour la durée d'une action asynchrone, avec un
+// spinner compact affiché dans le bouton lui-même plutôt que dans un
+// conteneur de résultat séparé - pour les actions qui n'ont pas de zone de
+// résultat dédiée à remplacer (export, enregistrement...) sans recouvrir
+// un résultat déjà affiché à l'écran. Retourne une fonction à appeler dans
+// un "finally" pour restaurer le bouton.
+function verrouillerBouton(bouton, texteChargement) {
+    const contenuOriginal = bouton.innerHTML;
+    bouton.disabled = true;
+    if (texteChargement) {
+        bouton.innerHTML = `<span class="sillon-spinner sillon-spinner--bouton" aria-hidden="true"></span>${echapper(texteChargement)}`;
+    }
+    return () => {
+        bouton.disabled = false;
+        bouton.innerHTML = contenuOriginal;
+    };
+}
+
 function echapper(texte) {
     const div = document.createElement("div");
     div.textContent = texte == null ? "" : String(texte);
@@ -438,7 +472,7 @@ const Bases = {
                     <button class="fr-btn fr-btn--sm fr-btn--tertiary-no-outline fr-icon-checkbox-circle-line bouton-selectionner" data-id="${b.id}">Sélectionner</button>
                     <button class="fr-btn fr-btn--sm fr-btn--tertiary-no-outline fr-icon-table-line bouton-tables" data-id="${b.id}">Tables</button>
                     ${proprietaire ? `<button class="fr-btn fr-btn--sm fr-btn--tertiary-no-outline fr-icon-share-line bouton-partager" data-id="${b.id}">Partager</button>` : ""}
-                    ${proprietaire ? `<button class="fr-btn fr-btn--sm fr-btn--tertiary-no-outline fr-icon-delete-bin-line" onclick="Bases.supprimerBase(${b.id}, '${b.nom_pg}')">Supprimer la base</button>` : ""}
+                    ${proprietaire ? `<button class="fr-btn fr-btn--sm fr-btn--tertiary-no-outline fr-icon-delete-bin-line" onclick="Bases.supprimerBase(this, ${b.id}, '${b.nom_pg}')">Supprimer la base</button>` : ""}
                 </td>
             </tr>
             <tr class="ligne-tables" id="tables-${b.id}" hidden><td colspan="${colonnes}"></td></tr>
@@ -521,6 +555,13 @@ const Bases = {
     async partager(idBase) {
         const email = document.getElementById(`nouveau-partage-email-${idBase}`).value.trim();
         const autoriseScripts = document.getElementById(`nouveau-partage-scripts-${idBase}`).checked;
+        // Boutons/champs de ce bloc désactivés pour la durée de l'appel
+        // (§5.2) : sur succès, afficherPartage() régénère entièrement ce
+        // contenu (donc les réactive de fait) ; sur échec, restaurés
+        // explicitement ci-dessous.
+        const cellule = document.getElementById(`partage-${idBase}`).querySelector("td");
+        const elements = cellule.querySelectorAll("button, input");
+        elements.forEach((el) => { el.disabled = true; });
         try {
             await appelJson(`/orchestrateur/bases/${idBase}/partager`, {
                 method: "POST",
@@ -529,11 +570,15 @@ const Bases = {
             await Bases.afficherPartage(idBase);
             await Bases.afficherPartage(idBase);
         } catch (erreur) {
+            elements.forEach((el) => { el.disabled = false; });
             alert(erreur.message);
         }
     },
 
     async revoquer(idBase, email) {
+        const cellule = document.getElementById(`partage-${idBase}`).querySelector("td");
+        const elements = cellule.querySelectorAll("button, input");
+        elements.forEach((el) => { el.disabled = true; });
         try {
             await appelJson(`/orchestrateur/bases/${idBase}/revoquer`, {
                 method: "POST",
@@ -542,6 +587,7 @@ const Bases = {
             await Bases.afficherPartage(idBase);
             await Bases.afficherPartage(idBase);
         } catch (erreur) {
+            elements.forEach((el) => { el.disabled = false; });
             alert(erreur.message);
         }
     },
@@ -598,7 +644,7 @@ const Bases = {
         });
         cellule.querySelectorAll(".bouton-supprimer-table").forEach((bouton) => {
             const t = tables[Number(bouton.dataset.index)];
-            bouton.addEventListener("click", () => Bases.supprimerTable(idBase, t.nom_table, t.nb_lignes));
+            bouton.addEventListener("click", () => Bases.supprimerTable(bouton, idBase, t.nom_table, t.nb_lignes));
         });
     },
 
@@ -626,6 +672,9 @@ const Bases = {
                 <p class="fr-text--sm">
                     ${fiche.nb_lignes} ligne(s) — ${formaterTaille(fiche.taille_octets)}
                     — dernier import : ${fiche.date_dernier_import ? new Date(fiche.date_dernier_import).toLocaleString("fr-FR") : "aucun (table créée par requête SQL)"}
+                    ${fiche.a_documentation
+                        ? ` — <a href="/orchestrateur/bases/${idBase}/tables/${encodeURIComponent(nomTable)}/documentation" target="_blank" rel="noopener">Voir la documentation (PDF)</a>`
+                        : ""}
                 </p>
 
                 <table class="fr-table fr-table--sm"><caption>Colonnes</caption>
@@ -643,13 +692,15 @@ const Bases = {
             </div>`;
     },
 
-    async supprimerTable(idBase, nomTable, nbLignes) {
+    async supprimerTable(bouton, idBase, nomTable, nbLignes) {
         if (!confirm(`Supprimer la table « ${nomTable} » et ses ${nbLignes} ligne(s) ? Cette action est irréversible.`)) return;
+        const restaurer = verrouillerBouton(bouton);
         try {
             await appelJson(`/orchestrateur/bases/${idBase}/tables/${encodeURIComponent(nomTable)}`, { method: "DELETE" });
             await Bases.afficherTables(idBase);
             await Bases.afficherTables(idBase);
         } catch (erreur) {
+            restaurer();
             alert(erreur.message);
         }
     },
@@ -658,11 +709,12 @@ const Bases = {
     // saisie du nom exact, en plus de la vérification de propriété faite
     // côté serveur - la suppression physique est différée en job (§9),
     // suivie comme les autres traitements dans l'onglet Suivi.
-    async supprimerBase(idBase, nomBase) {
+    async supprimerBase(bouton, idBase, nomBase) {
         const saisie = prompt(`Action irréversible. Pour confirmer la suppression de la base, saisissez son nom exact :\n${nomBase}`);
         if (saisie === null) return;
         if (saisie !== nomBase) return alert("Nom incorrect, suppression annulée.");
 
+        const restaurer = verrouillerBouton(bouton);
         try {
             const resultat = await appelJson(`/orchestrateur/bases/${idBase}/supprimer`, { method: "POST" });
             if (Etat.baseSelectionnee && Etat.baseSelectionnee.id === idBase) {
@@ -674,6 +726,7 @@ const Bases = {
             alert(`Suppression de la base en cours (job n°${resultat.id_job}), suivez sa progression dans l'onglet Suivi.`);
             await Bases.charger();
         } catch (erreur) {
+            restaurer();
             alert(erreur.message);
         }
     },
@@ -756,7 +809,14 @@ const Travaux = {
         const estEcriture = /^\s*(insert|update|delete|create|drop|alter|truncate|grant|revoke)\b/i.test(requete);
         if (estEcriture && !confirm("Cette requête modifie la structure ou les données. Continuer ?")) return;
 
-        conteneur.innerHTML = "Exécution…";
+        // Désactivé + spinner (§11) : une requête synchrone peut tourner
+        // jusqu'à duree_max_job_minutes (30 min par défaut) sans aucun
+        // évènement intermédiaire possible côté serveur (contrairement à
+        // l'import data.gouv.fr, pas de flux NDJSON ici) - le texte statique
+        // précédent restait figé tout ce temps, indiscernable d'un blocage.
+        const bouton = document.getElementById("travaux-bouton-executer");
+        bouton.disabled = true;
+        afficherChargement(conteneur, "Exécution de la requête en cours…");
         try {
             // appel() plutôt qu'appelJson() : un dépassement de délai (409
             // ci-dessous, "delai_depasse") appelle une réponse différente
@@ -776,6 +836,8 @@ const Travaux = {
             Travaux.rafraichirHistorique();
         } catch (erreur) {
             afficherErreur(conteneur, erreur);
+        } finally {
+            bouton.disabled = false;
         }
     },
 
@@ -793,7 +855,7 @@ const Travaux = {
         const conteneur = document.getElementById("resultat-travaux");
         const requete = Travaux.editeur.getValue().trim();
         if (!Etat.baseSelectionnee || !requete) return;
-        conteneur.innerHTML = "Mise en file d'attente…";
+        afficherChargement(conteneur, "Mise en file d'attente…");
         try {
             const resultat = await appelJson("/orchestrateur/sql/job", {
                 method: "POST",
@@ -823,21 +885,29 @@ const Travaux = {
         if (!Etat.baseSelectionnee) return alert("Sélectionnez d'abord une base.");
         const requete = Travaux.editeur.getValue().trim();
         if (!requete) return;
-        const reponse = await appel("/orchestrateur/sql/export", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ base_id: Etat.baseSelectionnee.id, requete }),
-        });
-        if (!reponse.ok) {
-            const corps = await reponse.json().catch(() => ({}));
-            return alert(corps.erreur || "Export impossible.");
+        // Spinner dans le bouton lui-même, pas dans resultat-travaux (§5.3) :
+        // cette action ne doit jamais recouvrir un résultat de requête déjà
+        // affiché à l'écran, contrairement à Exécuter.
+        const restaurer = verrouillerBouton(document.getElementById("travaux-bouton-exporter"), "Export en cours…");
+        try {
+            const reponse = await appel("/orchestrateur/sql/export", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ base_id: Etat.baseSelectionnee.id, requete }),
+            });
+            if (!reponse.ok) {
+                const corps = await reponse.json().catch(() => ({}));
+                return alert(corps.erreur || "Export impossible.");
+            }
+            const blob = await reponse.blob();
+            const lien = document.createElement("a");
+            lien.href = URL.createObjectURL(blob);
+            lien.download = "export.csv";
+            lien.click();
+            URL.revokeObjectURL(lien.href);
+        } finally {
+            restaurer();
         }
-        const blob = await reponse.blob();
-        const lien = document.createElement("a");
-        lien.href = URL.createObjectURL(blob);
-        lien.download = "export.csv";
-        lien.click();
-        URL.revokeObjectURL(lien.href);
     },
 
     // Historique persistant (§5.3) : lu directement via l'API de requêtage
@@ -897,6 +967,7 @@ const Travaux = {
         if (!requete) return;
         const nom = prompt("Nom de la requête enregistrée :");
         if (!nom) return;
+        const restaurer = verrouillerBouton(document.getElementById("travaux-bouton-enregistrer"));
         try {
             await appelJson("/api/rpc/enregistrer_requete", {
                 method: "POST",
@@ -905,6 +976,8 @@ const Travaux = {
             await Travaux.rafraichirRequetesEnregistrees();
         } catch (erreur) {
             alert(erreur.message);
+        } finally {
+            restaurer();
         }
     },
 
@@ -1015,12 +1088,23 @@ const Import = {
     // pas seulement sur les 50 lignes de l'aperçu.
     async valider() {
         const conteneur = document.getElementById("resultat-import");
+        const bouton = document.getElementById("import-bouton-confirmer");
         const apercu = Etat.dernierApercu;
         if (!apercu) return;
 
-        conteneur.innerHTML = "Contrôle de cohérence en cours…";
+        // Désactivé ici (pas seulement dans executerImport) : sans ça, un
+        // double-clic pendant cette phase de contrôle de cohérence déclenche
+        // deux vérifications concurrentes - le bouton reste visible tout du
+        // long, contrairement aux boutons dynamiques d'exclusion/remplacement
+        // ci-dessous, remplacés avec le contenu de resultat-import dès le
+        // premier appel (protection déjà assurée par ce remplacement).
+        // Réactivé soit ici (anomalie détectée ou erreur, écran encore à ce
+        // stade), soit dans executerImport (chemin normal, qui prend le relai).
+        bouton.disabled = true;
+        afficherChargement(conteneur, "Contrôle de cohérence en cours…");
+        let verification;
         try {
-            const verification = await appelJson("/orchestrateur/import/verifier", {
+            verification = await appelJson("/orchestrateur/import/verifier", {
                 method: "POST",
                 body: JSON.stringify({
                     jeton: apercu.jeton,
@@ -1031,12 +1115,14 @@ const Import = {
                     avec_entete: apercu.avec_entete,
                 }),
             });
-            if (verification.nb_lignes_anomalies > 0) {
-                Import.afficherAnomalies(verification);
-                return;
-            }
         } catch (erreur) {
+            bouton.disabled = false;
             return afficherErreur(conteneur, erreur);
+        }
+        if (verification.nb_lignes_anomalies > 0) {
+            bouton.disabled = false;
+            Import.afficherAnomalies(verification);
+            return;
         }
 
         Import.executerImport(false, []);
@@ -1080,10 +1166,20 @@ const Import = {
 
     async executerImport(remplacer, exclureLignes) {
         const conteneur = document.getElementById("resultat-import");
+        const bouton = document.getElementById("import-bouton-confirmer");
         const apercu = Etat.dernierApercu;
         const baseId = document.getElementById("import-base-cible").value || null;
 
-        conteneur.innerHTML = "Import en cours…";
+        // Bouton principal désactivé ici aussi (pas seulement dans valider())
+        // : cette fonction est également atteinte depuis les boutons
+        // d'exclusion/remplacement, dynamiquement recréés à chaque appel -
+        // seul "Confirmer l'import" reste un élément DOM stable tout du long,
+        // donc le seul à nécessiter une désactivation explicite (§ commentaire
+        // de valider() ci-dessus). Réactivé dans le "finally" : c'est le
+        // dernier maillon de toutes les chaînes d'appel (valider,
+        // confirmerExclusion, confirmerRemplacement).
+        bouton.disabled = true;
+        afficherChargement(conteneur, "Import en cours…");
         try {
             // appel() plutôt qu'appelJson() : la réponse 409 « collision »
             // n'est pas une erreur à afficher telle quelle, mais un choix à
@@ -1104,6 +1200,7 @@ const Import = {
                     avec_entete: apercu.avec_entete,
                     remplacer,
                     exclure_lignes: exclureLignes,
+                    ...(apercu.nom_documentation ? { nom_documentation: apercu.nom_documentation } : {}),
                 }),
             });
             const resultat = await reponse.json().catch(() => ({}));
@@ -1122,6 +1219,8 @@ const Import = {
             await Bases.charger();
         } catch (erreur) {
             afficherErreur(conteneur, erreur);
+        } finally {
+            bouton.disabled = false;
         }
     },
 
@@ -1171,6 +1270,12 @@ const Datagouv = {
             conteneur.innerHTML = '<p class="fr-text--sm">Aucun jeu de données trouvé.</p>';
             return;
         }
+        // Documentation (§5.1) : facultative et indépendante du choix de la
+        // ressource de données - un menu déroulant par jeu de données
+        // ("Aucune" par défaut), lu au moment du clic sur "Importer cette
+        // ressource" plutôt que lié à une ressource précise, puisqu'un même
+        // PDF peut légitimement documenter plusieurs fichiers d'un même jeu
+        // (ex. DVF : 5 fichiers de données, 4 PDF de documentation).
         conteneur.innerHTML = datasets.map((jeu, i) => `
             <div class="fr-card fr-card--sm fr-mb-2w">
                 <div class="fr-card__body">
@@ -1180,14 +1285,23 @@ const Datagouv = {
                             ${jeu.organisation ? `<strong>${echapper(jeu.organisation)}</strong> — ` : ""}
                             ${echapper(jeu.description || "")}
                         </p>
-                        ${jeu.ressources_csv.length === 0
-                            ? '<p class="fr-text--sm fr-text--disabled">Aucun fichier CSV disponible pour ce jeu de données.</p>'
-                            : `<ul class="fr-text--sm">${jeu.ressources_csv.map((r, j) => `
+                        ${jeu.ressources_donnees.length === 0
+                            ? '<p class="fr-text--sm fr-text--disabled">Aucun fichier de données exploitable (CSV/TXT/JSON/ZIP) pour ce jeu de données.</p>'
+                            : `<ul class="fr-text--sm">${jeu.ressources_donnees.map((r, j) => `
                                 <li class="fr-mb-1w">
-                                    ${echapper(r.titre || "ressource.csv")}
+                                    ${echapper(r.titre || "ressource")}
                                     ${r.taille ? ` (${Datagouv.formaterTaille(r.taille)})` : " (taille inconnue)"}
                                     <button class="fr-btn fr-btn--sm fr-btn--tertiary fr-ml-1w" onclick="Datagouv.importerRessource(${i}, ${j})">Importer cette ressource</button>
                                 </li>`).join("")}</ul>`}
+                        ${jeu.ressources_documentation.length > 0 ? `
+                            <label class="fr-label fr-text--sm" for="datagouv-doc-${i}">
+                                Documentation à joindre (facultatif)
+                            </label>
+                            <select class="fr-select" id="datagouv-doc-${i}">
+                                <option value="-1" selected>Aucune</option>
+                                ${jeu.ressources_documentation.map((r, j) => `
+                                    <option value="${j}">${echapper(r.titre || "documentation.pdf")}</option>`).join("")}
+                            </select>` : ""}
                     </div>
                 </div>
             </div>`).join("");
@@ -1201,14 +1315,24 @@ const Datagouv = {
     },
 
     async importerRessource(indexJeu, indexRessource) {
-        const ressource = Etat.derniersResultatsDatagouv[indexJeu].ressources_csv[indexRessource];
+        const jeu = Etat.derniersResultatsDatagouv[indexJeu];
+        const ressource = jeu.ressources_donnees[indexRessource];
         const conteneur = document.getElementById("datagouv-resultats");
-        conteneur.innerHTML = "Téléchargement de la ressource en cours…";
+
+        const selecteurDoc = document.getElementById(`datagouv-doc-${indexJeu}`);
+        const indexDoc = selecteurDoc ? Number(selecteurDoc.value) : -1;
+        const documentation = indexDoc >= 0 ? jeu.ressources_documentation[indexDoc] : null;
+
+        afficherChargement(conteneur, "Téléchargement de la ressource en cours…");
         try {
             const reponse = await appel("/orchestrateur/import/datagouv/apercu", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ url_ressource: ressource.url, nom_fichier: ressource.titre || "ressource.csv" }),
+                body: JSON.stringify({
+                    url_ressource: ressource.url,
+                    nom_fichier: ressource.titre || "ressource.csv",
+                    ...(documentation ? { url_documentation: documentation.url } : {}),
+                }),
             });
             if (!reponse.ok) {
                 // Erreur renvoyée avant l'entrée dans le flux (ex. URL
@@ -1237,10 +1361,25 @@ const Datagouv = {
 
                     if (evenement.type === "progression") {
                         Datagouv.afficherProgression(conteneur, evenement);
+                    } else if (evenement.type === "etape") {
+                        // Couvre les phases sans progression chiffrée
+                        // (extraction ZIP, conversion JSON, analyse - §5.1) :
+                        // sans cet évènement, le dernier message de
+                        // progression du téléchargement (à 100%) restait
+                        // affiché figé pendant potentiellement plusieurs
+                        // minutes sur un gros fichier réel (ex. DVF, ~5 min
+                        // constaté en pratique), indiscernable d'un blocage.
+                        afficherChargement(conteneur, evenement.message);
                     } else if (evenement.type === "erreur") {
                         throw new Error(evenement.message);
                     } else if (evenement.type === "resultat") {
                         const { type, ...apercu } = evenement;
+                        // Nom mémorisé ici (pas seulement documentation_disponible,
+                        // déjà dans apercu) : /import/valider en a besoin pour
+                        // l'attacher à la table lors de sa création.
+                        if (apercu.documentation_disponible && documentation) {
+                            apercu.nom_documentation = documentation.titre || "documentation.pdf";
+                        }
                         Etat.dernierApercu = apercu;
                         Import.afficherAssistant(apercu, apercu.nom_fichier);
                         document.getElementById("resultat-import").innerHTML = "";
@@ -1388,7 +1527,7 @@ dbDisconnect(connexion)
         donnees.append("base_id", baseId);
 
         Modales.fermer(document.getElementById("modal-editeur-script"));
-        conteneur.innerHTML = "Envoi du script…";
+        afficherChargement(conteneur, "Envoi du script…");
         try {
             const resultat = await appelJson("/orchestrateur/scripts/deposer", { method: "POST", body: donnees });
             conteneur.innerHTML = `<div class="fr-alert fr-alert--info fr-alert--sm">Script mis en file d'attente (job n°${resultat.id_job}). Suivez son exécution dans l'onglet Suivi.</div>`;
@@ -1519,7 +1658,7 @@ const Suivi = {
                 <td>${new Date(job.date_creation).toLocaleString("fr-FR")}</td>
                 <td>${Suivi._celluleDetail(job)}</td>
                 <td>
-                    ${["en_attente", "en_cours"].includes(job.statut) ? `<button class="fr-btn fr-btn--sm fr-btn--tertiary-no-outline fr-icon-close-line" onclick="Suivi.annuler(${job.id})">Annuler</button>` : ""}
+                    ${["en_attente", "en_cours"].includes(job.statut) ? `<button class="fr-btn fr-btn--sm fr-btn--tertiary-no-outline fr-icon-close-line" onclick="Suivi.annuler(this, ${job.id})">Annuler</button>` : ""}
                     ${estScript(job.type) && job.statut !== "annule" ? `<button class="fr-btn fr-btn--sm fr-btn--tertiary-no-outline fr-icon-file-text-line" onclick="Suivi.afficherJournal(${job.id})">Journal</button>` : ""}
                     ${estScript(job.type) && job.statut === "termine" ? `<button class="fr-btn fr-btn--sm fr-btn--tertiary-no-outline fr-icon-image-line" onclick="Suivi.afficherApercus(${job.id})">Aperçus</button>` : ""}
                     ${job.statut === "termine" && job.chemin_resultat ? `<a class="fr-btn fr-btn--sm fr-btn--tertiary-no-outline fr-icon-download-line" href="/orchestrateur/jobs/${job.id}/telecharger">Télécharger</a>` : ""}
@@ -1555,9 +1694,17 @@ const Suivi = {
         return `${nomFichier}${nomFichier ? "<br>" : ""}${principal}${detail}`;
     },
 
-    async annuler(idJob) {
-        await appelJson("/api/rpc/annuler_job", { method: "POST", body: JSON.stringify({ _id_job: idJob }) });
-        Suivi.rafraichir();
+    async annuler(bouton, idJob) {
+        // Absence de try/catch constatée en pratique (§5.5) : un échec
+        // réseau ne se voyait jusqu'ici d'aucune façon.
+        const restaurer = verrouillerBouton(bouton);
+        try {
+            await appelJson("/api/rpc/annuler_job", { method: "POST", body: JSON.stringify({ _id_job: idJob }) });
+            await Suivi.rafraichir();
+        } catch (erreur) {
+            restaurer();
+            alert(erreur.message);
+        }
     },
 
     // Journal consultable pendant l'exécution, pas seulement une fois le
@@ -2534,11 +2681,7 @@ const Carto = {
         // réussi, cf. correctif du sélecteur Détail).
         boutonActualiser.disabled = true;
         boutonTelecharger.disabled = true;
-        conteneur.innerHTML = `
-            <div class="sillon-chargement" role="status" aria-live="polite">
-                <span class="sillon-spinner" aria-hidden="true"></span>
-                <p>Génération de la carte en cours…</p>
-            </div>`;
+        afficherChargement(conteneur, "Génération de la carte en cours…");
         try {
             const cadrage = document.getElementById("carto-cadrage").value;
             // "commune" par défaut (cadrage Monde/Commune, #carto-detail-groupe
@@ -3314,14 +3457,15 @@ const Administration = {
                 <td><span class="fr-badge fr-badge--sm ${u.profil === "administrateur" ? "fr-badge--error" : "fr-badge--info"}">${echapper(u.profil)}</span></td>
                 <td>${u.actif ? "Oui" : "Non"}</td>
                 <td>
-                    <button class="fr-btn fr-btn--sm fr-btn--tertiary-no-outline fr-icon-lock-unlock-line" onclick="Administration.reinitialiserMdp('${u.email}')">Réinitialiser mdp</button>
-                    <button class="fr-btn fr-btn--sm fr-btn--tertiary-no-outline fr-icon-${u.actif ? "close-circle-line" : "check-line"}" onclick="Administration.basculerActivation('${u.email}', ${u.actif})">${u.actif ? "Désactiver" : "Réactiver"}</button>
+                    <button class="fr-btn fr-btn--sm fr-btn--tertiary-no-outline fr-icon-lock-unlock-line" onclick="Administration.reinitialiserMdp(this, '${u.email}')">Réinitialiser mdp</button>
+                    <button class="fr-btn fr-btn--sm fr-btn--tertiary-no-outline fr-icon-${u.actif ? "close-circle-line" : "check-line"}" onclick="Administration.basculerActivation(this, '${u.email}', ${u.actif})">${u.actif ? "Désactiver" : "Réactiver"}</button>
                 </td>
             </tr>`).join("");
     },
 
     async creerUtilisateur(evenement) {
         evenement.preventDefault();
+        const restaurer = verrouillerBouton(evenement.submitter);
         try {
             await appelJson("/api/rpc/creer_utilisateur", {
                 method: "POST",
@@ -3333,27 +3477,41 @@ const Administration = {
                 }),
             });
             document.getElementById("formulaire-creation-utilisateur").reset();
-            Administration.chargerUtilisateurs();
+            await Administration.chargerUtilisateurs();
         } catch (erreur) {
             alert(erreur.message);
+        } finally {
+            restaurer();
         }
     },
 
-    async reinitialiserMdp(email) {
+    async reinitialiserMdp(bouton, email) {
         const nouveauMdp = prompt(`Nouveau mot de passe pour ${email} (12 caractères minimum) :`);
         if (!nouveauMdp) return;
+        const restaurer = verrouillerBouton(bouton);
         try {
             await appelJson("/api/rpc/reinitialiser_mdp", { method: "POST", body: JSON.stringify({ _email: email, _nouveau_mdp: nouveauMdp }) });
             alert("Mot de passe réinitialisé.");
         } catch (erreur) {
             alert(erreur.message);
+        } finally {
+            restaurer();
         }
     },
 
-    async basculerActivation(email, actifActuellement) {
+    async basculerActivation(bouton, email, actifActuellement) {
+        // Absence de try/catch constatée en pratique (§5.6) : un échec réseau
+        // ou un refus serveur ne se voyait jusqu'ici d'aucune façon, le
+        // bouton restait affiché tel quel sans aucun retour à l'administrateur.
         const fonction = actifActuellement ? "desactiver_utilisateur" : "reactiver_utilisateur";
-        await appelJson(`/api/rpc/${fonction}`, { method: "POST", body: JSON.stringify({ _email: email }) });
-        Administration.chargerUtilisateurs();
+        const restaurer = verrouillerBouton(bouton);
+        try {
+            await appelJson(`/api/rpc/${fonction}`, { method: "POST", body: JSON.stringify({ _email: email }) });
+            await Administration.chargerUtilisateurs();
+        } catch (erreur) {
+            restaurer();
+            alert(erreur.message);
+        }
     },
 
     async chargerQuotas() {

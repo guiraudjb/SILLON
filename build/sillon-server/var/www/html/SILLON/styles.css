@@ -164,6 +164,20 @@ code {
     animation: sillon-spinner-rotation 0.8s linear infinite;
 }
 
+/* Variante compacte, utilisée à l'intérieur d'un bouton (Travaux.exporter,
+   Travaux.enregistrerRequete...) plutôt que dans un conteneur de résultat
+   dédié - pour ne jamais recouvrir un résultat déjà affiché à l'écran
+   pendant une action secondaire (export, enregistrement) qui n'a pas
+   besoin de le remplacer. */
+.sillon-spinner--bouton {
+    width: 1rem;
+    height: 1rem;
+    border-width: 2px;
+    display: inline-block;
+    vertical-align: -0.15em;
+    margin-right: 0.4rem;
+}
+
 @keyframes sillon-spinner-rotation {
     to { transform: rotate(360deg); }
 }

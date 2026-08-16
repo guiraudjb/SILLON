@@ -145,7 +145,7 @@ INSERT INTO public.parametres (cle, valeur) VALUES
     ('cpu_max_conteneur_vcpu',           '2'),
     ('ram_max_conteneur_mo',             '4096'),
     ('taille_max_csv_mo',                '2048'),
-    ('jobs_simultanes_par_utilisateur',  '1'),
+    ('jobs_simultanes_par_utilisateur',  '4'),
     ('quota_disque_base_mo',             '20480'),
     ('work_mem_defaut_mo',               '64'),
     -- Mémoire de travail dédiée à la construction des index (CREATE INDEX,
@@ -684,10 +684,50 @@ GRANT SELECT ON public.vue_mes_jobs TO agent, lecteur, administrateur;
 CREATE OR REPLACE FUNCTION public.creer_job(_type public.type_job, _base_id INTEGER, _payload JSONB DEFAULT '{}'::jsonb)
 RETURNS INTEGER AS $$
 DECLARE
-    _id_job         INTEGER;
-    _max_simultanes INTEGER;
-    _en_cours       INTEGER;
+    _id_job           INTEGER;
+    _max_simultanes   INTEGER;
+    _en_cours         INTEGER;
+    _proprietaire     BOOLEAN;
+    _autorise_scripts BOOLEAN;
 BEGIN
+    -- Verification d'appartenance (§8.4, meme esprit que partager_base/
+    -- revoquer_partage juste au-dessus) : sans elle, l'exposition PostgREST
+    -- automatique de toute fonction accordee a "agent" (POST
+    -- /api/rpc/creer_job, atteignable sans jamais passer par
+    -- orchestrateur.py) permettait de creer un job sur la base de
+    -- N'IMPORTE QUEL utilisateur, y compris l'administrateur, en fournissant
+    -- directement son role_pg/nom_pg dans _payload - demontre en conditions
+    -- reelles (cf. rapport d'audit de securite). base_accessible()/
+    -- exiger_script cote Flask ne protegeaient que le chemin normal, jamais
+    -- cet appel RPC direct.
+    IF _type = 'creation_base' THEN
+        IF _base_id IS NOT NULL THEN
+            RAISE EXCEPTION 'creation_base ne porte jamais de base cible';
+        END IF;
+    ELSE
+        IF _base_id IS NULL THEN
+            RAISE EXCEPTION 'base_id requis pour ce type de job';
+        END IF;
+
+        SELECT (b.proprietaire_id = public._id_courant()), COALESCE(p.autorise_scripts, false)
+        INTO _proprietaire, _autorise_scripts
+        FROM public.bases b
+        LEFT JOIN public.partages p ON p.base_id = b.id AND p.beneficiaire_id = public._id_courant()
+        WHERE b.id = _base_id AND (b.proprietaire_id = public._id_courant() OR p.beneficiaire_id = public._id_courant());
+
+        IF NOT FOUND THEN
+            RAISE EXCEPTION 'Base introuvable ou inaccessible';
+        END IF;
+
+        IF _type = 'suppression_base' AND NOT _proprietaire THEN
+            RAISE EXCEPTION 'Seul le proprietaire de la base peut la supprimer';
+        END IF;
+
+        IF _type IN ('script_python', 'script_r') AND NOT _proprietaire AND NOT _autorise_scripts THEN
+            RAISE EXCEPTION 'Execution de script non autorisee sur cette base';
+        END IF;
+    END IF;
+
     SELECT valeur::INTEGER INTO _max_simultanes FROM public.parametres WHERE cle = 'jobs_simultanes_par_utilisateur';
     SELECT count(*) INTO _en_cours FROM public.jobs
         WHERE utilisateur_id = public._id_courant() AND statut IN ('en_attente', 'en_cours');
@@ -696,8 +736,14 @@ BEGIN
         RAISE EXCEPTION 'Quota de jobs simultanes atteint (%). Voir §11.', _max_simultanes;
     END IF;
 
+    -- nom_pg/role_pg ne sont jamais retenus depuis l'appelant, meme s'il en
+    -- fournit (defense en profondeur, redondante avec le nettoyage cote
+    -- orchestrateur.py/worker.py qui ne les envoient plus) : les
+    -- consommateurs de jobs redérivent ces deux valeurs eux-memes depuis
+    -- base_id/utilisateur_id au moment du traitement, jamais depuis ce
+    -- payload stocke en base.
     INSERT INTO public.jobs (utilisateur_id, type, base_id, payload)
-    VALUES (public._id_courant(), _type, _base_id, _payload)
+    VALUES (public._id_courant(), _type, _base_id, (_payload - 'nom_pg' - 'role_pg'))
     RETURNING id INTO _id_job;
 
     -- Reveil des travailleurs asynchrones en attente (§9).

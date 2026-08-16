@@ -14,12 +14,15 @@ deux fois, quel que soit le nombre de workers).
 
 import csv
 import io
+import ipaddress
 import json
 import mimetypes
 import os
 import queue
+import random
 import re
 import smtplib
+import socket
 import threading
 import time
 import unicodedata
@@ -31,6 +34,7 @@ import zipfile
 from datetime import date, datetime
 from email.message import EmailMessage
 
+import ijson
 import jwt
 import psycopg2
 import psycopg2.extras
@@ -72,6 +76,21 @@ except OSError:
 
     RESULTATS_DIR = os.path.join(tempfile.gettempdir(), "sillon-resultats")
     os.makedirs(RESULTATS_DIR, exist_ok=True)
+
+# Jetons emis exclusivement par uuid.uuid4().hex (32 caracteres hexa) - les
+# trois routes qui les generent (/import/apercu, /import/apercu_local,
+# /import/datagouv/apercu) suivent toutes ce format. Rejeter toute autre
+# forme avant meme de construire un chemin sous STAGING_DIR empeche un
+# "jeton" contenant "../" d'en sortir (§8.10) : sans ce controle, n'importe
+# quel agent authentifie pouvait lire (verifier_import) puis importer dans
+# une table lui appartenant (valider_import) le fichier d'un autre job -
+# demontre en conditions reelles (cf. rapport d'audit de securite).
+_JETON_RE = re.compile(r"[0-9a-f]{32}")
+
+
+def _jeton_valide(jeton):
+    return bool(jeton) and _JETON_RE.fullmatch(jeton) is not None
+
 
 TYPES_SQL = {
     "Texte": "TEXT",
@@ -138,12 +157,92 @@ def lire_parametre(cle, defaut=None):
 def _opener_datagouv(proxy_url=None):
     if proxy_url is None:
         proxy_url = lire_parametre("datagouv_proxy_url", "") or ""
+    # OpenerDirector construit à la main plutôt que build_opener() (§5.1) :
+    # build_opener() ajoute toujours FileHandler/FTPHandler par défaut, même
+    # sans les demander explicitement - un opener limité aux seuls handlers
+    # HTTP(S) ci-dessous empêche par construction qu'une URL "file://" ou
+    # "ftp://" fournie par le client (/import/datagouv/apercu) ne lise un
+    # fichier local du serveur, quelle que soit la validation d'URL par
+    # ailleurs appliquée en amont (_url_datagouv_autorisee).
+    opener = urllib.request.OpenerDirector()
+    for gestionnaire in (
+        urllib.request.UnknownHandler(),
+        urllib.request.HTTPHandler(),
+        urllib.request.HTTPSHandler(),
+        urllib.request.HTTPRedirectHandler(),
+        # Sans HTTPDefaultErrorHandler, un statut HTTP d'erreur non couvert
+        # explicitement par un autre handler (ex. 400/403/404 en bout de
+        # redirection - constaté en pratique sur une ressource data.gouv.fr
+        # réelle lors de la non-régression VM de test) fait silencieusement
+        # renvoyer None par opener.open() au lieu de lever HTTPError, ce qui
+        # plantait _telecharger_ressource_datagouv_flux avec un TypeError
+        # (500) au lieu du message d'erreur propre déjà géré par l'appelant
+        # (except urllib.error.URLError, dont HTTPError hérite).
+        urllib.request.HTTPDefaultErrorHandler(),
+        urllib.request.HTTPErrorProcessor(),
+    ):
+        opener.add_handler(gestionnaire)
     if proxy_url:
-        return urllib.request.build_opener(urllib.request.ProxyHandler({"http": proxy_url, "https": proxy_url}))
-    return urllib.request.build_opener()
+        opener.add_handler(urllib.request.ProxyHandler({"http": proxy_url, "https": proxy_url}))
+    return opener
 
 
-def _telecharger_ressource_datagouv_flux(url, chemin_cible):
+# Validation d'URL pour /import/datagouv/apercu (§5.1) : cette route,
+# contrairement à /datagouv/recherche ci-dessous (hôte fixe côté serveur,
+# jamais fourni par le client), télécharge une URL entièrement fournie par
+# l'appelant - sans restriction, un agent authentifié pouvait faire ouvrir
+# par l'orchestrateur n'importe quelle URL (SSRF vers un service interne
+# accessible depuis l'hôte, contenu reflété dans l'aperçu renvoyé) -
+# démontré en conditions réelles (cf. rapport d'audit de sécurité).
+#
+# PAS de liste blanche de domaine (tentée puis abandonnée après test réel,
+# cf. non-régression VM de test) : les ressources CSV renvoyées par
+# /datagouv/recherche sont hébergées sur des domaines tiers très divers
+# (portails opendata régionaux, ArcGIS...), rarement sous data.gouv.fr
+# lui-même - une restriction par domaine aurait bloqué la quasi-totalité
+# des imports réels. La protection porte donc sur la CIBLE RESEAU plutôt
+# que sur le nom de domaine : schéma http(s) uniquement, et adresse résolue
+# hors des plages privées/loopback/lien-local/reservées (RFC 1918 et
+# assimilées) - un hôte public arbitraire reste autorisé, un service
+# interne ne l'est plus.
+#
+# Limite résiduelle assumée (DNS rebinding) : la résolution ci-dessous et
+# celle effectuée par _opener_datagouv.open() lors du téléchargement réel
+# sont deux requêtes DNS séparées - un attaquant contrôlant le DNS de
+# l'hôte visé pourrait théoriquement faire pointer la seconde résolution
+# vers une IP privée après coup. Hors de portée pour un attaquant qui ne
+# contrôle pas le DNS d'un domaine public tiers ; non traité ici, comme
+# d'autres limites résiduelles déjà documentées ailleurs dans le projet
+# (ex. worker.py, isolation réseau du conteneur "défense en profondeur").
+def _hote_prive_ou_local(hote):
+    try:
+        infos = socket.getaddrinfo(hote, None)
+    except socket.gaierror:
+        return True  # résolution impossible : refusé par prudence
+    for *_reste, sockaddr in infos:
+        adresse = ipaddress.ip_address(sockaddr[0])
+        if (
+            adresse.is_private or adresse.is_loopback or adresse.is_link_local
+            or adresse.is_reserved or adresse.is_multicast or adresse.is_unspecified
+        ):
+            return True
+    return False
+
+
+def _url_datagouv_autorisee(url):
+    try:
+        composants = urllib.parse.urlsplit(url)
+    except ValueError:
+        return False
+    if composants.scheme not in ("http", "https"):
+        return False
+    hote = composants.hostname
+    if not hote:
+        return False
+    return not _hote_prive_ou_local(hote)
+
+
+def _telecharger_ressource_datagouv_flux(url, chemin_cible, taille_max_octets=None):
     """Télécharge une ressource CSV data.gouv.fr en flux vers chemin_cible,
     en produisant un évènement de progression toutes les ~300 ms (§5.1) -
     consommé par /import/datagouv/apercu pour afficher volume reçu/attendu
@@ -156,8 +255,10 @@ def _telecharger_ressource_datagouv_flux(url, chemin_cible):
     seulement : le champ "filesize" de l'API data.gouv.fr n'est pas garanti
     présent, donc pas fiable comme unique protection. _analyser_fichier_stage
     réapplique de toute façon son propre contrôle sur le fichier final, en
-    confirmation."""
-    taille_max_octets = int(lire_parametre("taille_max_csv_mo", "2048")) * 1024 * 1024
+    confirmation. taille_max_octets : limite spécifique de l'appelant (ex.
+    documentation PDF, plus petite) - par défaut celle des données CSV."""
+    if taille_max_octets is None:
+        taille_max_octets = int(lire_parametre("taille_max_csv_mo", "2048")) * 1024 * 1024
     opener = _opener_datagouv()
     debut = time.monotonic()
     with opener.open(url, timeout=60) as reponse:
@@ -426,8 +527,6 @@ def executer_sql_en_tache_de_fond():
                 "SELECT public.creer_job('requete_sql', %s, %s::jsonb)",
                 (base_id, psycopg2.extras.Json({
                     "requete": requete_utilisateur,
-                    "role_pg": g.claims["role"],
-                    "nom_pg": nom_pg,
                 })),
             )
         except psycopg2.Error as exc:
@@ -546,18 +645,26 @@ def suggerer_type(valeurs):
         return "Texte"
     if all(v.lower() in ("vrai", "faux", "true", "false", "0", "1") for v in valeurs):
         return "Booléen"
-    try:
-        for v in valeurs:
-            int(v)
-        return "Entier"
-    except ValueError:
-        pass
-    try:
-        for v in valeurs:
-            float(v.replace(",", "."))
-        return "Décimal"
-    except ValueError:
-        pass
+    # Zéro non significatif (§5.1, ex. codes postaux "01000", départements
+    # "08"...) : un entier stocké perdrait ce zéro de tête, ce n'est donc
+    # jamais un vrai entier au sens métier, quelle que soit sa validité
+    # numérique - constaté en pratique (codes postaux tronqués après
+    # import). Exclut aussi le Décimal pour la même raison (float("0800")
+    # perdrait le zéro tout autant).
+    zero_en_tete = any(v[0] == "0" and len(v) > 1 and v[1:].isdigit() for v in valeurs)
+    if not zero_en_tete:
+        try:
+            for v in valeurs:
+                int(v)
+            return "Entier"
+        except ValueError:
+            pass
+        try:
+            for v in valeurs:
+                float(v.replace(",", "."))
+            return "Décimal"
+        except ValueError:
+            pass
     for motif in ("%Y-%m-%d", "%d/%m/%Y"):
         try:
             for v in valeurs:
@@ -633,8 +740,10 @@ def verifier_import():
     valeur_manquante = donnees.get("valeur_manquante") or ""
     avec_entete = bool(donnees.get("avec_entete", True))
 
+    if not _jeton_valide(jeton):
+        return jsonify(erreur="Fichier en attente introuvable ou expiré"), 404
     chemin_fichier = os.path.join(STAGING_DIR, f"{jeton}.csv")
-    if not jeton or not os.path.isfile(chemin_fichier):
+    if not os.path.isfile(chemin_fichier):
         return jsonify(erreur="Fichier en attente introuvable ou expiré"), 404
     for c in colonnes:
         if c.get("type") not in TYPES_SQL:
@@ -643,6 +752,21 @@ def verifier_import():
     anomalies_detail = []
     lignes_anomalies = []
     nb_lignes_totales = 0
+    # Mémorisation par valeur distincte, colonne par colonne (§5.1) : un
+    # jeu de données réel répète massivement certaines valeurs (codes,
+    # libellés, booléens...) sur des millions de lignes - revalider
+    # (int()/float()/strptime, cf. valeur_valide_pour_type) une valeur déjà
+    # rencontrée dans la même colonne est un travail pur perte, constaté en
+    # pratique sur un contrôle de cohérence de plusieurs minutes sur un
+    # fichier de plusieurs millions de lignes. Équivalent d'un "sort | uniq"
+    # par colonne, mais sans perdre le numéro de chaque ligne (nécessaire
+    # pour signaler précisément les anomalies) : on continue d'itérer
+    # chaque ligne, seule la validation elle-même est mise en cache.
+    # Plafonné par colonne : au-delà, une colonne à cardinalité aussi
+    # élevée n'est de toute façon pas répétitive, la mémoriser n'apporterait
+    # plus rien tout en consommant de la mémoire pour rien (§12/§13).
+    TAILLE_MAX_CACHE_TYPAGE = 50_000
+    caches_validite = [{} for _ in colonnes]
     with open(chemin_fichier, "r", encoding=encodage, newline="", errors="replace") as f:
         lecteur = csv.reader(f, delimiter=delimiteur)
         if avec_entete:
@@ -653,11 +777,19 @@ def verifier_import():
             for i, c in enumerate(colonnes):
                 if i >= len(ligne):
                     continue
-                if not valeur_valide_pour_type(ligne[i], c["type"], valeur_manquante):
+                valeur = ligne[i]
+                cache = caches_validite[i]
+                if valeur in cache:
+                    valide = cache[valeur]
+                else:
+                    valide = valeur_valide_pour_type(valeur, c["type"], valeur_manquante)
+                    if len(cache) < TAILLE_MAX_CACHE_TYPAGE:
+                        cache[valeur] = valide
+                if not valide:
                     ligne_en_anomalie = True
                     if len(anomalies_detail) < ANOMALIES_DETAIL_MAX:
                         anomalies_detail.append({
-                            "ligne": numero_ligne, "colonne": c["nom_normalise"], "valeur": ligne[i],
+                            "ligne": numero_ligne, "colonne": c["nom_normalise"], "valeur": valeur,
                         })
             if ligne_en_anomalie:
                 lignes_anomalies.append(numero_ligne)
@@ -695,6 +827,13 @@ def apercu_import():
         if os.path.exists(chemin_stage):
             os.remove(chemin_stage)
         raise
+
+    try:
+        _normaliser_vers_csv(chemin_stage)
+    except FormatImportNonSupporte as exc:
+        if os.path.exists(chemin_stage):
+            os.remove(chemin_stage)
+        return jsonify(erreur=str(exc)), 400
 
     avec_entete = request.form.get("avec_entete", "true").lower() != "false"
     resultat, code = _analyser_fichier_stage(jeton, chemin_stage, avec_entete, fichier.filename)
@@ -741,6 +880,13 @@ def apercu_import_local():
     chemin_stage = os.path.join(STAGING_DIR, f"{jeton}.csv")
     os.rename(chemin_source, chemin_stage)
 
+    try:
+        _normaliser_vers_csv(chemin_stage)
+    except FormatImportNonSupporte as exc:
+        if os.path.exists(chemin_stage):
+            os.remove(chemin_stage)
+        return jsonify(erreur=str(exc)), 400
+
     avec_entete = str(donnees.get("avec_entete", "true")).lower() != "false"
     resultat, code = _analyser_fichier_stage(jeton, chemin_stage, avec_entete, os.path.basename(chemin_source))
     return jsonify(resultat), code
@@ -763,19 +909,47 @@ def rechercher_datagouv():
     except (urllib.error.URLError, OSError) as exc:
         return jsonify(erreur=f"data.gouv.fr injoignable : {exc} (vérifiez le réglage du proxy en Administration)"), 502
 
+    # Formats de données acceptés par le pipeline d'import (§5.1) : CSV
+    # natif, TXT (même traitement que le CSV, délimiteur auto-détecté - ex.
+    # le "|" du DVF), ZIP (extraction, cf. _normaliser_vers_csv) et JSON
+    # (aplatissement, même fonction). Le géospatial (geojson, shp, wms...)
+    # reste hors périmètre - non ajouté à cet ensemble. Constaté au
+    # recensement de formats : le CSV seul ne représentait qu'environ 17 %
+    # des ressources rencontrées, ZIP/TXT/JSON à eux trois davantage que le
+    # CSV.
+    FORMATS_DONNEES_ACCEPTES = {"csv", "txt", "json", "zip"}
+
+    def _format_donnees_accepte(r):
+        # Champ "format" en texte libre côté data.gouv.fr, pas une énumération
+        # stricte (constaté en pratique : le DVF déclare "txt.zip", pas "zip"
+        # seul) - comparaison par jeton plutôt qu'égalité exacte.
+        jetons = set(re.split(r"[^a-z0-9]+", (r.get("format") or "").lower()))
+        return bool(jetons & FORMATS_DONNEES_ACCEPTES)
+
     resultats = []
     for jeu in donnees.get("data", []):
-        ressources_csv = [
+        ressources = jeu.get("resources") or []
+        ressources_donnees = [
             {"id": r.get("id"), "titre": r.get("title"), "url": r.get("url"), "taille": r.get("filesize")}
-            for r in (jeu.get("resources") or [])
-            if (r.get("format") or "").lower() == "csv" and r.get("url")
+            for r in ressources
+            if _format_donnees_accepte(r) and r.get("url")
+        ]
+        # Ressources de documentation (§5.1) : PDF associés au jeu de
+        # données (ex. les 4 PDF de documentation du DVF, à côté de ses 5
+        # fichiers de données) - proposées séparément, jamais mélangées aux
+        # ressources de données elles-mêmes.
+        ressources_documentation = [
+            {"id": r.get("id"), "titre": r.get("title"), "url": r.get("url"), "taille": r.get("filesize")}
+            for r in ressources
+            if (r.get("format") or "").lower() == "pdf" and r.get("url")
         ]
         resultats.append({
             "id": jeu.get("id"),
             "titre": jeu.get("title"),
             "organisation": (jeu.get("organization") or {}).get("name"),
             "description": (jeu.get("description") or "")[:300],
-            "ressources_csv": ressources_csv,
+            "ressources_donnees": ressources_donnees,
+            "ressources_documentation": ressources_documentation,
         })
     return jsonify(resultats=resultats)
 
@@ -799,17 +973,30 @@ def rechercher_datagouv():
 # arriverait d'un bloc une fois le téléchargement terminé - même limite déjà
 # documentée pour /sql/export (streaming serveur, pas forcément perçu comme
 # tel côté client).
+TAILLE_MAX_DOCUMENTATION_OCTETS = 20 * 1024 * 1024  # §5.1 : PDF de quelques dizaines à ~100 Ko en pratique (recensement)
+
+
 @app.route("/import/datagouv/apercu", methods=["POST"])
 def apercu_import_datagouv():
     donnees = request.get_json(force=True)
     url_ressource = donnees.get("url_ressource")
     if not url_ressource:
         return jsonify(erreur="URL de ressource manquante"), 400
+    if not _url_datagouv_autorisee(url_ressource):
+        return jsonify(erreur="URL de ressource non autorisée"), 400
+    # Ressource de documentation optionnelle (§5.1) : même validation SSRF
+    # que la ressource de données - un client authentifié fournit cette URL
+    # au même titre que url_ressource, sans raison d'y appliquer une
+    # protection moindre.
+    url_documentation = donnees.get("url_documentation")
+    if url_documentation and not _url_datagouv_autorisee(url_documentation):
+        return jsonify(erreur="URL de documentation non autorisée"), 400
     avec_entete = str(donnees.get("avec_entete", "true")).lower() != "false"
     nom_fichier = donnees.get("nom_fichier") or "ressource.csv"
 
     jeton = uuid.uuid4().hex
     chemin_stage = os.path.join(STAGING_DIR, f"{jeton}.csv")
+    chemin_documentation = os.path.join(STAGING_DIR, f"{jeton}.pdf")
 
     def evenements():
         try:
@@ -821,11 +1008,47 @@ def apercu_import_datagouv():
             yield json.dumps({"type": "erreur", "message": f"Téléchargement impossible : {exc}"}) + "\n"
             return
 
+        # Étapes sans retour de progression chiffrée (extraction ZIP,
+        # aplatissement JSON, analyse complète du fichier - §5.1) mais qui
+        # peuvent, sur un fichier volumineux réel, prendre plusieurs minutes
+        # (ex. DVF : ~65 Mo compressés, 3,5 millions de lignes une fois
+        # extrait, ~5 min constaté en pratique) : sans cet évènement, rien ne
+        # distinguait plus, côté client, ce traitement en cours d'un blocage -
+        # le dernier évènement "progression" à 100% restait affiché figé.
+        yield json.dumps({"type": "etape", "message": "Préparation du fichier…"}) + "\n"
+        try:
+            _normaliser_vers_csv(chemin_stage)
+        except FormatImportNonSupporte as exc:
+            if os.path.exists(chemin_stage):
+                os.remove(chemin_stage)
+            yield json.dumps({"type": "erreur", "message": str(exc)}) + "\n"
+            return
+
+        # Le PDF de documentation est secondaire par rapport à l'import des
+        # données lui-même (§5.1) : un échec de son téléchargement ne doit
+        # jamais faire échouer l'import, seulement se passer de la
+        # documentation attachée.
+        documentation_disponible = False
+        if url_documentation:
+            yield json.dumps({"type": "etape", "message": "Téléchargement de la documentation…"}) + "\n"
+            try:
+                for _progression in _telecharger_ressource_datagouv_flux(
+                    url_documentation, chemin_documentation, taille_max_octets=TAILLE_MAX_DOCUMENTATION_OCTETS
+                ):
+                    pass
+                documentation_disponible = True
+            except (RuntimeError, urllib.error.URLError, OSError):
+                if os.path.exists(chemin_documentation):
+                    os.remove(chemin_documentation)
+
+        yield json.dumps({"type": "etape", "message": "Analyse du fichier…"}) + "\n"
         resultat, code = _analyser_fichier_stage(jeton, chemin_stage, avec_entete, nom_fichier)
         if code != 200:
+            if os.path.exists(chemin_documentation):
+                os.remove(chemin_documentation)
             yield json.dumps({"type": "erreur", "message": resultat.get("erreur", "Erreur inconnue")}) + "\n"
         else:
-            yield json.dumps({"type": "resultat", **resultat}) + "\n"
+            yield json.dumps({"type": "resultat", "documentation_disponible": documentation_disponible, **resultat}) + "\n"
 
     return Response(stream_with_context(evenements()), mimetype="application/x-ndjson")
 
@@ -856,6 +1079,196 @@ def tester_proxy_datagouv():
     return jsonify(ok=True, duree_ms=int((time.monotonic() - debut) * 1000))
 
 
+# =============================================================================
+# NORMALISATION MULTI-FORMAT VERS CSV (§5.1)
+# =============================================================================
+# Point d'entrée unique appelé par les trois routes qui préparent un fichier
+# stagé (apercu_import, apercu_import_local, apercu_import_datagouv), juste
+# avant _analyser_fichier_stage : tout le reste du pipeline d'import (analyse,
+# vérification, validation, chargement COPY, job asynchrone import_csv) reste
+# strictement CSV et n'a besoin d'aucune modification - cette fonction
+# convertit EN PLACE (le résultat reste toujours à chemin_stage) tout ce
+# qu'elle reconnaît comme un autre format tabulaire courant sur data.gouv.fr
+# (ZIP, JSON), et laisse tel quel tout le reste (CSV, TXT - y compris le
+# délimiteur "|" du DVF, déjà géré par detecter_delimiteur).
+#
+# Détection par signature binaire, jamais par extension déclarée ni par le
+# champ "format" de data.gouv.fr : ces deux informations sont fournies par
+# le client ou par un tiers, pas fiables comme unique base de décision (même
+# principe que _url_datagouv_autorisee plus haut - un fichier .json envoyé
+# sous un nom .csv ne doit pas planter plus loin dans le pipeline CSV).
+#
+# Le géospatial (GeoJSON notamment) est explicitement hors périmètre : un
+# format tabulaire générique n'a pas vocation à représenter une géométrie -
+# rejeté avec un message dédié plutôt qu'un aplatissement qui produirait une
+# table sans signification exploitable.
+class FormatImportNonSupporte(Exception):
+    pass
+
+
+def _normaliser_vers_csv(chemin_stage):
+    with open(chemin_stage, "rb") as f:
+        entete = f.read(8)
+
+    if entete[:2] == b"PK":
+        _extraire_zip_vers_csv(chemin_stage)
+        # Le fichier extrait peut lui-même être un JSON (rare, mais possible
+        # pour un export compressé) - une seule repasse suffit, jamais un ZIP
+        # imbriqué côté data.gouv.fr en pratique (cf. recensement de formats).
+        with open(chemin_stage, "rb") as f:
+            entete = f.read(8)
+
+    if entete.lstrip()[:1] in (b"{", b"["):
+        _convertir_json_vers_csv(chemin_stage)
+
+
+def _extraire_zip_vers_csv(chemin_stage):
+    """Extrait la seule entrée de données utile d'une archive ZIP vers
+    chemin_stage (§5.1 : ex. le "txt.zip" du jeu Valeurs Foncières). Jamais
+    zf.extractall() avec les noms d'entrée du zip : on lit chaque entrée en
+    flux via zf.open() et on écrit vers NOTRE PROPRE chemin de staging fixe -
+    la traversée de chemin est donc structurellement impossible, pas
+    seulement filtrée après coup."""
+    taille_max_octets = int(lire_parametre("taille_max_csv_mo", "2048")) * 1024 * 1024
+
+    try:
+        with zipfile.ZipFile(chemin_stage) as zf:
+            candidats = [
+                info for info in zf.infolist()
+                if not info.is_dir() and not info.filename.startswith("__MACOSX/")
+                and not os.path.basename(info.filename).startswith("._")
+            ]
+            if not candidats:
+                raise FormatImportNonSupporte("Archive ZIP vide")
+
+            # Un seul fichier de données dans l'immense majorité des archives
+            # data.gouv.fr (constaté au recensement de formats) : préférence
+            # pour une extension reconnue, sinon l'entrée la plus volumineuse.
+            preferes = [
+                info for info in candidats
+                if os.path.splitext(info.filename)[1].lower() in (".csv", ".txt", ".json")
+            ]
+            choix = max(preferes or candidats, key=lambda i: i.file_size)
+
+            chemin_temp = chemin_stage + ".extrait"
+            octets_ecrits = 0
+            with zf.open(choix) as source, open(chemin_temp, "wb") as cible:
+                while True:
+                    bloc = source.read(1024 * 1024)
+                    if not bloc:
+                        break
+                    octets_ecrits += len(bloc)
+                    # Contrôlé en flux, pas seulement via choix.file_size
+                    # (déclaré dans l'archive, donc potentiellement faux) :
+                    # protection contre une "zip bomb" (rapport de
+                    # compression extrême), §12/§13.
+                    if octets_ecrits > taille_max_octets:
+                        cible.close()
+                        os.remove(chemin_temp)
+                        raise FormatImportNonSupporte(
+                            f"Fichier extrait trop volumineux (> {taille_max_octets // (1024 * 1024)} Mo)"
+                        )
+                    cible.write(bloc)
+    except zipfile.BadZipFile:
+        raise FormatImportNonSupporte("Archive ZIP invalide ou corrompue")
+
+    os.replace(chemin_temp, chemin_stage)
+
+
+def _detecter_prefixe_tableau_json(chemin_stage):
+    """Repère le chemin ijson (§5.1) du tableau d'objets à la racine du
+    JSON : soit la racine elle-même, soit l'unique tableau rencontré à
+    l'intérieur d'un objet racine qui l'enveloppe (enveloppe d'API courante,
+    ex. {"data": [...]}). Retourne None si aucun tableau exploitable n'est
+    trouvé (ex. objet racine plat, sans aucun tableau)."""
+    with open(chemin_stage, "rb") as source:
+        parseur = ijson.parse(source)
+        _prefixe, premier_type, _valeur = next(parseur, (None, None, None))
+        if premier_type == "start_array":
+            return "item"
+        if premier_type != "start_map":
+            return None
+        for prefixe_evt, type_evt, _valeur in parseur:
+            if type_evt == "start_array":
+                return f"{prefixe_evt}.item"
+            if prefixe_evt == "" and type_evt == "end_map":
+                return None
+    return None
+
+
+def _aplatir_json(objet, prefixe=""):
+    """Aplatit un objet JSON (clé_sousclé) : toute valeur restant elle-même
+    une liste est sérialisée en JSON brut dans la cellule plutôt que
+    d'exploser en lignes supplémentaires (§5.1) - un import générique n'a pas
+    de clé de jointure évidente à choisir pour une telle explosion."""
+    resultat = {}
+    for cle, valeur in objet.items():
+        nom = f"{prefixe}_{cle}" if prefixe else str(cle)
+        if isinstance(valeur, dict):
+            resultat.update(_aplatir_json(valeur, nom))
+        elif isinstance(valeur, list):
+            resultat[nom] = json.dumps(valeur, ensure_ascii=False)
+        else:
+            resultat[nom] = valeur
+    return resultat
+
+
+def _convertir_json_vers_csv(chemin_stage):
+    """Convertit un JSON (tableau d'objets, éventuellement enveloppé - cf.
+    _detecter_prefixe_tableau_json) en CSV équivalent, en flux via ijson
+    (jamais json.load() du fichier entier, §12/§13). GeoJSON explicitement
+    rejeté (hors périmètre géospatial, §5.1)."""
+    taille_max_octets = int(lire_parametre("taille_max_csv_mo", "2048")) * 1024 * 1024
+
+    prefixe = _detecter_prefixe_tableau_json(chemin_stage)
+    if prefixe is None:
+        raise FormatImportNonSupporte(
+            "Format JSON non reconnu : un tableau d'objets est attendu, éventuellement sous une seule clé racine"
+        )
+
+    # Premier passage en flux : détermine l'ensemble complet des colonnes
+    # avant d'écrire l'en-tête CSV (y compris les clés qui n'apparaissent que
+    # sur des objets plus loin dans le tableau) - seuls les NOMS de colonnes
+    # sont accumulés en mémoire ici, jamais les données elles-mêmes.
+    colonnes = []
+    vus = set()
+    premier = True
+    with open(chemin_stage, "rb") as source:
+        for objet in ijson.items(source, prefixe):
+            if premier:
+                premier = False
+                if not isinstance(objet, dict):
+                    raise FormatImportNonSupporte("Format JSON non reconnu : un tableau d'objets est attendu")
+                if str(objet.get("type", "")) in ("FeatureCollection", "Feature"):
+                    raise FormatImportNonSupporte(
+                        "Ce fichier est un format géoréférentiel (GeoJSON), non pris en charge par cet import"
+                    )
+            if not isinstance(objet, dict):
+                continue
+            for cle in _aplatir_json(objet):
+                if cle not in vus:
+                    vus.add(cle)
+                    colonnes.append(cle)
+
+    if premier:
+        raise FormatImportNonSupporte("Fichier JSON vide")
+
+    chemin_temp = chemin_stage + ".converti"
+    with open(chemin_stage, "rb") as source, open(chemin_temp, "w", encoding="utf-8", newline="") as cible:
+        ecrivain = csv.DictWriter(cible, fieldnames=colonnes, restval="")
+        ecrivain.writeheader()
+        for objet in ijson.items(source, prefixe):
+            if isinstance(objet, dict):
+                ecrivain.writerow(_aplatir_json(objet))
+            if cible.tell() > taille_max_octets:
+                os.remove(chemin_temp)
+                raise FormatImportNonSupporte(
+                    f"Fichier converti trop volumineux (> {taille_max_octets // (1024 * 1024)} Mo)"
+                )
+
+    os.replace(chemin_temp, chemin_stage)
+
+
 def _analyser_fichier_stage(jeton, chemin_stage, avec_entete, nom_fichier):
     """Renvoie (donnees, code_http) - un dict brut, jamais un objet Response :
     contrairement à ses trois appelants (tous des routes Flask classiques),
@@ -874,8 +1287,20 @@ def _analyser_fichier_stage(jeton, chemin_stage, avec_entete, nom_fichier):
     # Un seul passage en flux : compte le nombre réel de lignes tout en
     # conservant seulement les 50 premières pour l'aperçu, sans jamais
     # matérialiser le fichier entier en mémoire.
+    #
+    # echantillon_typage, séparé de l'aperçu ci-dessus : les 50 premières
+    # lignes ne sont pas un échantillon représentatif du fichier entier pour
+    # la suggestion de type (§5.1) - constaté en pratique sur un jeu de
+    # données réel de plusieurs millions de lignes (codes département
+    # corses "2A"/"2B", absents des 50 premières lignes, faisaient
+    # suggérer "Entier" pour toute la colonne). Échantillonnage par
+    # réservoir (algorithme R) : taille fixe et probabilité uniforme de
+    # présence pour chaque ligne, quelle que soit la taille totale du
+    # fichier, en un seul passage et sans connaître nb_lignes à l'avance.
+    TAILLE_ECHANTILLON_TYPAGE = 500
     entetes = None
     echantillon = []
+    echantillon_typage = []
     nb_lignes = 0
     with open(chemin_stage, "r", encoding=encodage, newline="", errors="replace") as f:
         lecteur = csv.reader(f, delimiter=delimiteur)
@@ -887,6 +1312,12 @@ def _analyser_fichier_stage(jeton, chemin_stage, avec_entete, nom_fichier):
             nb_lignes += 1
             if len(echantillon) < 50:
                 echantillon.append(ligne)
+            if len(echantillon_typage) < TAILLE_ECHANTILLON_TYPAGE:
+                echantillon_typage.append(ligne)
+            else:
+                indice_tire = random.randint(0, nb_lignes - 1)
+                if indice_tire < TAILLE_ECHANTILLON_TYPAGE:
+                    echantillon_typage[indice_tire] = ligne
 
     if entetes is None:
         os.remove(chemin_stage)
@@ -894,7 +1325,7 @@ def _analyser_fichier_stage(jeton, chemin_stage, avec_entete, nom_fichier):
 
     colonnes = []
     for i, nom in enumerate(entetes):
-        valeurs_colonne = [ligne[i] for ligne in echantillon if i < len(ligne)]
+        valeurs_colonne = [ligne[i] for ligne in echantillon_typage if i < len(ligne)]
         colonnes.append({
             "nom_source": nom,
             "nom_normalise": normaliser_identifiant(nom or f"colonne_{i+1}"),
@@ -1010,7 +1441,10 @@ def table_existe(conn, nom_table):
         return cur.fetchone() is not None
 
 
-def creer_table_et_charger(conn, nom_table, colonnes, chemin_fichier, encodage, delimiteur, valeur_manquante, remplacer=False, avec_entete=True, lignes_exclues=None):
+def creer_table_et_charger(
+    conn, nom_table, colonnes, chemin_fichier, encodage, delimiteur, valeur_manquante, remplacer=False,
+    avec_entete=True, lignes_exclues=None, documentation_pdf=None, documentation_nom_fichier=None,
+):
     with conn.cursor() as cur:
         # 0. suggerer_type() reconnaît le format "%d/%m/%Y" (jour/mois/année,
         #    usuel dans les exports administratifs français) : sans ce
@@ -1079,14 +1513,26 @@ def creer_table_et_charger(conn, nom_table, colonnes, chemin_fichier, encodage, 
         # bénéficiaire de partage qui importerait dans une base qui n'est
         # pas la sienne (cas exclu en pratique par les GRANT du §5.2, mais
         # cette fonction ne doit pas en dépendre pour rester correcte).
+        # documentation_pdf/documentation_nom_fichier (§5.1) : COALESCE côté
+        # UPDATE plutôt qu'un écrasement systématique - un ré-import de la
+        # même table (remplacement de données, sans nouveau PDF joint) ne
+        # doit pas faire disparaître une documentation déjà attachée lors
+        # d'un import précédent.
         cur.execute(
             """
-            INSERT INTO public._sillon_imports (nom_table, nb_lignes, taille_octets)
-            VALUES (%s, %s, pg_total_relation_size(%s))
+            INSERT INTO public._sillon_imports
+                (nom_table, nb_lignes, taille_octets, documentation_pdf, documentation_nom_fichier)
+            VALUES (%s, %s, pg_total_relation_size(%s), %s, %s)
             ON CONFLICT (nom_table) DO UPDATE SET
-                date_import = now(), nb_lignes = EXCLUDED.nb_lignes, taille_octets = EXCLUDED.taille_octets
+                date_import = now(), nb_lignes = EXCLUDED.nb_lignes, taille_octets = EXCLUDED.taille_octets,
+                documentation_pdf = COALESCE(EXCLUDED.documentation_pdf, public._sillon_imports.documentation_pdf),
+                documentation_nom_fichier = COALESCE(EXCLUDED.documentation_nom_fichier, public._sillon_imports.documentation_nom_fichier)
             """,
-            (nom_table, nb_lignes_chargees, nom_table),
+            (
+                nom_table, nb_lignes_chargees, nom_table,
+                psycopg2.Binary(documentation_pdf) if documentation_pdf else None,
+                documentation_nom_fichier,
+            ),
         )
 
     conn.commit()
@@ -1110,9 +1556,17 @@ def valider_import():
     # seules lignes de données.
     lignes_exclues = set(donnees.get("exclure_lignes") or [])
 
-    chemin_fichier = os.path.join(STAGING_DIR, f"{jeton}.csv")
-    if not jeton or not os.path.isfile(chemin_fichier):
+    if not _jeton_valide(jeton):
         return jsonify(erreur="Fichier en attente introuvable ou expiré"), 404
+    chemin_fichier = os.path.join(STAGING_DIR, f"{jeton}.csv")
+    if not os.path.isfile(chemin_fichier):
+        return jsonify(erreur="Fichier en attente introuvable ou expiré"), 404
+    # Documentation PDF éventuellement stagée par /import/datagouv/apercu
+    # sous le même jeton (§5.1) - jeton déjà validé ci-dessus, donc aucune
+    # nouvelle surface de traversée de chemin.
+    chemin_documentation = os.path.join(STAGING_DIR, f"{jeton}.pdf")
+    documentation_disponible = os.path.isfile(chemin_documentation)
+    nom_documentation = donnees.get("nom_documentation") if documentation_disponible else None
     for c in colonnes:
         if c.get("type") not in TYPES_SQL:
             return jsonify(erreur=f"Type de colonne invalide : {c.get('type')}"), 400
@@ -1128,11 +1582,21 @@ def valider_import():
                 cur.execute("SELECT public.creer_job('creation_base', NULL, '{}'::jsonb)")
                 id_job = cur.fetchone()[0]
                 conn.commit()
-        except psycopg2.Error:
+        except psycopg2.Error as exc:
             # Profil sans droit d'import (§3, lecteur) : creer_job refuse
-            # l'appel côté PostgreSQL (droit_refuse) - message clair plutôt
-            # que de laisser remonter une erreur SQL brute en 500.
-            return jsonify(erreur="Votre profil n'autorise pas l'import de fichiers CSV"), 403
+            # l'appel côté PostgreSQL - PostgreSQL distingue ce cas
+            # (SQLSTATE 42501, insufficient_privilege, posé avant même
+            # l'entrée dans la fonction) des refus applicatifs internes de
+            # creer_job (SQLSTATE générique P0001 : quota de jobs
+            # simultanés atteint, base inaccessible...), qui ne sont PAS un
+            # problème de profil et doivent remonter leur message réel -
+            # sans cette distinction, un quota transitoire (constaté en
+            # pratique : deux imports rapprochés de "Ma base personnelle")
+            # affichait à tort "profil non autorisé", message définitif et
+            # trompeur pour une situation en réalité transitoire.
+            if exc.pgcode == "42501":
+                return jsonify(erreur="Votre profil n'autorise pas l'import de fichiers CSV"), 403
+            return jsonify(erreur=str(exc)), 400
 
         base_id = _attendre_job_termine(id_job, timeout_s=15)
         if base_id is None:
@@ -1164,10 +1628,17 @@ def valider_import():
     seuil_sync_mo = int(lire_parametre("seuil_import_synchrone_mo", "10"))
 
     if taille_octets <= seuil_sync_mo * 1024 * 1024:
+        documentation_pdf = None
+        if documentation_disponible:
+            with open(chemin_documentation, "rb") as f:
+                documentation_pdf = f.read()
         try:
             conn = connexion_base(nom_pg, claims["role"])
             try:
-                nb_lignes = creer_table_et_charger(conn, nom_table, colonnes, chemin_fichier, encodage, delimiteur, valeur_manquante, remplacer, avec_entete, lignes_exclues)
+                nb_lignes = creer_table_et_charger(
+                    conn, nom_table, colonnes, chemin_fichier, encodage, delimiteur, valeur_manquante,
+                    remplacer, avec_entete, lignes_exclues, documentation_pdf, nom_documentation,
+                )
             finally:
                 conn.close()
         except psycopg2.Error as exc:
@@ -1184,6 +1655,8 @@ def valider_import():
             return jsonify(erreur=str(exc)), 400
         finally:
             os.remove(chemin_fichier)
+            if documentation_disponible and os.path.exists(chemin_documentation):
+                os.remove(chemin_documentation)
         rafraichir_taille_base(base_id, nom_pg)
         consigner_audit(claims, "CREATION", nom_table, f"table : CREATION (base #{base_id}), {nb_lignes} ligne(s) importée(s)")
         return jsonify(statut="termine", table=nom_table)
@@ -1202,17 +1675,28 @@ def valider_import():
                     "encodage": encodage,
                     "delimiteur": delimiteur,
                     "valeur_manquante": valeur_manquante,
-                    "role_pg": claims["role"],
-                    "nom_pg": nom_pg,
                     "remplacer": remplacer,
                     "avec_entete": avec_entete,
                     "lignes_exclues": list(lignes_exclues),
+                    # Chemin (pas les octets) transmis au job, sur le même
+                    # principe que "chemin_fichier" : construit ici côté
+                    # serveur à partir du seul jeton déjà validé, jamais
+                    # d'octets bruts dans le payload JSONB du catalogue
+                    # central (§5.1 - éviterait de faire grossir
+                    # sillon_catalog du poids de chaque PDF importé).
+                    "chemin_documentation": chemin_documentation if documentation_disponible else None,
+                    "nom_documentation": nom_documentation,
                 })),
             )
             id_job = cur.fetchone()[0]
             conn.commit()
-    except psycopg2.Error:
-        return jsonify(erreur="Votre profil n'autorise pas l'import de fichiers CSV"), 403
+    except psycopg2.Error as exc:
+        # Même distinction que le bloc creation_base plus haut : ne pas
+        # masquer un quota transitoire ou un refus applicatif interne de
+        # creer_job derrière un message de profil, définitif et trompeur.
+        if exc.pgcode == "42501":
+            return jsonify(erreur="Votre profil n'autorise pas l'import de fichiers CSV"), 403
+        return jsonify(erreur=str(exc)), 400
 
     return jsonify(statut="en_attente", id_job=id_job)
 
@@ -1278,8 +1762,6 @@ def deposer_script():
                 (type_job, base_id, psycopg2.extras.Json({
                     "chemin_script": chemin_script,
                     "nom_fichier": fichier.filename,
-                    "nom_pg": nom_pg,
-                    "role_pg": g.claims["role"],
                 })),
             )
         except psycopg2.Error as exc:
@@ -1437,7 +1919,8 @@ _REQUETE_TABLES = """
     SELECT c.relname,
            COALESCE(i.nb_lignes, GREATEST(c.reltuples, 0)::bigint) AS nb_lignes,
            pg_total_relation_size(c.oid) AS taille_octets,
-           i.date_import
+           i.date_import,
+           (i.documentation_pdf IS NOT NULL) AS a_documentation
     FROM pg_class c
     JOIN pg_namespace n ON n.oid = c.relnamespace
     LEFT JOIN public._sillon_imports i ON i.nom_table = c.relname
@@ -1468,7 +1951,7 @@ def lister_tables(base_id):
 
     return jsonify([
         {"nom_table": nom, "nb_lignes": nb_lignes, "taille_octets": taille, "date_dernier_import": _serialiser(date_import)}
-        for nom, nb_lignes, taille, date_import in lignes
+        for nom, nb_lignes, taille, date_import, _a_documentation in lignes
     ])
 
 
@@ -1488,7 +1971,7 @@ def fiche_table(base_id, nom_table):
             ligne = cur.fetchone()
             if not ligne:
                 return jsonify(erreur="Table introuvable ou inaccessible"), 404
-            _, nb_lignes, taille_octets, date_import = ligne
+            _, nb_lignes, taille_octets, date_import, a_documentation = ligne
 
             cur.execute(
                 "SELECT column_name, data_type FROM information_schema.columns "
@@ -1511,10 +1994,51 @@ def fiche_table(base_id, nom_table):
         "nb_lignes": nb_lignes,
         "taille_octets": taille_octets,
         "date_dernier_import": _serialiser(date_import),
+        "a_documentation": a_documentation,
         "colonnes": colonnes,
         "apercu_entetes": entetes_apercu,
         "apercu_lignes": lignes_apercu,
     })
+
+
+@app.route("/bases/<int:base_id>/tables/<nom_table>/documentation", methods=["GET"])
+def documentation_table(base_id, nom_table):
+    """Sert la documentation PDF jointe à une table (§5.1) - même contrôle
+    d'accès que fiche_table (base_accessible), jamais les octets bruts
+    n'apparaissent dans cette dernière (qui sert aussi l'aperçu des
+    données)."""
+    nom_pg = base_accessible(g.claims, base_id)
+    if not nom_pg:
+        return jsonify(erreur="Base introuvable ou inaccessible"), 404
+
+    try:
+        conn = connexion_base(nom_pg, g.claims["role"])
+    except psycopg2.Error as exc:
+        return jsonify(erreur=f"Connexion refusée : {exc}"), 403
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT documentation_pdf, documentation_nom_fichier FROM public._sillon_imports WHERE nom_table = %s",
+                (nom_table,),
+            )
+            ligne = cur.fetchone()
+        conn.rollback()
+    except psycopg2.Error as exc:
+        return jsonify(erreur=str(exc)), 400
+    finally:
+        conn.close()
+
+    if not ligne or ligne[0] is None:
+        return jsonify(erreur="Aucune documentation disponible pour cette table"), 404
+    octets_pdf, _nom_fichier = ligne
+    # Nom de fichier dérivé de nom_table (déjà passé par normaliser_identifiant
+    # à la création), jamais de la valeur stockée en base : cette dernière
+    # provient in fine du titre d'une ressource data.gouv.fr, texte externe
+    # non approprié à injecter tel quel dans un en-tête HTTP.
+    return Response(
+        bytes(octets_pdf), mimetype="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="{nom_table}.pdf"'},
+    )
 
 
 @app.route("/bases/<int:base_id>/tables/<nom_table>", methods=["DELETE"])
@@ -1776,6 +2300,19 @@ def _traiter_job(conn, id_job, type_job, utilisateur_id, base_id, payload):
         cur.execute("SELECT email, role_pg FROM public.utilisateurs WHERE id = %s", (utilisateur_id,))
         email_utilisateur, role_pg = cur.fetchone()
 
+    # nom_pg dérivé de base_id ici, jamais lu depuis payload["nom_pg"] (§8.8) :
+    # le payload est une donnée stockée en base, créée à l'origine par
+    # l'appelant du job (potentiellement via l'appel RPC direct
+    # /api/rpc/creer_job, hors du contrôle d'orchestrateur.py) - une valeur
+    # qui y figurerait ne doit jamais servir à choisir la base/le rôle
+    # PostgreSQL de connexion, quel que soit le chemin de création du job.
+    nom_pg = None
+    if type_job in ("import_csv", "requete_sql"):
+        with conn.cursor() as cur:
+            cur.execute("SELECT nom_pg FROM public.bases WHERE id = %s", (base_id,))
+            ligne = cur.fetchone()
+            nom_pg = ligne[0] if ligne else None
+
     try:
         debut = time.monotonic()  # utilisé par la branche "requete_sql", y compris dans le except ci-dessous
         if type_job == "creation_base":
@@ -1796,6 +2333,30 @@ def _traiter_job(conn, id_job, type_job, utilisateur_id, base_id, payload):
 
             if ligne_existante:
                 nouvelle_base_id = ligne_existante[0]
+                # Migration idempotente de public._sillon_imports (§5.1,
+                # documentation PDF) : une base créée avant l'ajout de ces
+                # deux colonnes ne les a jamais reçues (le CREATE TABLE
+                # ci-dessous, plus bas, ne s'exécute qu'à la toute première
+                # création de la base) - sans ce correctif, fiche_table()
+                # échouait avec "la colonne ... n'existe pas" pour toute
+                # base déjà existante avant la mise à jour du paquet,
+                # constaté en pratique. Ce chemin est reparcouru à chaque
+                # "Ma base personnelle" (creation_base est redéclenché à
+                # chaque import tant qu'aucune autre base n'est choisie,
+                # cf. commentaire au-dessus) : la migration s'applique donc
+                # d'elle-même dès le prochain import de chaque agent, sans
+                # action manuelle par base existante.
+                conn_migration = psycopg2.connect(host=DB_HOST, port=DB_PORT, dbname=nom_base_pg, user=DB_USER, password=DB_PASSWORD)
+                conn_migration.autocommit = True
+                try:
+                    with conn_migration.cursor() as cur:
+                        cur.execute("""
+                            ALTER TABLE public._sillon_imports
+                                ADD COLUMN IF NOT EXISTS documentation_pdf BYTEA,
+                                ADD COLUMN IF NOT EXISTS documentation_nom_fichier TEXT
+                        """)
+                finally:
+                    conn_migration.close()
             else:
                 conn_admin = psycopg2.connect(host=DB_HOST, port=DB_PORT, dbname="postgres", user=DB_USER, password=DB_PASSWORD)
                 conn_admin.autocommit = True
@@ -1834,10 +2395,15 @@ def _traiter_job(conn, id_job, type_job, utilisateur_id, base_id, payload):
                         cur.execute(sql.SQL("SET ROLE {}").format(sql.Identifier(role_pg)))
                         cur.execute("""
                             CREATE TABLE public._sillon_imports (
-                                nom_table     TEXT PRIMARY KEY,
-                                date_import   TIMESTAMPTZ NOT NULL DEFAULT now(),
-                                nb_lignes     BIGINT NOT NULL,
-                                taille_octets BIGINT NOT NULL
+                                nom_table                 TEXT PRIMARY KEY,
+                                date_import               TIMESTAMPTZ NOT NULL DEFAULT now(),
+                                nb_lignes                 BIGINT NOT NULL,
+                                taille_octets             BIGINT NOT NULL,
+                                -- Documentation PDF optionnelle jointe à l'import
+                                -- (§5.1, flux data.gouv.fr uniquement) - affichée
+                                -- depuis la fiche d'une table (fiche_table()).
+                                documentation_pdf         BYTEA,
+                                documentation_nom_fichier TEXT
                             )
                         """)
                 finally:
@@ -1876,7 +2442,12 @@ def _traiter_job(conn, id_job, type_job, utilisateur_id, base_id, payload):
             conn.commit()
 
         elif type_job == "import_csv":
-            conn_cible = connexion_base(payload["nom_pg"], payload["role_pg"])
+            conn_cible = connexion_base(nom_pg, role_pg)
+            chemin_documentation = payload.get("chemin_documentation")
+            documentation_pdf = None
+            if chemin_documentation and os.path.exists(chemin_documentation):
+                with open(chemin_documentation, "rb") as f:
+                    documentation_pdf = f.read()
             try:
                 nb_lignes = creer_table_et_charger(
                     conn_cible, payload["nom_table"], payload["colonnes"],
@@ -1884,6 +2455,7 @@ def _traiter_job(conn, id_job, type_job, utilisateur_id, base_id, payload):
                     payload["delimiteur"], payload["valeur_manquante"],
                     payload.get("remplacer", False), payload.get("avec_entete", True),
                     set(payload.get("lignes_exclues") or []),
+                    documentation_pdf, payload.get("nom_documentation"),
                 )
             finally:
                 # Dans le "finally", pas seulement après le bloc : un import
@@ -1891,11 +2463,14 @@ def _traiter_job(conn, id_job, type_job, utilisateur_id, base_id, payload):
                 # jusqu'ici le fichier tamponné - potentiellement plusieurs Go
                 # - orphelin dans STAGING_DIR indéfiniment, l'exception
                 # remontant directement au gestionnaire générique plus bas
-                # sans jamais repasser par ce nettoyage.
+                # sans jamais repasser par ce nettoyage. Même principe pour la
+                # documentation PDF éventuelle (§5.1).
                 conn_cible.close()
                 if os.path.exists(payload["chemin_fichier"]):
                     os.remove(payload["chemin_fichier"])
-            rafraichir_taille_base(base_id, payload["nom_pg"])
+                if chemin_documentation and os.path.exists(chemin_documentation):
+                    os.remove(chemin_documentation)
+            rafraichir_taille_base(base_id, nom_pg)
             # Hors contexte HTTP ici (consommateur de fond, §9) : pas de
             # g.claims. role_pg/email_utilisateur, déjà résolus plus haut
             # pour ce job, suffisent à simuler les claims nécessaires à
@@ -1912,7 +2487,7 @@ def _traiter_job(conn, id_job, type_job, utilisateur_id, base_id, payload):
         elif type_job == "requete_sql":
             lecture = est_requete_lecture(payload["requete"])
             delai_minutes = int(lire_parametre("duree_max_job_minutes", "30"))
-            conn_cible = connexion_base(payload["nom_pg"], payload["role_pg"])
+            conn_cible = connexion_base(nom_pg, role_pg)
             try:
                 with conn_cible.cursor() as cur:
                     cur.execute(sql.SQL("SET LOCAL statement_timeout = {}").format(sql.Literal(f"{delai_minutes}min")))
@@ -1944,7 +2519,7 @@ def _traiter_job(conn, id_job, type_job, utilisateur_id, base_id, payload):
             # claims pour ne pas violer la contrainte NOT NULL de
             # requetes_historique.utilisateur_id - constaté en pratique.
             enregistrer_historique(
-                {"role": payload["role_pg"], "email": email_utilisateur, "user_id": utilisateur_id},
+                {"role": role_pg, "email": email_utilisateur, "user_id": utilisateur_id},
                 base_id, payload["requete"], "lecture" if lecture else "ecriture", True, duree_ms,
             )
 
@@ -1986,7 +2561,7 @@ def _traiter_job(conn, id_job, type_job, utilisateur_id, base_id, payload):
             # (cf. sa docstring) : pas besoin d'un try/except supplémentaire
             # ici, contrairement à consigner_audit() ci-dessus.
             enregistrer_historique(
-                {"role": payload.get("role_pg"), "email": email_utilisateur, "user_id": utilisateur_id},
+                {"role": role_pg, "email": email_utilisateur, "user_id": utilisateur_id},
                 base_id, payload.get("requete"),
                 "lecture" if est_requete_lecture(payload.get("requete") or "") else "ecriture",
                 False, round((time.monotonic() - debut) * 1000), str(exc),

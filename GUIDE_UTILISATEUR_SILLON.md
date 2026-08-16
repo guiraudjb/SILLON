@@ -63,7 +63,7 @@ Après analyse, SILLON détecte l'encodage, le délimiteur et propose un type po
 
 ![Colonnes détectées et types proposés](07_import_colonnes.jpg)
 
-Un fichier n'est pas toujours déjà sur son poste : le bouton « Importer depuis data.gouv.fr », en haut de l'onglet, ouvre une recherche par mot-clé dans le catalogue national et propose directement les ressources CSV des jeux de données trouvés. Le fichier choisi est téléchargé côté serveur (avec la vitesse et le volume déjà reçu affichés pendant le transfert) puis rejoint automatiquement la même analyse de colonnes que pour un dépôt manuel.
+Un fichier n'est pas toujours déjà sur son poste : le bouton « Importer depuis data.gouv.fr », en haut de l'onglet, ouvre une recherche par mot-clé dans le catalogue national et propose directement les ressources exploitables des jeux de données trouvés (CSV, TXT, JSON ou ZIP — converti automatiquement, sans action à faire). Le fichier choisi est téléchargé côté serveur (avec la vitesse et le volume déjà reçu affichés pendant le transfert) puis rejoint automatiquement la même analyse de colonnes que pour un dépôt manuel. Si le jeu de données propose aussi des fichiers PDF de documentation, un menu permet d'en joindre un (facultatif) à la table qui sera créée — consultable ensuite depuis sa fiche.
 
 ![Recherche « population communes » depuis data.gouv.fr](25_import_datagouv.jpg)
 

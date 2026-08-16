@@ -141,10 +141,16 @@ elif [ -f "$PG_CONF_DIR/pg_hba.conf" ]; then
     # Le filtrage réel est porté par pg_hba.conf ci-dessus (restreint à
     # cette seule adresse) et par le statut LOGIN éphémère des rôles
     # personnels (§7.7) : élargir listen_addresses ne relâche rien à lui
-    # seul, il rend seulement PostgreSQL joignable sur cette interface.
+    # seul. Limité explicitement à "localhost" (connexions locales de
+    # sillon-orchestrateur/sillon-worker/PostgREST) et à cette adresse LAN
+    # précise, plutôt qu'à "*" (toutes les interfaces) : PostgreSQL n'a
+    # besoin d'être joignable que depuis ces deux origines, jamais depuis
+    # une interface réseau tierce de la machine (cf. rapport d'audit de
+    # sécurité).
+    LISTEN_ADDRESSES_CIBLE="localhost,${ADRESSE_HOTE}"
     LISTEN_ADDRESSES_MODIFIE=0
-    if ! sudo -u postgres psql -tAc "SHOW listen_addresses" 2>/dev/null | grep -q '\*'; then
-        sed -i "s/^#\?listen_addresses.*/listen_addresses = '*'/" "$PG_CONF_DIR/postgresql.conf" 2>/dev/null || true
+    if ! sudo -u postgres psql -tAc "SHOW listen_addresses" 2>/dev/null | grep -qF "$ADRESSE_HOTE"; then
+        sed -i "s/^#\?listen_addresses.*/listen_addresses = '${LISTEN_ADDRESSES_CIBLE}'/" "$PG_CONF_DIR/postgresql.conf" 2>/dev/null || true
         LISTEN_ADDRESSES_MODIFIE=1
     fi
 

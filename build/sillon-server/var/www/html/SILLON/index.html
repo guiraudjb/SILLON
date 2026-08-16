@@ -127,9 +127,9 @@
                 <p class="fr-hint-text">Ctrl+Espace pour l'auto-complétion des tables et colonnes.</p>
             </div>
             <ul class="fr-btns-group fr-btns-group--inline">
-                <li><button class="fr-btn fr-icon-play-circle-line fr-btn--icon-left" onclick="Travaux.executer()">Exécuter</button></li>
-                <li><button class="fr-btn fr-btn--secondary fr-icon-download-line fr-btn--icon-left" onclick="Travaux.exporter()">Exporter en CSV</button></li>
-                <li><button class="fr-btn fr-btn--secondary fr-icon-save-line fr-btn--icon-left" onclick="Travaux.enregistrerRequete()">Enregistrer sous…</button></li>
+                <li><button id="travaux-bouton-executer" class="fr-btn fr-icon-play-circle-line fr-btn--icon-left" onclick="Travaux.executer()">Exécuter</button></li>
+                <li><button id="travaux-bouton-exporter" class="fr-btn fr-btn--secondary fr-icon-download-line fr-btn--icon-left" onclick="Travaux.exporter()">Exporter en CSV</button></li>
+                <li><button id="travaux-bouton-enregistrer" class="fr-btn fr-btn--secondary fr-icon-save-line fr-btn--icon-left" onclick="Travaux.enregistrerRequete()">Enregistrer sous…</button></li>
             </ul>
 
             <div id="resultat-travaux" class="fr-mt-3w"></div>
@@ -195,7 +195,7 @@
                     </select>
                 </div>
 
-                <button class="fr-btn fr-icon-check-line fr-btn--icon-left" onclick="Import.valider()">Confirmer l'import</button>
+                <button id="import-bouton-confirmer" class="fr-btn fr-icon-check-line fr-btn--icon-left" onclick="Import.valider()">Confirmer l'import</button>
             </div>
 
             <div id="resultat-import" class="fr-mt-3w"></div>

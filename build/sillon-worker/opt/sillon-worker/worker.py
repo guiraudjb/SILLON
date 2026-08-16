@@ -128,7 +128,7 @@ def _job_annule(conn, id_job):
 # =============================================================================
 # EXECUTION DU CONTENEUR (§7.7, §8.7)
 # =============================================================================
-def executer_conteneur(conn, id_job, type_job, payload, mot_de_passe, repertoire_resultats, chemin_journal):
+def executer_conteneur(conn, id_job, type_job, payload, nom_pg, role_pg, mot_de_passe, repertoire_resultats, chemin_journal):
     delai_minutes = int(lire_parametre("duree_max_job_minutes", "30"))
     cpu_max = lire_parametre("cpu_max_conteneur_vcpu", "2")
     ram_max_mo = lire_parametre("ram_max_conteneur_mo", "4096")
@@ -150,8 +150,8 @@ def executer_conteneur(conn, id_job, type_job, payload, mot_de_passe, repertoire
     )
 
     dsn = (
-        f"host={HOTE_DB_DEPUIS_CONTENEUR} port={DB_PORT} dbname={payload['nom_pg']} "
-        f"user={payload['role_pg']} password={mot_de_passe} sslmode=prefer"
+        f"host={HOTE_DB_DEPUIS_CONTENEUR} port={DB_PORT} dbname={nom_pg} "
+        f"user={role_pg} password={mot_de_passe} sslmode=prefer"
     )
 
     commande = [
@@ -271,11 +271,21 @@ def traiter_job(conn, id_job, type_job, utilisateur_id, base_id, payload):
     marquer_statut(conn, id_job, "en_cours")
 
     with conn.cursor() as cur:
-        cur.execute("SELECT email FROM public.utilisateurs WHERE id = %s", (utilisateur_id,))
-        ligne = cur.fetchone()
-    email_utilisateur = ligne[0] if ligne else None
+        cur.execute("SELECT email, role_pg FROM public.utilisateurs WHERE id = %s", (utilisateur_id,))
+        email_utilisateur, role_pg = cur.fetchone()
 
-    role_pg = payload["role_pg"]
+    # nom_pg/role_pg dérivés ici de utilisateur_id/base_id (colonnes propres
+    # de la ligne "jobs", jamais du payload JSONB stocké dedans) : le job
+    # peut avoir été créé par un appel RPC PostgREST direct
+    # (/api/rpc/creer_job), hors du contrôle d'orchestrateur.py - un
+    # "role_pg" lu depuis payload aurait permis à un job de se connecter au
+    # conteneur d'exécution avec l'identité PostgreSQL de n'importe quel
+    # autre utilisateur, y compris l'administrateur (§7.7, §8.8 - cf.
+    # rapport d'audit de sécurité).
+    with conn.cursor() as cur:
+        cur.execute("SELECT nom_pg FROM public.bases WHERE id = %s", (base_id,))
+        ligne = cur.fetchone()
+    nom_pg = ligne[0] if ligne else None
     repertoire_resultats = os.path.join(RESULTATS_DIR, str(id_job))
     os.makedirs(repertoire_resultats, exist_ok=True)
     # 0o777 : ce répertoire est monté en écriture dans le conteneur pour
@@ -307,7 +317,7 @@ def traiter_job(conn, id_job, type_job, utilisateur_id, base_id, payload):
             mot_de_passe = cur.fetchone()[0]
         conn.commit()
 
-        code_retour = executer_conteneur(conn, id_job, type_job, payload, mot_de_passe, repertoire_resultats, chemin_journal)
+        code_retour = executer_conteneur(conn, id_job, type_job, payload, nom_pg, role_pg, mot_de_passe, repertoire_resultats, chemin_journal)
         chemin_archive = empaqueter_resultats(id_job, repertoire_resultats)
 
         if code_retour == 0:

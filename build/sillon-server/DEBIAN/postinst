@@ -149,8 +149,27 @@ EOF
     sudo -u postgres psql -d "$DB_NAME" -v ON_ERROR_STOP=1 < "$TMP_SCHEMA"
     rm -f "$TMP_SCHEMA"
 
-    echo "=== Identifiant administrateur initial : $ADMIN_EMAIL ==="
-    echo "=== Mot de passe administrateur initial : $ADMIN_PASS ==="
+    # Écrit dans un fichier root-only plutôt qu'affiché sur la sortie
+    # standard (§8.11) : la sortie d'un postinst est typiquement capturée
+    # dans des journaux persistants (/var/log/apt/term.log, journal
+    # systemd selon le mode d'installation) dont la protection n'est pas
+    # équivalente à celle de $SECRETS_FILE (chmod 600 root:root, ci-dessus)
+    # - afficher le mot de passe administrateur en clair y créait une
+    # seconde copie durable, moins bien maîtrisée (cf. rapport d'audit de
+    # sécurité).
+    ADMIN_CREDS_FILE="/root/sillon-admin-initial.txt"
+    cat << EOF > "$ADMIN_CREDS_FILE"
+Identifiant administrateur initial : ${ADMIN_EMAIL}
+Mot de passe administrateur initial : ${ADMIN_PASS}
+
+À changer dès la première connexion (panneau Administration), puis à
+supprimer ce fichier.
+EOF
+    chmod 600 "$ADMIN_CREDS_FILE"
+    chown root:root "$ADMIN_CREDS_FILE"
+
+    echo "=== Identifiants administrateur initiaux écrits dans $ADMIN_CREDS_FILE (lecture root uniquement) ==="
+    echo "=== À consulter puis à changer dès la première connexion ==="
 fi
 
 # =====================================================================
