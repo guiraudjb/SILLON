@@ -229,7 +229,19 @@ def _hote_prive_ou_local(hote):
     return False
 
 
-def _url_datagouv_autorisee(url):
+def _url_datagouv_autorisee(url, proxy_url=None):
+    """proxy_url : réglage "datagouv_proxy_url" actuellement configuré
+    (§5.6). La cible de déploiement n'a par construction aucun accès
+    réseau hors de ce proxy d'entreprise (cahier des charges §12.1) - la
+    résolution DNS directe faite par _hote_prive_ou_local échoue donc
+    systématiquement dès qu'un proxy est configuré (c'est justement
+    pourquoi il l'est), et un échec de résolution y était à tort traité
+    comme "hôte privé, refusé par prudence" : toute ressource devenait
+    inaccessible, constaté en pratique. Dès qu'un proxy est configuré, le
+    filtrage réseau est délégué au proxy d'entreprise lui-même (frontière
+    de confiance déjà posée par ce même choix d'architecture) plutôt que
+    reproduit ici par une résolution locale qui n'a justement plus lieu
+    d'être possible dans ce contexte."""
     try:
         composants = urllib.parse.urlsplit(url)
     except ValueError:
@@ -239,6 +251,8 @@ def _url_datagouv_autorisee(url):
     hote = composants.hostname
     if not hote:
         return False
+    if proxy_url:
+        return True
     return not _hote_prive_ou_local(hote)
 
 
@@ -979,17 +993,18 @@ TAILLE_MAX_DOCUMENTATION_OCTETS = 20 * 1024 * 1024  # §5.1 : PDF de quelques di
 @app.route("/import/datagouv/apercu", methods=["POST"])
 def apercu_import_datagouv():
     donnees = request.get_json(force=True)
+    proxy_url = lire_parametre("datagouv_proxy_url", "") or ""
     url_ressource = donnees.get("url_ressource")
     if not url_ressource:
         return jsonify(erreur="URL de ressource manquante"), 400
-    if not _url_datagouv_autorisee(url_ressource):
+    if not _url_datagouv_autorisee(url_ressource, proxy_url):
         return jsonify(erreur="URL de ressource non autorisée"), 400
     # Ressource de documentation optionnelle (§5.1) : même validation SSRF
     # que la ressource de données - un client authentifié fournit cette URL
     # au même titre que url_ressource, sans raison d'y appliquer une
     # protection moindre.
     url_documentation = donnees.get("url_documentation")
-    if url_documentation and not _url_datagouv_autorisee(url_documentation):
+    if url_documentation and not _url_datagouv_autorisee(url_documentation, proxy_url):
         return jsonify(erreur="URL de documentation non autorisée"), 400
     avec_entete = str(donnees.get("avec_entete", "true")).lower() != "false"
     nom_fichier = donnees.get("nom_fichier") or "ressource.csv"
