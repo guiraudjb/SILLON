@@ -146,16 +146,32 @@ sudo systemctl reload nginx
 
 ### 7.1 Notifications par mail
 
-Par défaut, l'orchestrateur tente d'envoyer les notifications de fin de traitement via un relais SMTP local (`localhost:25`), sans authentification. Pour utiliser un relais SMTP de la direction, ajouter les variables suivantes au service (`systemctl edit sillon-orchestrateur`, section `[Service]`) :
+Tout traitement mis en file d'attente (import CSV volumineux, requête SQL basculée en tâche de fond, script Python/R, suppression de base) peut notifier son auteur par mail à la fin — l'utilisateur en décide lui-même à chaque lancement, via une fenêtre de confirmation qui propose aussi de joindre le résultat au mail (uniquement si le fichier fait moins de 5 Mo ; au-delà, ou si la case n'est pas cochée, le mail renvoie simplement vers l'onglet Suivi de l'application). Il n'y a donc rien à activer côté administrateur pour que la fonctionnalité existe : seul le réglage du relais SMTP sortant reste à sa charge.
+
+Par défaut, l'orchestrateur et le travailleur de file d'attente (`sillon-worker`) tentent chacun d'envoyer leurs notifications via un relais SMTP local (`localhost:25`), sans authentification — ce qui ne fonctionne que si un agent de transport de courrier tourne réellement sur la machine. Pour utiliser le relais SMTP interne de la direction (un relais ouvert, sans authentification ni TLS ; SILLON ne gère pas de couple utilisateur/mot de passe SMTP), deux façons de procéder, équivalentes et modifiables à chaud sans redémarrage de service :
+
+- **Panneau d'administration** (recommandé) : onglet Administration, section « Notifications par mail » — renseigner le serveur SMTP (hôte), le port et l'adresse d'expéditeur, puis « Enregistrer ». Le bouton « Envoyer un mail de test » déclenche un envoi immédiat à l'adresse du compte administrateur connecté, avec les valeurs du formulaire (même non encore enregistrées) — pratique pour valider un réglage avant de le sauvegarder.
+- **SQL direct**, depuis le catalogue applicatif (`sillon_catalog`) :
+
+  ```sql
+  UPDATE public.parametres SET valeur = 'smtp.exemple-direction.fr' WHERE cle = 'smtp_hote';
+  UPDATE public.parametres SET valeur = '25'                        WHERE cle = 'smtp_port';
+  UPDATE public.parametres SET valeur = 'sillon@exemple-direction.fr' WHERE cle = 'smtp_expediteur';
+  ```
+
+Le lien inclus dans chaque mail (vers l'onglet Suivi de l'application) est construit à partir d'une adresse de base distincte, elle **non modifiable à chaud** : la variable d'environnement `SILLON_URL` (`https://localhost` par défaut). **Elle doit être réglée séparément sur les deux services**, `sillon-orchestrateur` (import CSV, requête SQL, suppression de base) et `sillon-worker` (scripts Python/R) — ce sont deux unités systemd indépendantes, chacune avec son propre `Environment=` ; régler l'une sans l'autre laisse les mails de fin de script pointer vers l'ancienne adresse alors que les autres notifications sont correctes (piège constaté en le réglant une seule fois par erreur) :
 
 ```ini
-Environment=SILLON_SMTP_HOST=smtp.exemple-direction.fr
-Environment=SILLON_SMTP_PORT=25
-Environment=SILLON_SMTP_FROM=sillon@exemple-direction.fr
+# systemctl edit sillon-orchestrateur, section [Service]
 Environment=SILLON_URL=https://sillon.exemple-direction.fr
 ```
 
-Puis `systemctl restart sillon-orchestrateur`. Un échec d'envoi de notification est journalisé (`journalctl -u sillon-orchestrateur`) mais ne bloque jamais le traitement lui-même.
+```ini
+# systemctl edit sillon-worker, section [Service]
+Environment=SILLON_URL=https://sillon.exemple-direction.fr
+```
+
+Puis `systemctl restart sillon-orchestrateur sillon-worker`. Un échec d'envoi de notification est journalisé (`journalctl -u sillon-orchestrateur` ou `-u sillon-worker` selon le type de traitement) mais ne bloque jamais le traitement lui-même — le résultat reste consultable et téléchargeable depuis l'onglet Suivi, notification par mail ou non.
 
 ### 7.2 Compte de démonstration et tutoriel
 
@@ -330,4 +346,27 @@ Cette détection n'est **jamais refaite automatiquement** par la suite. Si l'adr
 **Autres points de friction possibles liés à un changement d'adresse IP** (moins critiques, sans impact constaté à ce jour) :
 
 - Le certificat TLS auto-signé est généré avec `CN=localhost` (aucune adresse IP ni nom d'hôte spécifique) : un changement d'IP ne l'invalide pas, mais l'avertissement de certificat non reconnu par le navigateur reste présent quelle que soit l'adresse utilisée pour se connecter — sans lien avec ce changement.
-- Si `SILLON_URL` a été configuré manuellement (`systemctl edit sillon-orchestrateur`, §7.1) avec une adresse IP littérale plutôt qu'un nom de domaine, les liens inclus dans les notifications par mail pointeront vers l'ancienne adresse après un changement — à corriger manuellement dans ce cas précis.
+- Si `SILLON_URL` a été configuré manuellement (`systemctl edit sillon-orchestrateur` **et** `systemctl edit sillon-worker`, §7.1 — les deux services le lisent chacun de leur côté) avec une adresse IP littérale plutôt qu'un nom de domaine, les liens inclus dans les notifications par mail pointeront vers l'ancienne adresse après un changement — à corriger manuellement dans ce cas précis, sur les deux services.
+
+### 9.2 Tous les scripts échouent après un redémarrage du serveur, sans changement d'adresse IP
+
+**Distinct du §9.1** : ici l'adresse IP du serveur n'a pas changé, mais un **redémarrage complet de la machine** (pas un simple `systemctl restart`) suffit à provoquer le même symptôme (scripts en erreur, requêtes SQL normales) — de façon intermittente, pas à chaque redémarrage.
+
+**Cause** : sur une interface réseau configurée en DHCP via `allow-hotplug` (cas le plus courant sur une VM, `/etc/network/interfaces`), l'attribution de l'adresse IP se fait de façon asynchrone par rapport au reste de la séquence de démarrage — `network-online.target` peut être atteint **avant** la fin du bail DHCP (constaté en pratique : jusqu'à une dizaine de secondes d'écart). Si PostgreSQL démarre dans cette fenêtre, il ne parvient à se lier qu'à `localhost` (l'adresse LAN de `listen_addresses`, §7.7, n'existe pas encore sur l'interface à cet instant) — sans erreur bloquante, juste un avertissement dans son propre journal (`n'a pas pu lier IPv4 à l'adresse ... : Ne peut attribuer l'adresse demandée`). Les scripts, qui doivent joindre PostgreSQL depuis leur conteneur via cette adresse LAN, échouent alors jusqu'au prochain redémarrage manuel de PostgreSQL — l'application web, elle, continue de fonctionner normalement (elle passe par `localhost`).
+
+**Corrigé depuis `sillon-worker` 0.1.3** : le paquet installe un [*drop-in* systemd](https://www.freedesktop.org/software/systemd/man/latest/systemd.unit.html#Unit%20File%20Load%20Path) sur le gabarit `postgresql@.service` (celui réellement instancié en `postgresql@<version>-main.service` — `postgresql.service` lui-même n'est qu'une unité factice sur Debian, `ExecStart=/bin/true`, à ne pas confondre) qui fait patienter le démarrage de PostgreSQL jusqu'à ce qu'une route de sortie IPv4 soit utilisable (jusqu'à 30 secondes, puis démarrage normal même si le délai est dépassé — un problème réseau ne doit jamais empêcher PostgreSQL de démarrer). Validé par un redémarrage complet réel de la VM de test : sans le correctif, PostgreSQL ne se liait qu'à `localhost` ; avec, il patiente ~20 secondes le temps du bail DHCP puis se lie correctement aux deux adresses.
+
+**Sur une installation déjà à jour, rien à faire** : ce correctif s'applique automatiquement à l'installation/mise à jour de `sillon-worker`. Pour une installation antérieure à la version 0.1.3, sans reconstruire de paquet, poser le *drop-in* à la main :
+
+```bash
+sudo mkdir -p /etc/systemd/system/postgresql@.service.d
+sudo tee /etc/systemd/system/postgresql@.service.d/sillon-worker-attendre-reseau.conf <<'EOF'
+[Service]
+ExecStartPre=/opt/sillon-worker/attendre_reseau.sh
+EOF
+sudo systemctl daemon-reload
+```
+
+(nécessite que `/opt/sillon-worker/attendre_reseau.sh` existe déjà — livré par le paquet `sillon-worker` depuis la même version ; sur une version antérieure, mettre à jour le paquet plutôt que de recréer ce script à la main).
+
+**Comme pour le §9.1** : une adresse IP statique ou un bail DHCP réservé réduit encore la fenêtre de risque (la négociation DHCP, la partie la plus lente de la séquence, disparaît), mais le correctif ci-dessus reste la protection de fond — il fonctionne quel que soit le temps que prend la configuration réseau à ce démarrage précis.
