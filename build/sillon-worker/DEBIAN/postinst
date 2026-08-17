@@ -170,6 +170,23 @@ elif [ -f "$PG_CONF_DIR/pg_hba.conf" ]; then
     fi
 fi
 
+# Robustesse au redémarrage de la machine (pas seulement à l'installation) :
+# listen_addresses ci-dessus n'est correctement lié qu'une fois l'adresse
+# LAN réellement configurée sur l'interface - sur une VM en DHCP avec une
+# interface "allow-hotplug", un redémarrage ultérieur peut démarrer
+# PostgreSQL avant la fin du bail DHCP (network-online.target ne suffit
+# pas à l'empêcher, constaté en pratique : atteint dès la fin de
+# "networking.service", sans attendre une interface hotplug distincte).
+# Le drop-in systemd livré par ce paquet (etc/systemd/system/
+# postgresql@.service.d/ - le gabarit réellement instancié en
+# "postgresql@<version>-main.service", jamais "postgresql.service" qui
+# n'est qu'une unité factice sur Debian, ExecStart=/bin/true) fait
+# patienter le démarrage de PostgreSQL via /opt/sillon-worker/
+# attendre_reseau.sh - déjà en place sur le disque à ce stade du postinst
+# (dpkg dépaquette avant d'exécuter ce script), il ne reste qu'à faire
+# relire sa configuration à systemd.
+systemctl daemon-reload
+
 # =====================================================================
 # 4. DROITS SUR LE REPERTOIRE APPLICATIF (§4.2)
 # =====================================================================

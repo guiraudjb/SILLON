@@ -1,5 +1,5 @@
 Package: sillon-worker
-Version: 0.1.2
+Version: 0.1.3
 Architecture: all
 Maintainer: Administrateur SILLON <admin@sillon.local>
 Depends: sillon-orchestrateur, podman
