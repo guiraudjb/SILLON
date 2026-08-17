@@ -177,8 +177,12 @@ fi
 # PostgreSQL avant la fin du bail DHCP (network-online.target ne suffit
 # pas à l'empêcher, constaté en pratique : atteint dès la fin de
 # "networking.service", sans attendre une interface hotplug distincte).
-# Le drop-in systemd livré par ce paquet (etc/systemd/system/
-# postgresql@.service.d/ - le gabarit réellement instancié en
+# Le drop-in systemd livré par ce paquet (lib/systemd/system/
+# postgresql@.service.d/ - hors /etc, comme sillon-worker.service lui-même
+# : un drop-in fourni par le paquet n'a pas vocation à être personnalisé
+# par l'administrateur, contrairement à un fichier sous /etc (que lintian
+# s'attend à voir déclaré "conffile" sinon - constaté en pratique) ; le
+# gabarit réellement instancié en
 # "postgresql@<version>-main.service", jamais "postgresql.service" qui
 # n'est qu'une unité factice sur Debian, ExecStart=/bin/true) fait
 # patienter le démarrage de PostgreSQL via /opt/sillon-worker/
