@@ -94,6 +94,81 @@ if [ "$DB_EXISTE" = "1" ]; then
         ON CONFLICT (cle) DO NOTHING;
     " >/dev/null
 
+    # Migration : consentement par job à la notification par mail et à la
+    # pièce jointe (§9/§10) - capturés par une modale côté client au moment
+    # de la mise en file, jusqu'ici toujours implicite (mail systématique,
+    # jamais de pièce jointe). creer_job() change d'arité (ajout de
+    # _notifier puis _piece_jointe) : DROP explicite de chaque signature
+    # antérieure avant recréation, sinon plusieurs signatures coexistent et
+    # le REVOKE/GRANT le plus ancien resterait actif sur l'une d'elles
+    # (constaté en pratique pour un précédent changement de signature,
+    # cf. §5.5).
+    sudo -u postgres psql -d "$DB_NAME" -v ON_ERROR_STOP=1 -c "
+        ALTER TABLE public.jobs ADD COLUMN IF NOT EXISTS notifier_par_mail BOOLEAN NOT NULL DEFAULT true;
+        ALTER TABLE public.jobs ADD COLUMN IF NOT EXISTS joindre_piece_jointe BOOLEAN NOT NULL DEFAULT false;
+
+        DROP FUNCTION IF EXISTS public.creer_job(public.type_job, integer, jsonb);
+        DROP FUNCTION IF EXISTS public.creer_job(public.type_job, integer, jsonb, boolean);
+
+        CREATE OR REPLACE FUNCTION public.creer_job(_type public.type_job, _base_id INTEGER, _payload JSONB DEFAULT '{}'::jsonb, _notifier BOOLEAN DEFAULT true, _piece_jointe BOOLEAN DEFAULT false)
+        RETURNS INTEGER AS \$\$
+        DECLARE
+            _id_job           INTEGER;
+            _max_simultanes   INTEGER;
+            _en_cours         INTEGER;
+            _proprietaire     BOOLEAN;
+            _autorise_scripts BOOLEAN;
+        BEGIN
+            IF _type = 'creation_base' THEN
+                IF _base_id IS NOT NULL THEN
+                    RAISE EXCEPTION 'creation_base ne porte jamais de base cible';
+                END IF;
+            ELSE
+                IF _base_id IS NULL THEN
+                    RAISE EXCEPTION 'base_id requis pour ce type de job';
+                END IF;
+
+                SELECT (b.proprietaire_id = public._id_courant()), COALESCE(p.autorise_scripts, false)
+                INTO _proprietaire, _autorise_scripts
+                FROM public.bases b
+                LEFT JOIN public.partages p ON p.base_id = b.id AND p.beneficiaire_id = public._id_courant()
+                WHERE b.id = _base_id AND (b.proprietaire_id = public._id_courant() OR p.beneficiaire_id = public._id_courant());
+
+                IF NOT FOUND THEN
+                    RAISE EXCEPTION 'Base introuvable ou inaccessible';
+                END IF;
+
+                IF _type = 'suppression_base' AND NOT _proprietaire THEN
+                    RAISE EXCEPTION 'Seul le proprietaire de la base peut la supprimer';
+                END IF;
+
+                IF _type IN ('script_python', 'script_r') AND NOT _proprietaire AND NOT _autorise_scripts THEN
+                    RAISE EXCEPTION 'Execution de script non autorisee sur cette base';
+                END IF;
+            END IF;
+
+            SELECT valeur::INTEGER INTO _max_simultanes FROM public.parametres WHERE cle = 'jobs_simultanes_par_utilisateur';
+            SELECT count(*) INTO _en_cours FROM public.jobs
+                WHERE utilisateur_id = public._id_courant() AND statut IN ('en_attente', 'en_cours');
+
+            IF _en_cours >= _max_simultanes THEN
+                RAISE EXCEPTION 'Quota de jobs simultanes atteint (%). Voir §11.', _max_simultanes;
+            END IF;
+
+            INSERT INTO public.jobs (utilisateur_id, type, base_id, payload, notifier_par_mail, joindre_piece_jointe)
+            VALUES (public._id_courant(), _type, _base_id, (_payload - 'nom_pg' - 'role_pg'), _notifier, _piece_jointe)
+            RETURNING id INTO _id_job;
+
+            PERFORM pg_notify('sillon_jobs', _id_job::text);
+
+            RETURN _id_job;
+        END;
+        \$\$ LANGUAGE plpgsql SECURITY DEFINER;
+
+        REVOKE EXECUTE ON FUNCTION public.creer_job(public.type_job, integer, jsonb, boolean, boolean) FROM PUBLIC;
+        GRANT EXECUTE ON FUNCTION public.creer_job(public.type_job, integer, jsonb, boolean, boolean) TO agent;
+    " >/dev/null
+
     # Les secrets existants sont conservés tels quels (§12.3) : les
     # régénérer invaliderait toutes les sessions actives et romprait la
     # connexion des paquets déjà installés (sillon-orchestrateur, sillon-worker).

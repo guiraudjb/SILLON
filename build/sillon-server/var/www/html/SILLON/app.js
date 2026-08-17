@@ -397,11 +397,50 @@ const Modales = {
     },
 };
 
+// Modale de consentement (§9/§10) : ouverte au moment de chaque mise en
+// file d'attente déclenchée par un clic explicite de l'utilisateur (import
+// volumineux, requête/script asynchrone, suppression de base), jamais pour
+// la création de base personnelle (invisible, déclenchée en arrière-plan).
+// demander() renvoie une promesse résolue par repondre() ; l'évènement
+// natif "close" du <dialog> (déclenché par Modales.fermer() quel que soit
+// le chemin - bouton Oui/Non, croix, clic hors-modale, Échap) sert de
+// filet pour toujours résoudre la promesse, même sur un abandon sans
+// réponse explicite (§ défaut prudent : pas de notification).
+const ModaleNotification = {
+    _resolve: null,
+    _reponse: null,
+    demander() {
+        const modale = document.getElementById("modal-notification-mail");
+        document.getElementById("modal-notification-mail-adresse").textContent = Etat.utilisateur?.email || "";
+        document.getElementById("modal-notification-piece-jointe").checked = false;
+        return new Promise((resolve) => {
+            ModaleNotification._resolve = resolve;
+            ModaleNotification._reponse = null;
+            Modales.ouvrir(modale);
+        });
+    },
+    repondre(notifier) {
+        ModaleNotification._reponse = {
+            notifier,
+            pieceJointe: notifier && document.getElementById("modal-notification-piece-jointe").checked,
+        };
+        Modales.fermer(document.getElementById("modal-notification-mail"));
+    },
+    init() {
+        document.getElementById("modal-notification-mail").addEventListener("close", () => {
+            if (!ModaleNotification._resolve) return;
+            ModaleNotification._resolve(ModaleNotification._reponse || { notifier: false, pieceJointe: false });
+            ModaleNotification._resolve = null;
+        });
+    },
+};
+
 document.addEventListener("DOMContentLoaded", () => {
     document.querySelectorAll(".fr-tabs__tab").forEach((bouton) => {
         bouton.addEventListener("click", () => basculerOnglet(bouton.dataset.onglet));
     });
     Modales.init();
+    ModaleNotification.init();
     Import.initGlisserDeposer();
     Auth.chargerSession();
     mermaid.initialize({
@@ -713,10 +752,14 @@ const Bases = {
         const saisie = prompt(`Action irréversible. Pour confirmer la suppression de la base, saisissez son nom exact :\n${nomBase}`);
         if (saisie === null) return;
         if (saisie !== nomBase) return alert("Nom incorrect, suppression annulée.");
+        const { notifier, pieceJointe } = await ModaleNotification.demander();
 
         const restaurer = verrouillerBouton(bouton);
         try {
-            const resultat = await appelJson(`/orchestrateur/bases/${idBase}/supprimer`, { method: "POST" });
+            const resultat = await appelJson(`/orchestrateur/bases/${idBase}/supprimer`, {
+                method: "POST",
+                body: JSON.stringify({ notifier_par_mail: notifier, joindre_piece_jointe: pieceJointe }),
+            });
             if (Etat.baseSelectionnee && Etat.baseSelectionnee.id === idBase) {
                 Etat.baseSelectionnee = null;
                 document.getElementById("rappel-base-selectionnee").querySelector("p").textContent =
@@ -855,13 +898,18 @@ const Travaux = {
         const conteneur = document.getElementById("resultat-travaux");
         const requete = Travaux.editeur.getValue().trim();
         if (!Etat.baseSelectionnee || !requete) return;
+        const { notifier, pieceJointe } = await ModaleNotification.demander();
         afficherChargement(conteneur, "Mise en file d'attente…");
         try {
             const resultat = await appelJson("/orchestrateur/sql/job", {
                 method: "POST",
-                body: JSON.stringify({ base_id: Etat.baseSelectionnee.id, requete }),
+                body: JSON.stringify({
+                    base_id: Etat.baseSelectionnee.id, requete,
+                    notifier_par_mail: notifier, joindre_piece_jointe: pieceJointe,
+                }),
             });
-            conteneur.innerHTML = `<div class="fr-alert fr-alert--info fr-alert--sm">Requête mise en file d'attente (job n°${resultat.id_job}) : suivez sa progression dans l'onglet Suivi, vous serez notifié par mail à la fin.</div>`;
+            const suffixeMail = notifier ? ", vous serez notifié par mail à la fin" : "";
+            conteneur.innerHTML = `<div class="fr-alert fr-alert--info fr-alert--sm">Requête mise en file d'attente (job n°${resultat.id_job}) : suivez sa progression dans l'onglet Suivi${suffixeMail}.</div>`;
         } catch (erreur) {
             afficherErreur(conteneur, erreur);
         }
@@ -999,6 +1047,20 @@ const Travaux = {
 // ONGLET IMPORT (§5.1)
 // =============================================================================
 const Import = {
+    // Mémorisé après le premier appel plutôt que refait à chaque import
+    // (§9/§10, prédiction sync/async côté client) : ce réglage n'est
+    // modifiable que par un administrateur, une valeur légèrement
+    // obsolète pendant la session en cours est sans conséquence réelle
+    // (au pire, la modale est proposée ou non à tort une fois).
+    _seuilSynchroneOctetsCache: null,
+    async _seuilSynchroneOctets() {
+        if (Import._seuilSynchroneOctetsCache === null) {
+            const parametres = await appelJson("/api/parametres?cle=eq.seuil_import_synchrone_mo").catch(() => []);
+            Import._seuilSynchroneOctetsCache = Number(parametres[0]?.valeur || 10) * 1024 * 1024;
+        }
+        return Import._seuilSynchroneOctetsCache;
+    },
+
     // Glisser-déposer (§5.1, étape 1), en complément de la sélection
     // classique par clic déjà portée par <input type="file">. preventDefault
     // sur dragover est indispensable : sans lui, le navigateur refuse
@@ -1170,6 +1232,19 @@ const Import = {
         const apercu = Etat.dernierApercu;
         const baseId = document.getElementById("import-base-cible").value || null;
 
+        // La modale de consentement (§9/§10) n'a de sens que si ce fichier
+        // va effectivement partir en file d'attente : "taille_octets"
+        // (fichier normalisé, cf. _analyser_fichier_stage) est comparé au
+        // même seuil que celui utilisé côté serveur par valider_import()
+        // pour cette décision (seuil_import_synchrone_mo) - un import qui
+        // se termine en quelques secondes n'a pas à interrompre
+        // l'utilisateur pour une notification qui ne partira jamais.
+        let notifier = true;
+        let pieceJointe = false;
+        if (apercu?.taille_octets > (await Import._seuilSynchroneOctets())) {
+            ({ notifier, pieceJointe } = await ModaleNotification.demander());
+        }
+
         // Bouton principal désactivé ici aussi (pas seulement dans valider())
         // : cette fonction est également atteinte depuis les boutons
         // d'exclusion/remplacement, dynamiquement recréés à chaque appel -
@@ -1200,6 +1275,8 @@ const Import = {
                     avec_entete: apercu.avec_entete,
                     remplacer,
                     exclure_lignes: exclureLignes,
+                    notifier_par_mail: notifier,
+                    joindre_piece_jointe: pieceJointe,
                     ...(apercu.nom_documentation ? { nom_documentation: apercu.nom_documentation } : {}),
                 }),
             });
@@ -1212,9 +1289,10 @@ const Import = {
             if (!reponse.ok) throw new Error(resultat.erreur || `Erreur HTTP ${reponse.status}`);
 
             const suffixeExclusion = exclureLignes.length ? ` (${exclureLignes.length} ligne(s) exclue(s))` : "";
+            const suffixeMail = notifier ? ", vous serez notifié par mail à la fin" : "";
             conteneur.innerHTML = resultat.statut === "termine"
                 ? `<div class="fr-alert fr-alert--success fr-alert--sm">Table « ${echapper(resultat.table)} » créée avec succès${suffixeExclusion}.</div>`
-                : `<div class="fr-alert fr-alert--info fr-alert--sm">Fichier volumineux : import mis en file d'attente (job n°${resultat.id_job}), suivez sa progression dans l'onglet Suivi.</div>`;
+                : `<div class="fr-alert fr-alert--info fr-alert--sm">Fichier volumineux : import mis en file d'attente (job n°${resultat.id_job}), suivez sa progression dans l'onglet Suivi${suffixeMail}.</div>`;
             document.getElementById("assistant-import").hidden = true;
             await Bases.charger();
         } catch (erreur) {
@@ -1528,14 +1606,18 @@ dbDisconnect(connexion)
             return afficherErreur(conteneur, new Error("Le nom du fichier doit se terminer par .py ou .R."));
         }
 
+        Modales.fermer(document.getElementById("modal-editeur-script"));
+        const { notifier, pieceJointe } = await ModaleNotification.demander();
+
         // Un Blob construit à partir du contenu (potentiellement modifié)
         // de la modale, jamais le File d'origine : c'est le texte affiché
         // à l'écran qui doit partir, pas le fichier initialement choisi.
         const donnees = new FormData();
         donnees.append("fichier", new Blob([contenu], { type: "text/plain" }), nomFichier);
         donnees.append("base_id", baseId);
+        donnees.append("notifier_par_mail", notifier);
+        donnees.append("joindre_piece_jointe", pieceJointe);
 
-        Modales.fermer(document.getElementById("modal-editeur-script"));
         afficherChargement(conteneur, "Envoi du script…");
         try {
             const resultat = await appelJson("/orchestrateur/scripts/deposer", { method: "POST", body: donnees });
@@ -3454,6 +3536,7 @@ const Administration = {
         Administration.chargerUtilisateurs();
         Administration.chargerQuotas();
         Administration.chargerProxyDatagouv();
+        Administration.chargerSmtp();
         Administration.chargerAudit();
     },
 
@@ -3494,15 +3577,47 @@ const Administration = {
         }
     },
 
-    async reinitialiserMdp(bouton, email) {
-        const nouveauMdp = prompt(`Nouveau mot de passe pour ${email} (12 caractères minimum) :`);
-        if (!nouveauMdp) return;
+    reinitialiserMdp(bouton, email) {
+        const modale = document.getElementById("modal-reinitialiser-mdp");
+        modale.dataset.email = email;
+        document.getElementById("modal-reinitialiser-mdp-email").textContent = email;
+        document.getElementById("modal-reinitialiser-mdp-valeur").value = "";
+        Administration._masquerErreurMdp();
+        Modales.ouvrir(modale, bouton);
+    },
+
+    // Retour DSFR inline (fr-input-group--error), jamais alert() : une
+    // boîte de dialogue JS native bloque le fil d'exécution de la page
+    // (gênant pour l'automatisation de tests, et une expérience utilisateur
+    // dégradée par rapport au reste de la modale).
+    _masquerErreurMdp() {
+        document.getElementById("modal-reinitialiser-mdp-groupe").classList.remove("fr-input-group--error");
+        const erreur = document.getElementById("modal-reinitialiser-mdp-erreur");
+        erreur.hidden = true;
+        erreur.textContent = "";
+    },
+
+    _afficherErreurMdp(message) {
+        document.getElementById("modal-reinitialiser-mdp-groupe").classList.add("fr-input-group--error");
+        const erreur = document.getElementById("modal-reinitialiser-mdp-erreur");
+        erreur.hidden = false;
+        erreur.textContent = message;
+    },
+
+    async confirmerReinitialisationMdp() {
+        const email = document.getElementById("modal-reinitialiser-mdp").dataset.email;
+        const champ = document.getElementById("modal-reinitialiser-mdp-valeur");
+        if (champ.value.length < 12) return Administration._afficherErreurMdp("Le mot de passe doit comporter au moins 12 caractères.");
+        Administration._masquerErreurMdp();
+
+        const bouton = document.getElementById("modal-reinitialiser-mdp-bouton");
         const restaurer = verrouillerBouton(bouton);
         try {
-            await appelJson("/api/rpc/reinitialiser_mdp", { method: "POST", body: JSON.stringify({ _email: email, _nouveau_mdp: nouveauMdp }) });
-            alert("Mot de passe réinitialisé.");
+            await appelJson("/api/rpc/reinitialiser_mdp", { method: "POST", body: JSON.stringify({ _email: email, _nouveau_mdp: champ.value }) });
+            Modales.fermer(document.getElementById("modal-reinitialiser-mdp"));
+            afficherToast("Réinitialisé", `Mot de passe de ${email} réinitialisé.`, "success");
         } catch (erreur) {
-            alert(erreur.message);
+            Administration._afficherErreurMdp(erreur.message);
         } finally {
             restaurer();
         }
@@ -3555,6 +3670,56 @@ const Administration = {
             method: "PATCH",
             body: JSON.stringify({ valeur }),
         }).catch((erreur) => alert(erreur.message));
+    },
+
+    // Champs dédiés du même principe que le proxy data.gouv.fr ci-dessus :
+    // smtp_hote/smtp_port/smtp_expediteur continuent aussi d'apparaître
+    // dans le tableau générique des quotas, sans conséquence (même
+    // endpoint /api/parametres).
+    async chargerSmtp() {
+        const parametres = await appelJson(
+            "/api/parametres?cle=in.(smtp_hote,smtp_port,smtp_expediteur)"
+        ).catch(() => []);
+        const valeur = (cle, defaut) => parametres.find((p) => p.cle === cle)?.valeur ?? defaut;
+        document.getElementById("admin-smtp-hote").value = valeur("smtp_hote", "");
+        document.getElementById("admin-smtp-port").value = valeur("smtp_port", "");
+        document.getElementById("admin-smtp-expediteur").value = valeur("smtp_expediteur", "");
+    },
+
+    async enregistrerSmtp() {
+        const champs = {
+            smtp_hote: document.getElementById("admin-smtp-hote").value.trim(),
+            smtp_port: document.getElementById("admin-smtp-port").value.trim(),
+            smtp_expediteur: document.getElementById("admin-smtp-expediteur").value.trim(),
+        };
+        try {
+            await Promise.all(Object.entries(champs).map(([cle, valeur]) =>
+                appelJson(`/api/parametres?cle=eq.${cle}`, { method: "PATCH", body: JSON.stringify({ valeur }) })
+            ));
+            afficherToast("Enregistré", "Réglage du serveur de mail sortant mis à jour.", "success");
+        } catch (erreur) {
+            alert(erreur.message);
+        }
+    },
+
+    async testerSmtp() {
+        const conteneur = document.getElementById("admin-smtp-resultat");
+        conteneur.innerHTML = "Envoi en cours…";
+        try {
+            const resultat = await appelJson("/orchestrateur/mail/tester", {
+                method: "POST",
+                body: JSON.stringify({
+                    smtp_hote: document.getElementById("admin-smtp-hote").value.trim(),
+                    smtp_port: document.getElementById("admin-smtp-port").value.trim(),
+                    smtp_expediteur: document.getElementById("admin-smtp-expediteur").value.trim(),
+                }),
+            });
+            conteneur.innerHTML = resultat.ok
+                ? `<div class="fr-alert fr-alert--success fr-alert--sm">Mail de test envoyé à ${echapper(Etat.utilisateur.email)}.</div>`
+                : `<div class="fr-alert fr-alert--error fr-alert--sm">Échec : ${echapper(resultat.erreur)}</div>`;
+        } catch (erreur) {
+            conteneur.innerHTML = `<div class="fr-alert fr-alert--error fr-alert--sm">${echapper(erreur.message)}</div>`;
+        }
     },
 
     async testerProxyDatagouv() {

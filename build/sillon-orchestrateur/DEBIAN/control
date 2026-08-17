@@ -1,5 +1,5 @@
 Package: sillon-orchestrateur
-Version: 0.1.12
+Version: 0.1.13
 Architecture: all
 Maintainer: Administrateur SILLON <admin@sillon.local>
 Depends: sillon-server, python3-flask, python3-psycopg2, python3-jwt, gunicorn, python3-ijson

@@ -16,6 +16,7 @@ une poignée de fonctions dupliquées est un compromis raisonnable face à un
 paquet de bibliothèque partagée supplémentaire pour si peu de code.
 """
 
+import mimetypes
 import os
 import shutil
 import signal
@@ -244,7 +245,13 @@ def empaqueter_resultats(id_job, repertoire_resultats):
 # =============================================================================
 # NOTIFICATIONS PAR MAIL (§9, §10)
 # =============================================================================
-def envoyer_notification(email_destinataire, sujet, corps):
+# Même seuil que orchestrateur.py (§9/§10) - la décision d'y rester ou non
+# est prise avant l'appel, ici la fonction se contente de joindre ce
+# qu'on lui donne.
+TAILLE_MAX_PIECE_JOINTE_OCTETS = 5 * 1024 * 1024
+
+
+def envoyer_notification(email_destinataire, sujet, corps, piece_jointe=None):
     # Lu à chaque envoi, pas mémorisé au démarrage (§5.6) : réglage
     # modifiable à chaud par un administrateur, sans redémarrage de ce
     # service - même principe que orchestrateur.py, qui envoie ses propres
@@ -255,6 +262,12 @@ def envoyer_notification(email_destinataire, sujet, corps):
     message["From"] = lire_parametre("smtp_expediteur", "sillon@sillon.local")
     message["To"] = email_destinataire
     message.set_content(corps)
+    if piece_jointe:
+        with open(piece_jointe, "rb") as f:
+            contenu = f.read()
+        type_mime = mimetypes.guess_type(piece_jointe)[0] or "application/octet-stream"
+        type_principal, _, sous_type = type_mime.partition("/")
+        message.add_attachment(contenu, maintype=type_principal, subtype=sous_type or "octet-stream", filename=os.path.basename(piece_jointe))
     try:
         smtp_hote = lire_parametre("smtp_hote", "localhost")
         smtp_port = int(lire_parametre("smtp_port", "25"))
@@ -267,7 +280,7 @@ def envoyer_notification(email_destinataire, sujet, corps):
 # =============================================================================
 # TRAITEMENT D'UN JOB (§5.4, §7.7, §8.7)
 # =============================================================================
-def traiter_job(conn, id_job, type_job, utilisateur_id, base_id, payload):
+def traiter_job(conn, id_job, type_job, utilisateur_id, base_id, payload, notifier_par_mail, joindre_piece_jointe):
     marquer_statut(conn, id_job, "en_cours")
 
     with conn.cursor() as cur:
@@ -372,16 +385,41 @@ def traiter_job(conn, id_job, type_job, utilisateur_id, base_id, payload):
     marquer_statut(conn, id_job, statut_final, chemin_resultat=chemin_archive,
                     message_erreur=message_erreur, message_utilisateur=message_utilisateur)
 
-    if email_utilisateur:
+    if email_utilisateur and notifier_par_mail:
         if statut_final == "termine":
+            # Même logique que orchestrateur.py (§9/§10) : pièce jointe
+            # (archive .zip journal+résultats, cf. empaqueter_resultats)
+            # seulement si demandée et sous 5 Mo, sinon la ligne du mail
+            # explique pourquoi et renvoie vers Suivi.
+            piece_jointe_ok = (
+                joindre_piece_jointe and chemin_archive and os.path.exists(chemin_archive)
+                and os.path.getsize(chemin_archive) <= TAILLE_MAX_PIECE_JOINTE_OCTETS
+            )
+            if piece_jointe_ok:
+                ligne_piece_jointe = "Le résultat est joint à ce mail.\n"
+            elif joindre_piece_jointe and chemin_archive:
+                ligne_piece_jointe = "Le résultat dépasse 5 Mo : il n'a pas pu être joint, téléchargez-le depuis l'onglet Suivi.\n"
+            else:
+                ligne_piece_jointe = ""
             envoyer_notification(
                 email_utilisateur, "[SILLON] Script terminé",
-                f"Votre script ({type_job}) est terminé.\nConsultez le résultat : {URL_APPLICATION}/#/suivi\n",
+                f"Votre script ({type_job}) est terminé.\n"
+                f"Base concernée : {nom_pg or 'sans objet'}\n"
+                f"{ligne_piece_jointe}"
+                f"Consultez le résultat : {URL_APPLICATION}/#/suivi\n",
+                piece_jointe=chemin_archive if piece_jointe_ok else None,
             )
         else:
+            # message_utilisateur, pas message_erreur (§5.5) : ce dernier
+            # peut contenir un détail technique brut (chemin, sortie
+            # Podman...) qu'on préfère ne pas faire transiter par le canal
+            # mail, moins maîtrisé qu'une session web authentifiée (§8.10,
+            # même prudence que pour le jeton de téléchargement).
             envoyer_notification(
                 email_utilisateur, "[SILLON] Échec du script",
-                f"Votre script ({type_job}) a échoué : {message_erreur}\n",
+                f"Votre script ({type_job}) a échoué : {message_utilisateur}\n"
+                f"Base concernée : {nom_pg or 'sans objet'}\n"
+                f"Détail dans l'onglet Suivi : {URL_APPLICATION}/#/suivi\n",
             )
 
 
@@ -392,7 +430,7 @@ def _prochain_job(conn):
     with conn.cursor() as cur:
         cur.execute(
             """
-            SELECT id, type, utilisateur_id, base_id, payload
+            SELECT id, type, utilisateur_id, base_id, payload, notifier_par_mail, joindre_piece_jointe
             FROM public.jobs
             WHERE statut = 'en_attente' AND type = ANY(%s::public.type_job[])
             ORDER BY date_creation

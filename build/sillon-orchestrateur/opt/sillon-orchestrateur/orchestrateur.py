@@ -538,10 +538,10 @@ def executer_sql_en_tache_de_fond():
     with connexion_catalogue(claims=g.claims) as conn, conn.cursor() as cur:
         try:
             cur.execute(
-                "SELECT public.creer_job('requete_sql', %s, %s::jsonb)",
+                "SELECT public.creer_job('requete_sql', %s, %s::jsonb, %s, %s)",
                 (base_id, psycopg2.extras.Json({
                     "requete": requete_utilisateur,
-                })),
+                }), bool(donnees.get("notifier_par_mail", True)), bool(donnees.get("joindre_piece_jointe", False))),
             )
         except psycopg2.Error as exc:
             return jsonify(erreur=str(exc)), 400
@@ -1356,6 +1356,13 @@ def _analyser_fichier_stage(jeton, chemin_stage, avec_entete, nom_fichier):
         "nb_lignes_totales": nb_lignes,
         "colonnes": colonnes,
         "apercu": echantillon,
+        # Taille du fichier normalisé (post-ZIP/TXT/JSON, §5.1) tel qu'il
+        # sera relu par valider_import() : permet au client de prédire
+        # sans ambiguïté si l'import sera synchrone ou différé en file
+        # d'attente (comparaison à seuil_import_synchrone_mo), pour ne
+        # proposer la modale de consentement à la notification par mail
+        # (§9/§10) que lorsqu'un job sera effectivement créé.
+        "taille_octets": os.path.getsize(chemin_stage),
     }, 200
 
 
@@ -1594,7 +1601,13 @@ def valider_import():
     if not base_id:
         try:
             with connexion_catalogue(claims=claims) as conn, conn.cursor() as cur:
-                cur.execute("SELECT public.creer_job('creation_base', NULL, '{}'::jsonb)")
+                # notifier=false : cette création de base est un
+                # sous-effet invisible du premier import (§9), jamais
+                # soumise à la modale de consentement côté client - un
+                # mail non sollicité pour un job que l'utilisateur n'a pas
+                # vu passer en file d'attente serait surprenant plutôt
+                # qu'utile.
+                cur.execute("SELECT public.creer_job('creation_base', NULL, '{}'::jsonb, false)")
                 id_job = cur.fetchone()[0]
                 conn.commit()
         except psycopg2.Error as exc:
@@ -1681,7 +1694,7 @@ def valider_import():
     try:
         with connexion_catalogue(claims=claims) as conn, conn.cursor() as cur:
             cur.execute(
-                "SELECT public.creer_job('import_csv', %s, %s::jsonb)",
+                "SELECT public.creer_job('import_csv', %s, %s::jsonb, %s, %s)",
                 (base_id, psycopg2.extras.Json({
                     "chemin_fichier": chemin_fichier,
                     "nom_table": nom_table,
@@ -1701,7 +1714,7 @@ def valider_import():
                     # sillon_catalog du poids de chaque PDF importé).
                     "chemin_documentation": chemin_documentation if documentation_disponible else None,
                     "nom_documentation": nom_documentation,
-                })),
+                }), bool(donnees.get("notifier_par_mail", True)), bool(donnees.get("joindre_piece_jointe", False))),
             )
             id_job = cur.fetchone()[0]
             conn.commit()
@@ -1773,11 +1786,12 @@ def deposer_script():
     with connexion_catalogue(claims=g.claims) as conn, conn.cursor() as cur:
         try:
             cur.execute(
-                "SELECT public.creer_job(%s, %s, %s::jsonb)",
+                "SELECT public.creer_job(%s, %s, %s::jsonb, %s, %s)",
                 (type_job, base_id, psycopg2.extras.Json({
                     "chemin_script": chemin_script,
                     "nom_fichier": fichier.filename,
-                })),
+                }), request.form.get("notifier_par_mail", "true").lower() != "false",
+                    request.form.get("joindre_piece_jointe", "false").lower() == "true"),
             )
         except psycopg2.Error as exc:
             os.remove(chemin_script)
@@ -2089,9 +2103,13 @@ def supprimer_base(base_id):
     if not base_dont_je_suis_proprietaire(g.claims, base_id):
         return jsonify(erreur="Base introuvable ou vous n'en êtes pas propriétaire"), 404
 
+    donnees = request.get_json(force=True, silent=True) or {}
     with connexion_catalogue(claims=g.claims) as conn, conn.cursor() as cur:
         try:
-            cur.execute("SELECT public.creer_job('suppression_base', %s, '{}'::jsonb)", (base_id,))
+            cur.execute(
+                "SELECT public.creer_job('suppression_base', %s, '{}'::jsonb, %s, %s)",
+                (base_id, bool(donnees.get("notifier_par_mail", True)), bool(donnees.get("joindre_piece_jointe", False))),
+            )
         except psycopg2.Error as exc:
             return jsonify(erreur=str(exc)), 400
         id_job = cur.fetchone()[0]
@@ -2240,7 +2258,13 @@ def contenu_apercu(id_job, nom_fichier):
 # =============================================================================
 # NOTIFICATIONS PAR MAIL (§9, §10)
 # =============================================================================
-def envoyer_notification(email_destinataire, sujet, corps):
+# Pièce jointe (§9/§10, case à cocher de la modale de consentement) : le
+# choix de ne jamais dépasser 5 Mo est fait ici, jamais laissé au client -
+# la taille réelle du fichier de résultat n'est connue que côté serveur.
+TAILLE_MAX_PIECE_JOINTE_OCTETS = 5 * 1024 * 1024
+
+
+def envoyer_notification(email_destinataire, sujet, corps, piece_jointe=None):
     # Lu à chaque envoi plutôt que mémorisé au démarrage (§5.6) : ce réglage
     # est modifiable à chaud par un administrateur (panneau Administration,
     # tableau des quotas - "smtp_hote"/"smtp_port"/"smtp_expediteur" sont de
@@ -2251,6 +2275,15 @@ def envoyer_notification(email_destinataire, sujet, corps):
     message["From"] = lire_parametre("smtp_expediteur", "sillon@sillon.local")
     message["To"] = email_destinataire
     message.set_content(corps)
+    # piece_jointe : chemin déjà vérifié éligible (existant, < 5 Mo) par
+    # l'appelant - c'est là, pas ici, que le corps du mail est adapté
+    # (§10, "le mail s'adapte selon que la pièce est jointe ou non").
+    if piece_jointe:
+        with open(piece_jointe, "rb") as f:
+            contenu = f.read()
+        type_mime = mimetypes.guess_type(piece_jointe)[0] or "application/octet-stream"
+        type_principal, _, sous_type = type_mime.partition("/")
+        message.add_attachment(contenu, maintype=type_principal, subtype=sous_type or "octet-stream", filename=os.path.basename(piece_jointe))
     try:
         smtp_hote = lire_parametre("smtp_hote", "localhost")
         smtp_port = int(lire_parametre("smtp_port", "25"))
@@ -2258,6 +2291,41 @@ def envoyer_notification(email_destinataire, sujet, corps):
             serveur.send_message(message)
     except (OSError, ValueError) as exc:
         app.logger.warning("Échec d'envoi de la notification à %s : %s", email_destinataire, exc)
+
+
+# Réservé aux administrateurs (§5.6), même motif que /datagouv/tester-proxy
+# juste au-dessus dans le fichier : déclenche un envoi réseau sortant réel,
+# potentiellement vers un relais interne sensible. Les valeurs du
+# formulaire priment sur celles déjà enregistrées (§ mêmes principe que le
+# test de proxy) - permet de vérifier un réglage avant de l'enregistrer.
+@app.route("/mail/tester", methods=["POST"])
+def tester_smtp():
+    if g.claims.get("profil") != "administrateur":
+        return jsonify(erreur="Réservé aux administrateurs"), 403
+
+    donnees = request.get_json(force=True) or {}
+    smtp_hote = donnees.get("smtp_hote") or lire_parametre("smtp_hote", "localhost")
+    smtp_expediteur = donnees.get("smtp_expediteur") or lire_parametre("smtp_expediteur", "sillon@sillon.local")
+    try:
+        smtp_port = int(donnees.get("smtp_port") or lire_parametre("smtp_port", "25"))
+    except ValueError:
+        return jsonify(ok=False, erreur="Port invalide")
+
+    message = EmailMessage()
+    message["Subject"] = "[SILLON] Mail de test"
+    message["From"] = smtp_expediteur
+    message["To"] = g.claims["email"]
+    message.set_content("Ceci est un mail de test envoyé depuis le panneau Administration de SILLON (§9/§10).\n")
+
+    debut = time.monotonic()
+    try:
+        with smtplib.SMTP(smtp_hote, smtp_port, timeout=10) as serveur:
+            serveur.send_message(message)
+    except (OSError, ValueError) as exc:
+        # Résultat normal à afficher, pas une erreur serveur (même
+        # principe que tester_proxy_datagouv) : toujours 200.
+        return jsonify(ok=False, erreur=str(exc))
+    return jsonify(ok=True, duree_ms=int((time.monotonic() - debut) * 1000))
 
 
 # =============================================================================
@@ -2294,7 +2362,7 @@ def _prochain_job(conn):
     with conn.cursor() as cur:
         cur.execute(
             """
-            SELECT id, type, utilisateur_id, base_id, payload
+            SELECT id, type, utilisateur_id, base_id, payload, notifier_par_mail, joindre_piece_jointe
             FROM public.jobs
             WHERE statut = 'en_attente' AND type = ANY(%s::public.type_job[])
             ORDER BY date_creation
@@ -2306,7 +2374,7 @@ def _prochain_job(conn):
         return cur.fetchone()
 
 
-def _traiter_job(conn, id_job, type_job, utilisateur_id, base_id, payload):
+def _traiter_job(conn, id_job, type_job, utilisateur_id, base_id, payload, notifier_par_mail, joindre_piece_jointe):
     with conn.cursor() as cur:
         cur.execute("SELECT public.maj_statut_job(%s, 'en_cours')", (id_job,))
     conn.commit()
@@ -2322,6 +2390,11 @@ def _traiter_job(conn, id_job, type_job, utilisateur_id, base_id, payload):
     # qui y figurerait ne doit jamais servir à choisir la base/le rôle
     # PostgreSQL de connexion, quel que soit le chemin de création du job.
     nom_pg = None
+    # Initialisé ici (pas seulement dans la branche "requete_sql" qui
+    # l'affecte plus bas) : la notification de fin de fonction y fait
+    # référence quel que soit le type de job, la plupart n'en produisant
+    # simplement jamais (creation_base, suppression_base, import_csv).
+    chemin_resultat = None
     if type_job in ("import_csv", "requete_sql"):
         with conn.cursor() as cur:
             cur.execute("SELECT nom_pg FROM public.bases WHERE id = %s", (base_id,))
@@ -2429,6 +2502,8 @@ def _traiter_job(conn, id_job, type_job, utilisateur_id, base_id, payload):
                     nouvelle_base_id = cur.fetchone()[0]
                 conn.commit()
 
+            nom_pg = nom_base_pg  # base concernée (§10), pour la notification en fin de fonction
+
             with conn.cursor() as cur:
                 cur.execute("SELECT public.maj_statut_job(%s, 'termine')", (id_job,))
                 cur.execute(
@@ -2443,6 +2518,7 @@ def _traiter_job(conn, id_job, type_job, utilisateur_id, base_id, payload):
                 nom_base_pg = cur.fetchone()[0]
                 cur.execute("SELECT public.retirer_base(%s)", (base_id,))
             conn.commit()
+            nom_pg = nom_base_pg  # base concernée (§10) : lue avant suppression, la ligne n'existe plus ensuite
 
             conn_admin = psycopg2.connect(host=DB_HOST, port=DB_PORT, dbname="postgres", user=DB_USER, password=DB_PASSWORD)
             conn_admin.autocommit = True
@@ -2542,12 +2618,29 @@ def _traiter_job(conn, id_job, type_job, utilisateur_id, base_id, payload):
                 cur.execute("SELECT public.maj_statut_job(%s, 'termine', %s, %s)", (id_job, chemin_resultat, detail))
             conn.commit()
 
-        if email_utilisateur:
+        if email_utilisateur and notifier_par_mail:
+            # Pièce jointe seulement si demandée, un fichier de résultat
+            # existe (creation_base/suppression_base/import_csv/requete_sql
+            # en écriture n'en produisent jamais) et tient sous 5 Mo - sinon
+            # le corps du mail explique pourquoi et renvoie vers Suivi.
+            piece_jointe_ok = (
+                joindre_piece_jointe and chemin_resultat and os.path.exists(chemin_resultat)
+                and os.path.getsize(chemin_resultat) <= TAILLE_MAX_PIECE_JOINTE_OCTETS
+            )
+            if piece_jointe_ok:
+                ligne_piece_jointe = "Le résultat est joint à ce mail.\n"
+            elif joindre_piece_jointe and chemin_resultat:
+                ligne_piece_jointe = "Le résultat dépasse 5 Mo : il n'a pas pu être joint, téléchargez-le depuis l'onglet Suivi.\n"
+            else:
+                ligne_piece_jointe = ""
             envoyer_notification(
                 email_utilisateur,
                 "[SILLON] Traitement terminé",
                 f"Votre traitement ({type_job}) est terminé.\n"
+                f"Base concernée : {nom_pg or 'sans objet'}\n"
+                f"{ligne_piece_jointe}"
                 f"Consultez le résultat : {URL_APPLICATION}/#/suivi\n",
+                piece_jointe=chemin_resultat if piece_jointe_ok else None,
             )
 
     except Exception as exc:  # noqa: BLE001 - un job en erreur ne doit jamais faire tomber le consommateur
@@ -2581,11 +2674,18 @@ def _traiter_job(conn, id_job, type_job, utilisateur_id, base_id, payload):
                 "lecture" if est_requete_lecture(payload.get("requete") or "") else "ecriture",
                 False, round((time.monotonic() - debut) * 1000), str(exc),
             )
-        if email_utilisateur:
+        if email_utilisateur and notifier_par_mail:
+            # reformuler_erreur(exc), pas str(exc) (§5.5) : le mail transite
+            # par un canal moins maîtrisé qu'une session web authentifiée
+            # (§8.10, même prudence déjà appliquée au jeton de
+            # téléchargement) - un message technique brut n'a rien à y
+            # faire, le détail complet reste consultable dans l'onglet Suivi.
             envoyer_notification(
                 email_utilisateur,
                 "[SILLON] Échec du traitement",
-                f"Votre traitement ({type_job}) a échoué : {exc}\n",
+                f"Votre traitement ({type_job}) a échoué : {reformuler_erreur(exc)}\n"
+                f"Base concernée : {nom_pg or 'sans objet'}\n"
+                f"Détail dans l'onglet Suivi : {URL_APPLICATION}/#/suivi\n",
             )
 
 

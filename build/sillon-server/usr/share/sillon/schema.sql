@@ -114,7 +114,21 @@ CREATE TABLE public.jobs (
     -- compréhensible affichée en avant côté interface (§5.5) - distincts
     -- pour ne jamais exposer un message Postgres brut en première lecture.
     message_erreur     TEXT,
-    message_utilisateur TEXT
+    message_utilisateur TEXT,
+    -- Préférence de notification par mail, capturée par la modale de
+    -- consentement affichée côté client au moment de la mise en file
+    -- (§9, §10) - vraie par défaut pour tout appelant qui ne la fournit
+    -- pas explicitement (créations de base automatiques notamment,
+    -- jamais soumises à cette modale), cf. creer_job() ci-dessous.
+    notifier_par_mail BOOLEAN NOT NULL DEFAULT true,
+    -- Case à cocher de la même modale : joindre le résultat au mail plutôt
+    -- que de renvoyer uniquement vers l'onglet Suivi - sans effet pour un
+    -- job qui ne produit aucun fichier de résultat (création/suppression
+    -- de base, import CSV, requête en écriture), et honoré uniquement si
+    -- le fichier fait moins de 5 Mo (orchestrateur.py/worker.py), au-delà
+    -- l'utilisateur récupère le résultat depuis l'onglet Suivi comme
+    -- d'habitude.
+    joindre_piece_jointe BOOLEAN NOT NULL DEFAULT false
 );
 CREATE INDEX idx_jobs_utilisateur ON public.jobs(utilisateur_id);
 CREATE INDEX idx_jobs_statut ON public.jobs(statut);
@@ -681,7 +695,7 @@ WHERE j.utilisateur_id = public._id_courant();
 GRANT SELECT ON public.vue_mes_jobs TO agent, lecteur, administrateur;
 
 
-CREATE OR REPLACE FUNCTION public.creer_job(_type public.type_job, _base_id INTEGER, _payload JSONB DEFAULT '{}'::jsonb)
+CREATE OR REPLACE FUNCTION public.creer_job(_type public.type_job, _base_id INTEGER, _payload JSONB DEFAULT '{}'::jsonb, _notifier BOOLEAN DEFAULT true, _piece_jointe BOOLEAN DEFAULT false)
 RETURNS INTEGER AS $$
 DECLARE
     _id_job           INTEGER;
@@ -742,8 +756,8 @@ BEGIN
     -- consommateurs de jobs redérivent ces deux valeurs eux-memes depuis
     -- base_id/utilisateur_id au moment du traitement, jamais depuis ce
     -- payload stocke en base.
-    INSERT INTO public.jobs (utilisateur_id, type, base_id, payload)
-    VALUES (public._id_courant(), _type, _base_id, (_payload - 'nom_pg' - 'role_pg'))
+    INSERT INTO public.jobs (utilisateur_id, type, base_id, payload, notifier_par_mail, joindre_piece_jointe)
+    VALUES (public._id_courant(), _type, _base_id, (_payload - 'nom_pg' - 'role_pg'), _notifier, _piece_jointe)
     RETURNING id INTO _id_job;
 
     -- Reveil des travailleurs asynchrones en attente (§9).
@@ -764,8 +778,8 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 -- Le REVOKE FROM PUBLIC est indispensable (cf. note détaillée plus haut,
 -- au premier REVOKE de cette section) : sans lui, ce GRANT ne restreint
 -- rien du tout.
-REVOKE EXECUTE ON FUNCTION public.creer_job(public.type_job, integer, jsonb) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.creer_job(public.type_job, integer, jsonb) TO agent;
+REVOKE EXECUTE ON FUNCTION public.creer_job(public.type_job, integer, jsonb, boolean, boolean) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.creer_job(public.type_job, integer, jsonb, boolean, boolean) TO agent;
 
 
 CREATE OR REPLACE FUNCTION public.annuler_job(_id_job INTEGER) RETURNS void AS $$
