@@ -46,7 +46,7 @@ const PALETTE_LABELS_DSFR = {
 
 // Nuances (déclinaisons de teinte, "refonte du système de couleur" du DSFR)
 // pour chacune des 19 teintes ci-dessus, extraites du CSS DSFR vendorisé
-// (dsfr-v1.14.3/dist/dsfr.min.css, thème clair) plutôt que retranscrites à
+// (dsfr-v1.15.2/dist/dsfr.min.css, thème clair) plutôt que retranscrites à
 // la main : chaque teinte y est déclinée en 5-6 nuances de la plus claire
 // à la plus soutenue (ex. --blue-france-975-75, ..., --blue-france-main-525,
 // --blue-france-sun-113-625 pour le Bleu France uniquement, seule teinte à
