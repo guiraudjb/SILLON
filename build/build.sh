@@ -48,11 +48,21 @@ install -m 755 "$CACHE_DIR/postgrest" "sillon-server/usr/lib/sillon/postgrest"
 # dans le paquet ; le postinst se contente d'un "podman load" purement
 # local, sans aucun accès réseau requis sur la cible.
 OUTIL_CONTENEURS="podman"
+OPTIONS_BUILD=()
 if ! command -v podman >/dev/null 2>&1; then
     if command -v docker >/dev/null 2>&1; then
         echo "AVERTISSEMENT : podman introuvable sur cette machine de build, substitution par docker." >&2
         echo "(le format d'archive produit par \"docker save\" reste chargeable par \"podman load\" sur la cible.)" >&2
         OUTIL_CONTENEURS="docker"
+        # BuildKit enveloppe par defaut l'image dans un index de
+        # provenance/attestation (docker build > 23) : "podman load" ne sait
+        # pas le deplier et charge une image vide/inutilisable sur la cible,
+        # sans erreur au chargement - la panne ne se voit qu'au premier
+        # "podman run" (constate en pratique, 2026-08-19, image d'apparence
+        # correcte mais conteneur ne demarrant jamais, aucune sortie
+        # capturee). Sans objet pour "podman build", qui ne produit pas ces
+        # attestations.
+        OPTIONS_BUILD=(--provenance=false --sbom=false)
     else
         echo "ERREUR : ni podman ni docker disponibles pour construire l'image d'exécution." >&2
         exit 1
@@ -62,7 +72,7 @@ fi
 echo ""
 echo "--- Construction de l'image d'exécution (sillon-image-execution) ---"
 IMAGE_TAG="sillon-image-execution:latest"
-"$OUTIL_CONTENEURS" build -t "$IMAGE_TAG" sillon-image-execution/opt/sillon-image-execution
+"$OUTIL_CONTENEURS" build "${OPTIONS_BUILD[@]}" -t "$IMAGE_TAG" sillon-image-execution/opt/sillon-image-execution
 mkdir -p "sillon-image-execution/usr/lib/sillon"
 "$OUTIL_CONTENEURS" save -o "sillon-image-execution/usr/lib/sillon/image-execution.tar" "$IMAGE_TAG"
 # "docker/podman save -o" écrit avec un umask restrictif (0600) : sans

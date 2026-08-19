@@ -1,5 +1,5 @@
 Package: sillon-image-execution
-Version: 0.1.1
+Version: 0.1.2
 Architecture: amd64
 Maintainer: Administrateur SILLON <admin@sillon.local>
 Depends: sillon-worker
