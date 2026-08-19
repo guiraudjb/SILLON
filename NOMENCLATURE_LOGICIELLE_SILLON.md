@@ -9,7 +9,7 @@
 | Méthode | Dépendances directes relevées dans `DEBIAN/control` et le `Dockerfile` de l'image d'exécution ; fermeture transitive et versions résolues **directement depuis la VM de test SILLON réelle** (`192.168.122.114`, Debian 13/Trixie), reprise en conditions réelles après une première version basée sur des dépôts Debian génériques |
 | Format | Ce document (synthèse de lecture) + `sbom/sillon-sbom-cyclonedx.json` (référence machine-lisible, CycloneDX 1.6, 590 composants, validée sans erreur contre le schéma officiel) |
 | Statut | Nomenclature établie pour appuyer les obligations de gestion de la chaîne d'approvisionnement logicielle et de gestion des vulnérabilités du règlement **NIS2** — voir « Limites » (§7) |
-| Dernière mise à jour de sécurité appliquée | **19 août 2026** — PapaParse et DSFR corrigés dans `sillon-server` (0.1.28 → **0.1.29**), déployés sur la VM de test et vérifiés en conditions réelles, voir §6.1 et journal ci-dessous |
+| Dernière mise à jour de sécurité appliquée | **19 août 2026** — PapaParse et DSFR corrigés dans `sillon-server` (0.1.28 → **0.1.29**, déployé et vérifié) ; `debian:13-slim` épinglé par digest dans `sillon-image-execution` (0.1.0 → **0.1.1**, construit, déploiement en attente) — voir §6.1, §7 et journal ci-dessous |
 
 **Journal des révisions** (même journée, 19 août 2026) :
 
@@ -20,6 +20,7 @@
 | 3 | Vérification des correctifs de sécurité amont des 10 composants vendorisés (§6.1) — 1 CVE active trouvée (PapaParse) et 1 correctif de sécurité manquant (DSFR) |
 | 4 | **Correction construite** : PapaParse 5.0.2 → 5.6.0 et DSFR 1.14.3 → 1.15.2 vendorisés dans `sillon-server` (nouvelle version `0.1.29`), package reconstruit et vérifié statiquement (voir §6.1 et §7, constats 8-9) |
 | 5 | **Correction déployée et vérifiée en conditions réelles** : `sillon-server` 0.1.29 installé sur la VM de test (mise à niveau propre depuis 0.1.28), application réelle testée en HTTPS — connexion, chargement de toutes les ressources front, import CSV réel via PapaParse 5.6.0. Constats §7.8-7.9 clos (voir §11) |
+| 6 | `FROM debian:13-slim` épinglé par empreinte de digest dans le `Dockerfile` de `sillon-image-execution` (constat §7.1) ; image reconstruite à l'identique (`sillon-image-execution` 0.1.0 → 0.1.1), `.deb` déposé sur la VM de test, déploiement en attente (voir §11) |
 
 ---
 
@@ -71,7 +72,7 @@ Les 6 paquets SILLON dépendent les uns des autres en chaîne, mais traversent s
 | `sillon-server` | 0.1.29 | amd64 | postgresql-17, nginx, openssl, sudo, fail2ban | — | PostgREST 14.8, 9 libs JS, DSFR 1.15.2 |
 | `sillon-orchestrateur` | 0.1.13 | all | python3-flask, python3-psycopg2, python3-jwt, gunicorn, python3-ijson | sillon-server | — |
 | `sillon-worker` | 0.1.3 | all | podman | sillon-orchestrateur | — |
-| `sillon-image-execution` | 0.1.0 | amd64 | *(univers séparé, §4)* | sillon-worker | image podman figée (384 Mo) |
+| `sillon-image-execution` | 0.1.1 | amd64 | *(univers séparé, §4)* | sillon-worker | image podman figée (384 Mo), base épinglée par digest |
 | `sillon-tutoriel` | 0.1.0 | all | python3 | sillon-server, sillon-orchestrateur, sillon-worker, sillon-image-execution | — |
 | `sillon-demo-sirene` | 0.1.4 | all | python3 | sillon-tutoriel | — |
 
@@ -84,7 +85,7 @@ Les 5 premiers paquets sont installés sur la VM de test SILLON (`192.168.122.11
 | `sillon-server_0.1.29_amd64.deb` | `c3e22be05165d5b4eb77372b82d7df07b830da4643bb21637e10fe16fe1aed6a` |
 | `sillon-orchestrateur_0.1.13_all.deb` | `d408ecaa5481a026759a2602e8267e2a8be4465e7c0df2768ca283870f1b07da` |
 | `sillon-worker_0.1.3_all.deb` | `a8543ce76490628c2d4ccfdf42472ae88afa6f68230c7c3759bd6ac9e8a1cc34` |
-| `sillon-image-execution_0.1.0_amd64.deb` | `93e1802ca54b5ac1964382590f5b4ecca7e58584ad8513311b976aaaa8267e6d` |
+| `sillon-image-execution_0.1.1_amd64.deb` | `0291f79f629e7315a1ebc7034cbbf6d3401400889c666729743d015d5535b7f6` |
 | `sillon-tutoriel_0.1.0_all.deb` | `7ab74cb735c3167eeb659c3f9b835458504b9800e246fa05a3eab79a64fac203` |
 | `sillon-demo-sirene_0.1.4_all.deb` | `f0fabc42fa3f9d7949cde4f4f87ed942bbda421f73ff0c8a35059533d01055b4` |
 
@@ -126,7 +127,7 @@ Chacun des 10 composants a été confronté à sa dernière version amont (regis
 
 | # | Constat | Sévérité | Concerne | Recommandation |
 |---|---|---|---|---|
-| 1 | `FROM debian:13-slim` dans le `Dockerfile` de l'image d'exécution n'est pas épinglé par empreinte (`@sha256:…`) | Attention | `sillon-image-execution` | Épingler l'image de base par digest pour garantir la reproductibilité et la traçabilité de provenance du build |
+| 1 | `FROM debian:13-slim` dans le `Dockerfile` de l'image d'exécution n'était pas épinglé par empreinte (`@sha256:…`) | **Corrigé (19/08/2026)** | `sillon-image-execution` | Épinglé sur `debian:13-slim@sha256:3a39a059…8f94f258` ; image reconstruite à l'identique (toutes les couches `CACHED`, contenu inchangé), `sillon-image-execution` 0.1.0 → 0.1.1. Déploiement sur la VM de test en attente (voir §11) |
 | 2 | `sillon-demo-sirene` télécharge ~2,86 Go depuis data.gouv.fr à l'installation — seule dérogation du système au principe « aucun accès réseau hors dépôts Debian » ; rien dans le paquet lui-même n'empêche techniquement son installation en production | Attention | `sillon-demo-sirene` | Exclure explicitement ce paquet de tout inventaire ou déploiement de production dans les procédures d'exploitation |
 | 3 | `r-cran-tidyverse` entraîne des paquets R à capacité réseau (`httr`, `curl`, `googledrive`, `googlesheets4`) à l'intérieur de l'image d'exécution ; l'isolation réseau effective repose entièrement sur les options d'exécution imposées par `worker.py` (`--network` interne), pas sur l'absence de ces bibliothèques | À noter | `sillon-image-execution` | Défense en profondeur souhaitable si cette garantie d'exécution venait à être retirée par erreur |
 | 4 | Aucun fichier `LICENSE` à la racine du dépôt pour le code propre à SILLON (les 6 paquets `.deb`) | À noter | Dépôt SILLON | À clarifier si cette nomenclature ou le code doivent circuler en dehors de l'organisation |
@@ -734,10 +735,11 @@ Chacun des 10 composants a été confronté à sa dernière version amont (regis
 - **Revue de licence non exhaustive** : les licences des paquets Debian (annexes A et B) ne sont pas reproduites ici (elles sont chacune consultables via `apt-cache show` ou `/usr/share/doc/<paquet>/copyright` sur une machine Debian) ; seules celles des 10 composants vendorisés hors `dpkg` (§6) ont été relevées individuellement.
 - Cette nomenclature couvre les 6 paquets `.deb` de SILLON. Elle ne couvre pas les outils de build eux-mêmes (`build/build.sh`, scripts `generer_pdf_*.py`, `pandoc`, `libreoffice`), qui ne sont jamais installés sur la cible de production.
 - **Correctif construit, déployé et vérifié en conditions réelles** : `sillon-server` 0.1.29 (PapaParse 5.6.0, DSFR 1.15.2) a été reconstruit le 19 août 2026, installé sur la VM de test (`apt install`, mise à niveau propre depuis 0.1.28, migrations incrémentales appliquées sans recréation du catalogue) et vérifié de bout en bout sur l'application réelle servie en HTTPS par cette VM : connexion avec le compte de démonstration, chargement de toutes les ressources front (CSS, polices, icônes, PapaParse) sans erreur console ni requête en échec, et **import CSV réel** (onglet Import, fichier `graphique.csv`) analysé avec succès par PapaParse 5.6.0 jusqu'à la détection des colonnes. Aucune régression visuelle ou fonctionnelle constatée après la mise à jour de DSFR et PapaParse.
+- **Image de base épinglée, déploiement sur la VM de test en attente** : `sillon-image-execution` 0.1.1 (base `debian:13-slim` épinglée par digest) a été reconstruit et vérifié le 19 août 2026 — image reconstruite à l'identique octet pour octet (toutes les couches Docker `CACHED`, même contenu que 0.1.0), `.deb` déposé sur la VM de test (`/home/adm1/sillon-image-execution_0.1.1_amd64.deb`, somme SHA-256 en §5). L'installation nécessite un accès root que cette session n'a pas — voir §7, constat 1.
 
 ## 12. Suite possible
 
+- **Installer `sillon-image-execution_0.1.1_amd64.deb` sur la VM de test** (`sudo apt install ./sillon-image-execution_0.1.1_amd64.deb`) pour clore le déploiement du constat §7.1.
 - Rejouer cette résolution à chaque nouvelle version des paquets `.deb`, ou périodiquement, pour tenir la nomenclature à jour des correctifs de sécurité Debian réellement appliqués sur la cible (constat §7.7) et des composants vendorisés (§6.1, §8).
-- Épingler `FROM debian:13-slim` par empreinte de digest dans le `Dockerfile` de `sillon-image-execution` (constat §7.1).
 - Mettre en place un rapprochement périodique (par exemple à chaque publication d'un nouveau `.deb`) entre `sbom/sillon-sbom-cyclonedx.json` et le Debian Security Tracker ou un scanner de vulnérabilités.
 - Ajouter un fichier `LICENSE` à la racine du dépôt si le code SILLON doit circuler en dehors de l'organisation (constat §7.4).
