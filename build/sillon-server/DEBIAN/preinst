@@ -1,0 +1,20 @@
+#!/bin/bash
+set -e
+
+# =====================================================================
+# RETRAIT DES ANCIENS CRON.D DE PURGE (fusionnes dans le paquet optionnel
+# sillon-purge en 0.1.31, §8.9/§8.12) - ce sont des conffiles : sans cet
+# appel explicite, dpkg les laisse orphelins sur le disque lors d'une
+# montee de version (il ne supprime jamais de lui-meme un conffile retire
+# de la liste du paquet), et les deux anciennes purges continueraient de
+# tourner indefiniment en doublon avec celles de sillon-purge. Meme appel
+# repete a l'identique dans postinst ET postrm (les trois scripts sont
+# necessaires, cf. doc de dpkg-maintscript-helper - preinst renomme le
+# conffile en .dpkg-remove, postinst le supprime une fois la configuration
+# reussie, postrm gere l'annulation/la purge).
+dpkg-maintscript-helper rm_conffile \
+    /etc/cron.d/sillon_purge_logs 0.1.32~ -- "$@"
+dpkg-maintscript-helper rm_conffile \
+    /etc/cron.d/sillon_purge_resultats 0.1.32~ -- "$@"
+
+exit 0

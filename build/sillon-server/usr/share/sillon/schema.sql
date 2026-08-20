@@ -192,7 +192,18 @@ INSERT INTO public.parametres (cle, valeur) VALUES
     -- modifiable a chaud par un administrateur, sans redemarrage.
     ('smtp_hote',                        'localhost'),
     ('smtp_port',                        '25'),
-    ('smtp_expediteur',                  'sillon@sillon.local');
+    ('smtp_expediteur',                  'sillon@sillon.local'),
+    -- Durees de retention lues par le paquet optionnel sillon-purge (§8.9,
+    -- §8.12) - modifiables a chaud par un administrateur (panneau
+    -- Administration), sans reconstruire de paquet ni editer /etc/cron.d.
+    ('retention_resultats_jours',        '90'),
+    ('retention_audit_mois',             '12'),
+    -- Un depot jamais valide dans /import/apercu (STAGING_DIR) est cense
+    -- etre nettoye par le code lui-meme en fin de traitement normal ; cette
+    -- retention ne couvre que les orphelins laisses par un crash en cours
+    -- de route (§15.2). Aucune valeur probante a preserver ici,
+    -- contrairement a audit_logs - une duree courte suffit.
+    ('retention_staging_heures',         '48');
 
 -- -----------------------------------------------------------------------------
 -- 4. ROLES POSTGRESQL (§3, §4.3, §8.3)
@@ -878,7 +889,8 @@ GRANT EXECUTE ON FUNCTION public.maj_statut_job(integer, public.statut_job, text
 CREATE RULE regle_audit_immuable AS ON UPDATE TO public.audit_logs DO INSTEAD NOTHING;
 
 -- La suppression n'est possible que par le compte systeme (purge planifiee,
--- cf. etc/cron.d/sillon_purge_logs, executee en tant que role "postgres").
+-- cf. paquet sillon-purge, executee en tant que role "postgres" via
+-- "sudo -u postgres psql").
 CREATE OR REPLACE FUNCTION public.proteger_audit_suppression() RETURNS TRIGGER AS $$
 BEGIN
     IF current_user <> 'postgres' THEN

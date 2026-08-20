@@ -1,6 +1,19 @@
 #!/bin/bash
 set -e
 
+# Meme appel qu'en preinst/postrm (voir preinst pour le detail) - la
+# documentation de dpkg-maintscript-helper exige les TROIS scripts pour
+# rm_conffile, pas seulement preinst+postrm comme suppose initialement :
+# c'est ce postinst qui supprime effectivement le fichier .dpkg-remove
+# cree par preinst une fois la configuration reussie. Sans cet appel, le
+# vieux conffile reste renomme en .dpkg-remove indefiniment - constate en
+# conditions reelles sur la VM de test lors de la premiere tentative
+# (preinst+postrm seuls).
+dpkg-maintscript-helper rm_conffile \
+    /etc/cron.d/sillon_purge_logs 0.1.32~ -- "$@"
+dpkg-maintscript-helper rm_conffile \
+    /etc/cron.d/sillon_purge_resultats 0.1.32~ -- "$@"
+
 echo "=== Installation de SILLON (sillon-server) ==="
 
 # =====================================================================
@@ -220,6 +233,21 @@ if [ "$DB_EXISTE" = "1" ]; then
 
         REVOKE EXECUTE ON FUNCTION public.creer_utilisateur(text, text, text, public.profil_utilisateur) FROM PUBLIC;
         GRANT EXECUTE ON FUNCTION public.creer_utilisateur(text, text, text, public.profil_utilisateur) TO administrateur;
+    " >/dev/null
+
+    # Migration : durées de rétention lues par le paquet optionnel
+    # sillon-purge (§8.9, §8.12) - absentes des installations antérieures à
+    # son introduction, où ces valeurs étaient codées en dur dans les
+    # anciens /etc/cron.d/sillon_purge_logs et sillon_purge_resultats
+    # (retirés au profit de ce paquet, cf. preinst). Mêmes valeurs par
+    # défaut que ces anciens cron.d, pour ne rien changer au comportement
+    # observé sur une installation déjà en production.
+    sudo -u postgres psql -d "$DB_NAME" -c "
+        INSERT INTO public.parametres (cle, valeur) VALUES
+            ('retention_resultats_jours', '90'),
+            ('retention_audit_mois', '12'),
+            ('retention_staging_heures', '48')
+        ON CONFLICT (cle) DO NOTHING;
     " >/dev/null
 
     # Les secrets existants sont conservés tels quels (§12.3) : les
@@ -464,37 +492,21 @@ systemctl restart fail2ban
 systemctl enable fail2ban
 
 # =====================================================================
-# 6. PURGE AUTOMATIQUE DU JOURNAL D'AUDIT (§8.12)
-# =====================================================================
-# Le fichier /etc/cron.d/sillon_purge_logs est livré par le paquet ; on
-# s'assure ici de ses droits (exigence standard pour /etc/cron.d).
-chown root:root /etc/cron.d/sillon_purge_logs
-chmod 644 /etc/cron.d/sillon_purge_logs
-
-# =====================================================================
-# 6bis. PURGE AUTOMATIQUE DES RESULTATS DE JOBS (§8.9, §5.4)
-# =====================================================================
-chown root:root /etc/cron.d/sillon_purge_resultats
-chmod 644 /etc/cron.d/sillon_purge_resultats
-
-# =====================================================================
-# 7. REPERTOIRE DE DEPOT TEMPORAIRE DES IMPORTS CSV (§5.1)
+# 6. REPERTOIRE DE DEPOT TEMPORAIRE DES IMPORTS CSV (§5.1)
 # =====================================================================
 # Utilisé par l'orchestrateur entre /import/apercu et /import/valider
 # (orchestrateur.py, STAGING_DIR) ; sans ce répertoire pré-créé avec les
 # bons droits, le service retombe sur /tmp au démarrage, ce qui fonctionne
-# mais sort du périmètre géré par le paquet.
+# mais sort du périmètre géré par le paquet. Les orphelins (dépôt jamais
+# validé) sont purgés par le paquet optionnel sillon-purge (§15.2).
 mkdir -p /var/lib/sillon/staging
 # Résultats de jobs (RESULTATS_DIR, partagé par orchestrateur.py et
 # sillon-worker : exports SQL différés §5.3, archives de scripts §5.4) -
-# même repli sur /tmp sinon, et purgé par sillon_purge_resultats ci-dessus.
+# même repli sur /tmp sinon. Purgé par le paquet optionnel sillon-purge.
 mkdir -p /var/lib/sillon/resultats
 chown -R www-data:www-data /var/lib/sillon
 chmod 750 /var/lib/sillon/staging
 chmod 750 /var/lib/sillon/resultats
-# Point de vigilance non traité ici : un fichier déposé via /import/apercu
-# et jamais validé reste indéfiniment dans ce répertoire (§15.2, à traiter
-# avec une purge périodique le jour où ça devient nécessaire).
 
 # =====================================================================
 # ACTIVATION DES SERVICES

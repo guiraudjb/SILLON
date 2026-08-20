@@ -1,0 +1,16 @@
+# Purge quotidienne SILLON (§8.9, §8.12 du cahier des charges) : résultats
+# de jobs, dépôts temporaires orphelins, journal d'audit. Un seul point
+# d'entrée (opt/sillon-purge/purge.py) qui lit ses durées de rétention dans
+# public.parametres (panneau Administration) - voir ce script pour le
+# détail des trois opérations effectuées.
+#
+# root : nécessaire pour supprimer les fichiers de résultats appartenant à
+# l'UID remappé du conteneur d'exécution (§7.7) ; le script délègue
+# lui-même à "sudo -u postgres" pour les opérations sur le catalogue.
+#
+# Sortie envoyée au journal via "logger" (consultable par
+# "journalctl -t sillon-purge") plutôt qu'un fichier dédié sous /var/log,
+# qui redeviendrait lui-même un fichier à purger - et plutôt qu'un envoi de
+# mail cron, qui suppose un agent de transport de courrier absent de la
+# cible (§12.1).
+0 3 * * * root /usr/bin/python3 /opt/sillon-purge/purge.py 2>&1 | /usr/bin/logger -t sillon-purge

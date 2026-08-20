@@ -1,0 +1,12 @@
+#!/bin/bash
+set -e
+
+echo "=== Installation de SILLON (sillon-purge) ==="
+
+# Droits standard exiges pour /etc/cron.d (le fichier est livre par le
+# paquet, mais dpkg n'impose pas ces permissions de lui-meme).
+chown root:root /etc/cron.d/sillon_purge
+chmod 644 /etc/cron.d/sillon_purge
+
+echo "=== Installation de SILLON (sillon-purge) terminee ==="
+exit 0

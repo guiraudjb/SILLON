@@ -1,0 +1,12 @@
+Package: sillon-purge
+Version: 0.1.0
+Architecture: all
+Maintainer: Administrateur SILLON <admin@sillon.local>
+Depends: sillon-server (>= 0.1.32)
+Section: web
+Priority: optional
+Description: SILLON - Purge automatique des fichiers/donnees accumules.
+ Purge quotidienne des resultats de jobs, des depots temporaires
+ orphelins et du journal d'audit (§8.9, §8.12). Optionnel : sans ce
+ paquet, ces trois points continuent de s'accumuler indefiniment sur le
+ serveur. Voir cahier des charges §12.2.

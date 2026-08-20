@@ -1,6 +1,14 @@
 #!/bin/bash
 set -e
 
+# Meme appel qu'en preinst/postinst (voir preinst pour le detail) - exige
+# par dpkg-maintscript-helper pour rm_conffile, sans quoi le retrait de ces
+# deux cron.d ne serait pas nettoye correctement lors d'un "remove"/"purge".
+dpkg-maintscript-helper rm_conffile \
+    /etc/cron.d/sillon_purge_logs 0.1.32~ -- "$@"
+dpkg-maintscript-helper rm_conffile \
+    /etc/cron.d/sillon_purge_resultats 0.1.32~ -- "$@"
+
 DB_NAME="sillon_catalog"
 
 # =====================================================================
