@@ -33,6 +33,7 @@ Les dépendances sont déclarées dans chaque paquet SILLON et installées autom
 | `sillon-image-execution` | Image figée (Python/R) utilisée pour l'exécution des scripts | `sillon-worker` |
 | `sillon-tutoriel` *(optionnel)* | Jeu de données réel et tutoriel PDF, partagés automatiquement avec tous les comptes — VM de démo/formation uniquement, voir §7.2 | `sillon-image-execution` |
 | `sillon-demo-sirene` *(optionnel)* | Jeu de données Sirene massif (~43,9 millions de lignes) et scripts de démonstration à l'échelle — VM de démo/formation uniquement, voir §7.2 | `sillon-tutoriel` |
+| `sillon-purge` *(optionnel, recommandé en production)* | Purge automatique quotidienne des résultats de jobs, dépôts temporaires orphelins et journal d'audit — voir §7.4 | `sillon-server` |
 
 **L'ordre d'installation ci-dessus est obligatoire** : chaque paquet vérifie au `postinst` que le précédent est déjà configuré (présence de `/etc/sillon/secrets.env`, service actif) et refuse de s'installer sinon.
 
@@ -258,6 +259,36 @@ SELECT query, calls, round(total_exec_time) AS temps_total_ms, round(mean_exec_t
 FROM public.pg_stat_statements ORDER BY total_exec_time DESC LIMIT 10;
 ```
 
+### 7.4 Purge automatique des fichiers et données accumulés (`sillon-purge`)
+
+Sans intervention, trois choses grossissent indéfiniment sur le serveur au fil de l'usage : les résultats de jobs (exports SQL, archives de scripts, §5.3/§5.4 du cahier des charges), les dépôts temporaires d'import CSV jamais validés — orphelins laissés par un import interrompu en cours de route — et le journal d'audit (§8.12). Le paquet optionnel `sillon-purge` couvre les trois, installé après `sillon-server` (≥ 0.1.32) :
+
+```bash
+sudo dpkg -i sillon-purge_0.1.0_all.deb
+```
+
+Il livre un seul point d'entrée, `/etc/cron.d/sillon_purge`, exécuté chaque jour à 3 h du matin en tant que `root` (nécessaire pour atteindre les fichiers de résultats appartenant à l'UID remappé du conteneur d'exécution, §7.7 du cahier des charges — les opérations sur le catalogue applicatif, elles, sont déléguées à `sudo -u postgres psql`, comme le reste des scripts de maintenance de SILLON). Aucun service à surveiller : c'est une tâche cron, pas un démon.
+
+**Durées de rétention**, modifiables à chaud comme les autres paramètres applicatifs (§7.3 ci-dessus — panneau d'administration ou SQL direct), sans redémarrage de service ni reconstruction de paquet :
+
+| Paramètre | Valeur par défaut | Porte sur |
+|---|---|---|
+| `retention_resultats_jours` | 90 | `/var/lib/sillon/resultats` |
+| `retention_staging_heures` | 48 | `/var/lib/sillon/staging` (dépôts orphelins uniquement — un import mené à son terme normal est déjà nettoyé par le code applicatif lui-même, indépendamment de cette purge) |
+| `retention_audit_mois` | 12 | `public.audit_logs` |
+
+```sql
+UPDATE public.parametres SET valeur = '180' WHERE cle = 'retention_resultats_jours';
+```
+
+**Suivi** : la sortie de chaque exécution est envoyée au journal système plutôt qu'à un fichier dédié sous `/var/log` (qui redeviendrait lui-même un fichier à purger) :
+
+```bash
+journalctl -t sillon-purge -n 50
+```
+
+**Avant `sillon-purge` (`sillon-server` < 0.1.32)** : ces mêmes durées étaient réparties dans deux `/etc/cron.d` livrés directement par `sillon-server` (résultats de jobs et journal d'audit uniquement — pas de purge des dépôts orphelins), avec des valeurs codées en dur plutôt que modifiables via `parametres`. Une mise à niveau de `sillon-server` vers 0.1.32 ou ultérieur retire proprement ces deux anciens fichiers ; installer ensuite `sillon-purge` pour retrouver une purge active.
+
 ---
 
 ## 8. Désinstallation
@@ -267,14 +298,16 @@ Deux niveaux, sémantique standard `dpkg` :
 - **`remove`** : arrête les services et retire les fichiers du paquet, mais conserve `/etc/sillon/secrets.env`, `/etc/sillon-api.conf` et la base `sillon_catalog` — une réinstallation ultérieure reprend alors à l'identique (mêmes secrets, mêmes comptes), sans passer par la branche « premier déploiement ».
 
   ```bash
-  sudo apt-get remove sillon-image-execution sillon-worker sillon-orchestrateur sillon-server
+  sudo apt-get remove sillon-purge sillon-image-execution sillon-worker sillon-orchestrateur sillon-server
   ```
 
 - **`purge`** : en plus de ce qui précède, supprime réellement le catalogue applicatif (base `sillon_catalog`, rôles PostgreSQL personnels et de service qu'elle porte) ainsi que `/etc/sillon`, `/etc/sillon-api.conf`, `/etc/ssl/sillon` et `/var/lib/sillon` — une réinstallation ultérieure repart alors intégralement à zéro (nouveaux secrets, nouveau compte administrateur).
 
   ```bash
-  sudo apt-get purge sillon-image-execution sillon-worker sillon-orchestrateur sillon-server
+  sudo apt-get purge sillon-purge sillon-image-execution sillon-worker sillon-orchestrateur sillon-server
   ```
+
+`sillon-purge` dépend de `sillon-server` : retirer `sillon-server` sans le lister également fait échouer `apt-get remove`/`purge` (ou entraîne sa suppression automatique avec avertissement, selon le gestionnaire de paquets utilisé) — l'inclure explicitement dans la commande évite toute ambiguïté. Il ne porte aucune donnée propre (ni base, ni fichier hors son unique `/etc/cron.d/sillon_purge`) : `remove` et `purge` ont pour lui un effet strictement identique, retrait pur et simple du cron de purge.
 
 Dans les deux cas, **les bases de travail créées par les agents** (§4.4 du cahier des charges — une base physique par agent, distincte du catalogue `sillon_catalog`) **ne sont jamais supprimées automatiquement**, ni par `remove` ni par `purge` : ce sont des données applicatives, pas des artefacts d'installation. Pour les retirer explicitement si c'est réellement souhaité :
 
