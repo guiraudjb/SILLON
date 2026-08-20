@@ -281,22 +281,23 @@ const Auth = {
         document.getElementById("libelle-utilisateur").textContent = `${Etat.utilisateur.email} (${Etat.utilisateur.profil})`;
         document.getElementById("onglet-nav-administration").hidden = Etat.utilisateur.profil !== "administrateur";
         // Section "Formation" de la modale "À propos" (guide + corrigés) :
-        // uniquement pour le compte de démonstration du paquet optionnel
-        // sillon-tutoriel - ces liens 404 si ce paquet n'est pas installé,
-        // jamais montrés à un compte réel dans ce cas.
-        const estCompteDemo = Etat.utilisateur.email === "demo@sillon.local";
-        document.getElementById("modal-about-formation").hidden = !estCompteDemo;
+        // ouverte à tout compte depuis que le jeu de données du tutoriel est
+        // partagé automatiquement avec chaque utilisateur (schema.sql,
+        // creer_utilisateur()) - plus besoin du compte demo pour en profiter.
+        // sillon-tutoriel reste un paquet optionnel : un simple test
+        // d'existence du PDF plutôt qu'un lien systématiquement affiché, qui
+        // 404rait sinon pour quiconque ne l'a pas installé.
+        fetch("./Documentation/Tutoriel SILLON.pdf", { method: "HEAD" })
+            .then((reponse) => { document.getElementById("modal-about-formation").hidden = !reponse.ok; })
+            .catch(() => {});
 
         // sillon-demo-sirene est un paquet séparé, optionnel : peut être
-        // absent même avec le compte demo présent (sillon-tutoriel seul
-        // suffit à créer ce compte) - un simple test d'existence du
-        // fichier plutôt qu'un lien systématiquement affiché, qui 404rait
-        // sinon pour quiconque n'a installé que sillon-tutoriel.
-        if (estCompteDemo) {
-            fetch("./Documentation/corriges-sirene.zip", { method: "HEAD" })
-                .then((reponse) => { document.getElementById("modal-about-sirene").hidden = !reponse.ok; })
-                .catch(() => {});
-        }
+        // absent même avec sillon-tutoriel installé - un simple test
+        // d'existence du fichier plutôt qu'un lien systématiquement affiché,
+        // qui 404rait sinon pour quiconque n'a installé que sillon-tutoriel.
+        fetch("./Documentation/corriges-sirene.zip", { method: "HEAD" })
+            .then((reponse) => { document.getElementById("modal-about-sirene").hidden = !reponse.ok; })
+            .catch(() => {});
 
         Bases.charger();
         Suivi.rafraichir();

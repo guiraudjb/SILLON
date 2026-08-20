@@ -31,7 +31,7 @@ Les dépendances sont déclarées dans chaque paquet SILLON et installées autom
 | `sillon-orchestrateur` | Création/suppression des bases, SQL libre, import CSV, partage, file d'attente | `sillon-server` |
 | `sillon-worker` | Consommation de la file, lancement des conteneurs d'exécution de scripts | `sillon-orchestrateur` |
 | `sillon-image-execution` | Image figée (Python/R) utilisée pour l'exécution des scripts | `sillon-worker` |
-| `sillon-tutoriel` *(optionnel)* | Compte de démonstration, jeu de données réel et tutoriel PDF — VM de démo/formation uniquement, voir §7.2 | `sillon-image-execution` |
+| `sillon-tutoriel` *(optionnel)* | Jeu de données réel et tutoriel PDF, partagés automatiquement avec tous les comptes — VM de démo/formation uniquement, voir §7.2 | `sillon-image-execution` |
 | `sillon-demo-sirene` *(optionnel)* | Jeu de données Sirene massif (~43,9 millions de lignes) et scripts de démonstration à l'échelle — VM de démo/formation uniquement, voir §7.2 | `sillon-tutoriel` |
 
 **L'ordre d'installation ci-dessus est obligatoire** : chaque paquet vérifie au `postinst` que le précédent est déjà configuré (présence de `/etc/sillon/secrets.env`, service actif) et refuse de s'installer sinon.
@@ -177,15 +177,19 @@ Puis `systemctl restart sillon-orchestrateur sillon-worker`. Un échec d'envoi d
 
 Deux façons de peupler un compte de démonstration, **jamais installées automatiquement avec le socle applicatif** — jamais sur un serveur de production :
 
-- **`sillon-tutoriel`** (recommandé pour une VM de démonstration/formation) : cinquième paquet `.deb`, optionnel, à installer après les quatre autres (`sudo dpkg -i sillon-tutoriel_0.1.0_all.deb`). Son `postinst` crée (ou réutilise) le compte `demo@sillon.local` / `demo` (profil agent) et importe un **jeu de données réel** : les 34 868 communes de France et leurs 18 régions (source [data.gouv.fr](https://www.data.gouv.fr/), INSEE/IGN, Licence Ouverte 2.0), avec des requêtes d'exemple déjà dans l'historique et deux scripts Python/R déjà exécutés. Fournit en plus un **tutoriel PDF complet** (exercices SQL en difficulté croissante, puis formation avancée Python et R), installé dans `/usr/share/doc/sillon-tutoriel/` et publié aux côtés de la documentation existante sur `https://<serveur>/Documentation/`. `sudo apt-get purge sillon-tutoriel` supprime intégralement le compte demo, sa base et le PDF publié ; une réinstallation repart proprement à zéro.
+- **`sillon-tutoriel`** (recommandé pour une VM de démonstration/formation) : cinquième paquet `.deb`, optionnel, à installer après les quatre autres (`sudo dpkg -i sillon-tutoriel_0.1.0_all.deb`). Son `postinst` crée (ou réutilise) un compte technique `demo@sillon.local` (profil agent, mot de passe généré aléatoirement — voir plus bas) et importe un **jeu de données réel** : les 34 868 communes de France et leurs 18 régions (source [data.gouv.fr](https://www.data.gouv.fr/), INSEE/IGN, Licence Ouverte 2.0), avec des requêtes d'exemple déjà dans l'historique et deux scripts Python/R déjà exécutés. Fournit en plus un **tutoriel PDF complet** (exercices SQL en difficulté croissante, puis formation avancée Python et R), installé dans `/usr/share/doc/sillon-tutoriel/` et publié aux côtés de la documentation existante sur `https://<serveur>/Documentation/`.
 
-- **`outils/peupler_demo.py`** (script autonome, hors paquet) : alternative plus légère pour un jeu de données fictif (`communes_exemple`), sans tutoriel PDF :
+  **Ce jeu de données est partagé automatiquement avec tous les comptes**, existants comme à venir (lecture seule, exécution de scripts Python/R autorisée) : chaque agent le retrouve dans son propre onglet Bases, sous le nom du compte `demo@sillon.local`, sans jamais avoir besoin de s'y connecter. Le tutoriel PDF et ses corrigés (`corriges-tutoriel.zip`) sont de la même façon visibles depuis la modale « À propos » de **tout** compte, dès lors que ce paquet est installé — chacun suit le tutoriel avec sa propre identité. Techniquement, ce partage repose sur un rôle PostgreSQL de groupe (`sillon_tutoriel_lecteurs`) créé par ce `postinst`, dont `creer_utilisateur()` (schema.sql, `sillon-server` ≥ 0.1.30) rend automatiquement membre tout nouveau compte.
+
+  `sudo apt-get purge sillon-tutoriel` supprime intégralement le compte demo, sa base, le rôle de partage et le PDF publié ; une réinstallation repart proprement à zéro.
+
+- **`outils/peupler_demo.py`** (script autonome, hors paquet) : alternative plus légère pour un jeu de données fictif (`communes_exemple`), sans tutoriel PDF ni partage automatique avec les autres comptes :
 
   ```bash
-  python3 outils/peupler_demo.py --url https://<adresse-du-serveur> --admin-password '<mot de passe administrateur>'
+  python3 outils/peupler_demo.py --url https://<adresse-du-serveur> --admin-password '<mot de passe administrateur>' --demo-password '<mot de passe choisi>'
   ```
 
-Dans les deux cas, le mot de passe du compte demo est **fixe et documenté** (`demo`) — pratique pour une démonstration, mais à ne jamais laisser sur une VM exposée ou de production, contrairement au compte administrateur (mot de passe généré aléatoirement, §5).
+Le mot de passe du compte `demo@sillon.local` créé par `sillon-tutoriel` est **généré aléatoirement**, comme celui du compte administrateur (§5) : écrit dans `/root/sillon-demo-initial.txt` (lecture root uniquement, jamais affiché en clair dans les journaux d'installation), et à conserver uniquement pour un accès manuel exceptionnel (dépannage, réimport) — les agents n'ont normalement jamais besoin de s'authentifier avec ce compte, le jeu de données leur étant partagé directement. `outils/peupler_demo.py` reste un script volontaire (jamais installé automatiquement) dont le mot de passe par défaut (`--demo-password`, `demo`) doit être changé explicitement avant tout usage sur une VM exposée.
 
 #### Jeu de données massif (`sillon-demo-sirene`)
 
@@ -279,7 +283,7 @@ sudo -u postgres psql -c "\l" | grep sillon_
 sudo -u postgres dropdb <nom_de_la_base>
 ```
 
-**Cas particulier de `sillon-tutoriel`** : contrairement aux quatre autres paquets, son `purge` supprime intégralement le compte `demo@sillon.local`, sa base et le PDF publié — c'est un compte de démonstration jetable, pas une donnée d'agent réel, la même prudence ne s'applique pas.
+**Cas particulier de `sillon-tutoriel`** : contrairement aux quatre autres paquets, son `purge` supprime intégralement le compte `demo@sillon.local`, sa base, le rôle de partage (`sillon_tutoriel_lecteurs`, retiré de tous les comptes qui en étaient membres) et le PDF publié — c'est un compte de démonstration jetable, pas une donnée d'agent réel, la même prudence ne s'applique pas.
 
 ```bash
 sudo apt-get purge sillon-tutoriel

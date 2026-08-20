@@ -5,6 +5,8 @@ DEMO_EMAIL="demo@sillon.local"
 DB_NAME="sillon_catalog"
 PDF_CIBLE="/var/www/html/SILLON/Documentation/Tutoriel SILLON.pdf"
 CORRIGES_CIBLE="/var/www/html/SILLON/Documentation/corriges-tutoriel.zip"
+ROLE_GROUPE_LECTEURS="sillon_tutoriel_lecteurs"
+DEMO_CREDS_FILE="/root/sillon-demo-initial.txt"
 
 # Reproduit auth.nom_role_personnel() (schema.sql) sans dépendre de
 # l'existence de sillon_catalog : dpkg ne garantit aucun ordre de purge
@@ -30,7 +32,7 @@ case "$1" in
         ;;
 
     purge)
-        rm -f "$PDF_CIBLE" "$CORRIGES_CIBLE"
+        rm -f "$PDF_CIBLE" "$CORRIGES_CIBLE" "$DEMO_CREDS_FILE"
 
         if command -v psql >/dev/null 2>&1; then
             # Nettoyage des lignes du catalogue (historique, jobs...)
@@ -71,6 +73,15 @@ SQL
                 || echo "AVERTISSEMENT : base $NOM_BASE_PG non supprimée." >&2
             sudo -u postgres psql -c "DROP ROLE IF EXISTS \"$ROLE_PG\";" >/dev/null \
                 || echo "AVERTISSEMENT : rôle $ROLE_PG non supprimé (probablement encore titulaire de privilèges)." >&2
+
+            # Role de groupe du partage automatique avec tous les comptes
+            # (postinst §4) : ses seuls privilèges directs portaient sur la
+            # base du compte demo (CONNECT/USAGE/SELECT), déjà supprimée
+            # ci-dessus - seule l'appartenance des autres comptes à ce rôle
+            # subsiste, qu'un DROP ROLE retire de lui-même, sans blocage.
+            echo "Suppression du rôle de partage du tutoriel..." >&2
+            sudo -u postgres psql -c "DROP ROLE IF EXISTS \"$ROLE_GROUPE_LECTEURS\";" >/dev/null \
+                || echo "AVERTISSEMENT : rôle $ROLE_GROUPE_LECTEURS non supprimé (probablement encore titulaire de privilèges)." >&2
         fi
         ;;
 

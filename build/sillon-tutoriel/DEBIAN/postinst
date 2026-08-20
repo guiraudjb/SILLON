@@ -4,11 +4,12 @@ set -e
 echo "=== Installation de SILLON (sillon-tutoriel) ==="
 
 DEMO_EMAIL="demo@sillon.local"
-DEMO_PASSWORD="demo"
 DEMO_NOM="Compte de démonstration"
 DB_NAME="sillon_catalog"
 PDF_SOURCE="/usr/share/doc/sillon-tutoriel/Tutoriel SILLON.pdf"
 PDF_CIBLE="/var/www/html/SILLON/Documentation/Tutoriel SILLON.pdf"
+ROLE_GROUPE_LECTEURS="sillon_tutoriel_lecteurs"
+DEMO_CREDS_FILE="/root/sillon-demo-initial.txt"
 
 if [ ! -f /etc/sillon/secrets.env ]; then
     echo "ERREUR : sillon-server doit être installé et configuré au préalable." >&2
@@ -18,23 +19,43 @@ fi
 # =====================================================================
 # 1. COMPTE DE DEMONSTRATION (§7.2 du guide d'installation)
 # =====================================================================
-# Mot de passe fixe et documenté, jamais généré aléatoirement contrairement
-# au compte administrateur (§12.3) : c'est précisément pour ça que ce
-# paquet est séparé et optionnel, jamais installé automatiquement avec le
-# socle applicatif.
+# Mot de passe genere aleatoirement, comme le compte administrateur
+# (§12.3) : ce compte n'a plus besoin d'etre partage entre utilisateurs
+# pour suivre le tutoriel depuis que son jeu de donnees est partage
+# automatiquement avec chaque compte reel (section 4 ci-dessous) - un mot
+# de passe fixe et documente n'aurait plus aucune justification
+# fonctionnelle, seulement un risque residuel sur une VM exposee.
 DEJA_PRESENT=$(sudo -u postgres psql -d "$DB_NAME" -tAc \
     "SELECT 1 FROM public.utilisateurs WHERE email = '$DEMO_EMAIL'")
 
 if [ "$DEJA_PRESENT" = "1" ]; then
-    echo "Compte $DEMO_EMAIL déjà présent - réutilisé tel quel."
+    echo "Compte $DEMO_EMAIL déjà présent - réutilisé tel quel (mot de passe conservé)."
 else
     echo "Création du compte $DEMO_EMAIL (profil agent)..."
+    DEMO_PASSWORD=$(tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 16)
     # Connecté en tant que superutilisateur postgres : les vérifications de
     # droits (REVOKE ... FROM PUBLIC, §8.4) ne s'appliquent jamais à lui,
     # inutile de faire un "SET ROLE administrateur" au préalable.
     sudo -u postgres psql -d "$DB_NAME" -c \
         "SELECT public.creer_utilisateur('$DEMO_EMAIL', '$DEMO_PASSWORD', '$DEMO_NOM', 'agent');" \
         >/dev/null
+
+    # Écrit dans un fichier root-only plutôt qu'affiché sur la sortie
+    # standard (§8.11, même motif que ADMIN_CREDS_FILE de sillon-server) :
+    # les utilisateurs suivent le tutoriel avec leur propre compte
+    # (section 4), ce mot de passe ne sert plus qu'à un login manuel
+    # exceptionnel de l'administrateur (dépannage, réimport...).
+    cat << EOF > "$DEMO_CREDS_FILE"
+Identifiant du compte de démonstration : ${DEMO_EMAIL}
+Mot de passe initial : ${DEMO_PASSWORD}
+
+Ce compte n'a normalement pas besoin d'être utilisé directement : son jeu
+de données de tutoriel est partagé automatiquement avec chaque compte réel
+(onglet Bases, base "${DEMO_EMAIL}"). Conservé ici pour un accès manuel
+exceptionnel (dépannage, réimport). À supprimer une fois consulté.
+EOF
+    chmod 600 "$DEMO_CREDS_FILE"
+    chown root:root "$DEMO_CREDS_FILE"
 fi
 
 # =====================================================================
@@ -64,14 +85,76 @@ echo "Peuplement du compte de démonstration (import du jeu de données, requêt
 python3 /usr/share/sillon-tutoriel/peupler_tutoriel.py --url https://localhost --jeton "$JETON"
 
 # =====================================================================
-# 4. TUTORIEL PDF, PUBLIE AUX COTES DE LA DOCUMENTATION EXISTANTE
+# 4. PARTAGE DU JEU DE DONNEES AVEC TOUS LES COMPTES (§7.2)
+# =====================================================================
+# Depuis la modale "À propos", tout compte réel voit désormais le tutoriel
+# et ses corrigés (app.js) : encore faut-il que sa base soit effectivement
+# accessible en SQL, sans passer par le compte demo. Un role de groupe
+# plutot qu'un GRANT table par table par beneficiaire (partager_base(),
+# schema.sql/orchestrateur.py) : les droits sur les tables du tutoriel ne
+# sont poses qu'une fois ici, chaque compte (existant ou a venir) n'a
+# ensuite qu'a devenir membre de ce role - cluster-level, sans reconnexion
+# a la base du compte demo a chaque nouveau compte (creer_utilisateur(),
+# schema.sql, section 4 de sa propre logique).
+echo "Préparation du partage du jeu de données avec l'ensemble des comptes..."
+ROLE_DEJA_PRESENT=$(sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname = '$ROLE_GROUPE_LECTEURS'")
+if [ "$ROLE_DEJA_PRESENT" != "1" ]; then
+    sudo -u postgres psql -c "CREATE ROLE \"$ROLE_GROUPE_LECTEURS\" NOLOGIN;" >/dev/null
+fi
+
+DEMO_ROLE_PG=$(sudo -u postgres psql -d "$DB_NAME" -tAc \
+    "SELECT role_pg FROM public.utilisateurs WHERE email = '$DEMO_EMAIL'")
+DEMO_ID=$(sudo -u postgres psql -d "$DB_NAME" -tAc \
+    "SELECT id FROM public.utilisateurs WHERE email = '$DEMO_EMAIL'")
+DEMO_BASE_ID=$(sudo -u postgres psql -d "$DB_NAME" -tAc \
+    "SELECT id FROM public.bases WHERE proprietaire_id = $DEMO_ID")
+DEMO_BASE_NOM_PG=$(sudo -u postgres psql -d "$DB_NAME" -tAc \
+    "SELECT nom_pg FROM public.bases WHERE id = $DEMO_BASE_ID")
+
+# CONNECT est un privilege de niveau cluster (§7.4, meme motif que
+# partager_base()) : herite par tout membre du role de groupe, pose ici
+# une seule fois plutot qu'au niveau de chaque compte.
+sudo -u postgres psql -c \
+    "GRANT CONNECT ON DATABASE \"$DEMO_BASE_NOM_PG\" TO \"$ROLE_GROUPE_LECTEURS\";" >/dev/null
+
+# USAGE/SELECT + privileges par defaut pour les tables futures : exige une
+# connexion a la base cible elle-meme, comme le fait l'orchestrateur pour
+# un partage individuel (§4.4, endpoint /bases/<id>/partager).
+sudo -u postgres psql -d "$DEMO_BASE_NOM_PG" -v ON_ERROR_STOP=1 -c "
+    GRANT USAGE ON SCHEMA public TO \"$ROLE_GROUPE_LECTEURS\";
+    GRANT SELECT ON ALL TABLES IN SCHEMA public TO \"$ROLE_GROUPE_LECTEURS\";
+    ALTER DEFAULT PRIVILEGES FOR ROLE \"$DEMO_ROLE_PG\" IN SCHEMA public GRANT SELECT ON TABLES TO \"$ROLE_GROUPE_LECTEURS\";
+" >/dev/null
+
+# Comptes deja crees avant l'installation (ou la reinstallation) de ce
+# paquet : creer_utilisateur() (schema.sql) ne prend en charge que les
+# comptes crees APRES que ce role de groupe existe - un rattrapage
+# explicite est necessaire pour les comptes anterieurs. Idempotent (GRANT
+# de role deja accorde = no-op, ON CONFLICT DO NOTHING sur les partages) :
+# sans risque a rejouer a chaque (re)installation de ce paquet.
+sudo -u postgres psql -d "$DB_NAME" -v ON_ERROR_STOP=1 -c "
+    DO \$\$
+    DECLARE
+        _u RECORD;
+    BEGIN
+        FOR _u IN SELECT id, role_pg FROM public.utilisateurs WHERE email <> '$DEMO_EMAIL' LOOP
+            EXECUTE format('GRANT %I TO %I', '$ROLE_GROUPE_LECTEURS', _u.role_pg);
+            INSERT INTO public.partages (base_id, beneficiaire_id, accorde_par_id, autorise_scripts)
+            VALUES ($DEMO_BASE_ID, _u.id, $DEMO_ID, true)
+            ON CONFLICT (base_id, beneficiaire_id) DO NOTHING;
+        END LOOP;
+    END \$\$;
+" >/dev/null
+
+# =====================================================================
+# 5. TUTORIEL PDF, PUBLIE AUX COTES DE LA DOCUMENTATION EXISTANTE
 # =====================================================================
 if [ -f "$PDF_SOURCE" ] && [ -d /var/www/html/SILLON/Documentation ]; then
     install -o root -g www-data -m 644 "$PDF_SOURCE" "$PDF_CIBLE"
 fi
 
 # =====================================================================
-# 5. CORRIGES DES EXERCICES, EMPAQUETES EN ARCHIVE TELECHARGEABLE
+# 6. CORRIGES DES EXERCICES, EMPAQUETES EN ARCHIVE TELECHARGEABLE
 # =====================================================================
 # python3 zipfile plutôt que la commande "zip" (§12 - pas de dépendance
 # supplémentaire à déclarer pour ce seul usage, python3 est déjà requis).
@@ -93,7 +176,9 @@ fi
 
 echo ""
 echo "=== Installation de SILLON (sillon-tutoriel) terminée ==="
-echo "Compte de démonstration : $DEMO_EMAIL / $DEMO_PASSWORD"
-echo "Tutoriel PDF et corrigés disponibles dans /usr/share/sillon-tutoriel/ et sur https://<serveur>/Documentation/"
-echo "(visibles depuis la modale « À propos » uniquement lorsque connecté avec ce compte)"
+echo "Jeu de données, tutoriel PDF et corrigés partagés avec l'ensemble des comptes,"
+echo "visibles depuis la modale « À propos » et l'onglet Bases de chacun."
+if [ -f "$DEMO_CREDS_FILE" ]; then
+    echo "Identifiants du compte $DEMO_EMAIL (accès manuel exceptionnel uniquement) : $DEMO_CREDS_FILE (lecture root uniquement)"
+fi
 exit 0

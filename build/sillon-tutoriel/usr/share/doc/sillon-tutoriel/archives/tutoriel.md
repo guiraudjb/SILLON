@@ -6,23 +6,15 @@
 
 ## À propos de ce tutoriel
 
-Ce document accompagne le compte de démonstration `demo@sillon.local` créé par le paquet `sillon-tutoriel`. Il vous fait découvrir SILLON à travers un vrai jeu de données ouvert, avec des exercices SQL en difficulté croissante, puis un panorama complet de ce qu'il est possible de produire en Python et en R : graphiques, tableaux, exports Excel, rapports PDF, cartographie et diagrammes Mermaid — le tout démontré une seconde fois à grande échelle (43,9 millions de lignes) si le paquet optionnel `sillon-demo-sirene` est également installé (Parties 4 et 5).
+Ce document accompagne le jeu de données du paquet optionnel `sillon-tutoriel`. Il vous fait découvrir SILLON à travers un vrai jeu de données ouvert, avec des exercices SQL en difficulté croissante, puis un panorama complet de ce qu'il est possible de produire en Python et en R : graphiques, tableaux, exports Excel, rapports PDF, cartographie et diagrammes Mermaid — le tout démontré une seconde fois à grande échelle (43,9 millions de lignes) si le paquet optionnel `sillon-demo-sirene` est également installé (Parties 4 et 5).
 
-**Identifiants du compte de démonstration**
+**Vous suivez ce tutoriel avec votre propre compte SILLON** — aucun identifiant à part à retenir. Dès que `sillon-tutoriel` est installé, son jeu de données vous est partagé automatiquement : retrouvez-le dans l'onglet **Bases**, sous « Bases partagées avec moi », au nom du compte technique `demo@sillon.local` qui le possède. Ce compte technique existe toujours en interne (mot de passe généré aléatoirement à l'installation), mais vous n'avez normalement jamais besoin de vous y connecter.
 
-| Champ | Valeur |
-|---|---|
-| Adresse email | `demo@sillon.local` |
-| Mot de passe | `demo` |
-| Profil | Agent |
-
-> **Ce mot de passe est volontairement fixe et documenté**, pour faciliter une session de démonstration ou de formation. Le paquet `sillon-tutoriel` ne doit **jamais** être installé sur un serveur de production — voir le guide d'installation administrateur, §7.2.
-
-**Tous les scripts présentés dans ce tutoriel sont téléchargeables**, sous forme de fichiers réellement fonctionnels (pas de simples extraits) — qu'il s'agisse des scripts d'exemple déjà exécutés à l'installation ou des corrigés d'exercices. Depuis le bouton « À propos » de l'application, connecté avec le compte de démonstration : archive **`corriges-tutoriel.zip`**, organisée en `sql/`, `python/exemples/`, `python/exercices/`, `r/exemples/` et `r/exercices/`.
+**Tous les scripts présentés dans ce tutoriel sont téléchargeables**, sous forme de fichiers réellement fonctionnels (pas de simples extraits) — qu'il s'agisse des scripts d'exemple déjà exécutés à l'installation ou des corrigés d'exercices. Depuis le bouton « À propos » de l'application, avec votre propre compte : archive **`corriges-tutoriel.zip`**, organisée en `sql/`, `python/exemples/`, `python/exercices/`, `r/exemples/` et `r/exercices/`.
 
 ## Le jeu de données
 
-Trois tables sont déjà importées dans votre base personnelle :
+Trois tables sont déjà importées dans la base partagée du tutoriel (« Bases partagées avec moi », propriétaire `demo@sillon.local`) :
 
 - **`communes_france`** — 34 868 communes de France (métropole et outre-mer), avec pour chacune : son département, sa région, sa population, sa superficie, sa densité, son altitude et ses coordonnées.
 - **`regions_france`** — les 18 régions françaises et le code INSEE de leur chef-lieu (préfecture de région), pour pratiquer les jointures.
@@ -54,7 +46,7 @@ Colonnes de `contours_departements` : `dep_code`, `dep_nom`, `groupe` (numéro d
 
 ## Partie 1 — SQL progressif
 
-Tous les exercices se travaillent dans l'onglet **Travaux**, en sélectionnant votre base personnelle. Les sept premiers exercices sont déjà présents dans votre **historique** (onglet Travaux) : vous pouvez les relire ou les réexécuter avant de passer aux suivants, qui restent à écrire vous-même. Corrigés téléchargeables dans `sql/` (`exercice_1.3.sql` à `exercice_7.2.sql`).
+Tous les exercices se travaillent dans l'onglet **Travaux**, en sélectionnant la base partagée du tutoriel (propriétaire `demo@sillon.local`). Les sept premières requêtes de ce tutoriel sont déjà exécutées et consultables dans les corrigés (`sql/`, `exercice_1.3.sql` à `exercice_7.2.sql`) : votre propre **historique** (onglet Travaux), lui, ne conservera que les requêtes que vous exécutez vous-même.
 
 ### Niveau 1 — Sélection et filtrage
 
@@ -584,7 +576,7 @@ Sans surprise, les chefs-lieux des petites régions ultramarines pèsent netteme
 
 ## Partie 4 — Python à grande échelle (`sillon-demo-sirene`)
 
-Le paquet optionnel `sillon-demo-sirene` (complémentaire de `sillon-tutoriel`, à installer séparément — voir le guide d'installation administrateur, §7.2) importe le jeu de données Sirene complet de l'INSEE (« StockEtablissement », Licence Ouverte 2.0, [data.gouv.fr](https://www.data.gouv.fr/)) dans votre base personnelle : la table **`sirene_etablissements`**, environ **43,9 millions de lignes** — un ordre de grandeur au-delà de `communes_france`. Six scripts Python et trois scripts R, déjà déposés et exécutés à l'installation de ce paquet, démontrent les mêmes possibilités que les Parties 2 et 3 mais à cette échelle. **Si ce paquet n'est pas installé, cette table n'existe pas** : passez directement à « Pour continuer ».
+Le paquet optionnel `sillon-demo-sirene` (complémentaire de `sillon-tutoriel`, à installer séparément — voir le guide d'installation administrateur, §7.2) importe le jeu de données Sirene complet de l'INSEE (« StockEtablissement », Licence Ouverte 2.0, [data.gouv.fr](https://www.data.gouv.fr/)) dans la même base partagée du tutoriel : la table **`sirene_etablissements`**, environ **43,9 millions de lignes** — un ordre de grandeur au-delà de `communes_france`. Six scripts Python et trois scripts R, déjà déposés et exécutés à l'installation de ce paquet, démontrent les mêmes possibilités que les Parties 2 et 3 mais à cette échelle. **Si ce paquet n'est pas installé, cette table n'existe pas** : passez directement à « Pour continuer ».
 
 **Règle impérative à cette échelle** : chaque script agrège côté PostgreSQL (`GROUP BY`, `COUNT`, ...) avant de rapatrier le résultat en Python/R — jamais un `SELECT * FROM sirene_etablissements` ni un `pd.read_sql("SELECT * FROM ...")` sans filtre, qui dépasserait largement le quota mémoire du conteneur d'exécution (`ram_max_conteneur_mo`, §11 du cahier des charges). Une requête déjà réduite à quelques dizaines ou centaines de lignes transite seule vers pandas/dplyr. Même sous cette forme agrégée, chaque requête balaie l'essentiel des 43,9 millions de lignes — la table n'est indexée qu'en recherche approchée (`GIN`/trigramme, pour un filtrage par motif), pas pour ce type de regroupement : comptez couramment plusieurs minutes par script.
 
@@ -671,7 +663,7 @@ Le bac à sable n'a ni Node.js ni Chromium (§7.7/§8.7 du cahier des charges) :
 
 ### 4.6 Cartographie croisée (`carte_choroplethe.py`)
 
-Densité d'établissements actifs par département, sur les contours réels déjà importés par `sillon-tutoriel` (`contours_departements`) — les deux paquets partagent la même base personnelle, cette jointure ne nécessite donc aucun import supplémentaire. Échelle **logarithmique** (`LogNorm`), pas linéaire : le nombre d'établissements par département est extrêmement asymétrique (Paris et les départements franciliens en concentrent bien plus que les départements ruraux) — une échelle linéaire écraserait la plupart des départements dans la teinte la plus claire, tous indiscernables (même défaut, et même corrigé, que la densité de population en Partie 2, exercice 2.1).
+Densité d'établissements actifs par département, sur les contours réels déjà importés par `sillon-tutoriel` (`contours_departements`) — les deux paquets partagent la même base partagée du tutoriel, cette jointure ne nécessite donc aucun import supplémentaire. Échelle **logarithmique** (`LogNorm`), pas linéaire : le nombre d'établissements par département est extrêmement asymétrique (Paris et les départements franciliens en concentrent bien plus que les départements ruraux) — une échelle linéaire écraserait la plupart des départements dans la teinte la plus claire, tous indiscernables (même défaut, et même corrigé, que la densité de population en Partie 2, exercice 2.1).
 
 ```python
 collection = PatchCollection(

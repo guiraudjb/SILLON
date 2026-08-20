@@ -169,6 +169,59 @@ if [ "$DB_EXISTE" = "1" ]; then
         GRANT EXECUTE ON FUNCTION public.creer_job(public.type_job, integer, jsonb, boolean, boolean) TO agent;
     " >/dev/null
 
+    # Migration : partage automatique du jeu de donnees du tutoriel a la
+    # creation de chaque nouveau compte, si sillon-tutoriel est installe
+    # (§7.2) - meme arite, CREATE OR REPLACE suffit (REVOKE/GRANT deja en
+    # place, contrairement a la migration creer_job ci-dessus).
+    sudo -u postgres psql -d "$DB_NAME" -v ON_ERROR_STOP=1 -c "
+        CREATE OR REPLACE FUNCTION public.creer_utilisateur(_email TEXT, _password TEXT, _nom_complet TEXT, _profil public.profil_utilisateur)
+        RETURNS void AS \$\$
+        DECLARE
+            _role_pg        TEXT;
+            _work_mem_mo    TEXT;
+            _maintenance_mo TEXT;
+            _connexions_max INTEGER;
+            _user_id        INTEGER;
+            _demo_id        INTEGER;
+            _demo_base_id   INTEGER;
+        BEGIN
+            _role_pg := auth.nom_role_personnel(_email);
+
+            SELECT valeur INTO _work_mem_mo FROM public.parametres WHERE cle = 'work_mem_defaut_mo';
+            SELECT valeur INTO _maintenance_mo FROM public.parametres WHERE cle = 'maintenance_work_mem_defaut_mo';
+            SELECT valeur::INTEGER INTO _connexions_max FROM public.parametres WHERE cle = 'connexions_max_par_utilisateur';
+
+            EXECUTE format('CREATE ROLE %I NOLOGIN CONNECTION LIMIT %s', _role_pg, _connexions_max);
+            EXECUTE format('ALTER ROLE %I SET work_mem = %L', _role_pg, (_work_mem_mo::integer * 1024)::text);
+            EXECUTE format('ALTER ROLE %I SET maintenance_work_mem = %L', _role_pg, (_maintenance_mo::integer * 1024)::text);
+
+            EXECUTE format('GRANT %I TO sillon_service', _role_pg);
+            EXECUTE format('GRANT %I TO sillon_orchestrateur', _role_pg);
+            EXECUTE format('GRANT %I TO %I', _profil::text, _role_pg);
+
+            INSERT INTO public.utilisateurs (email, mot_de_passe_hash, nom_complet, profil, role_pg)
+            VALUES (_email, crypt(_password, gen_salt('bf')), _nom_complet, _profil, _role_pg)
+            RETURNING id INTO _user_id;
+
+            IF _email <> 'demo@sillon.local' AND EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'sillon_tutoriel_lecteurs') THEN
+                SELECT u.id, b.id INTO _demo_id, _demo_base_id
+                FROM public.utilisateurs u JOIN public.bases b ON b.proprietaire_id = u.id
+                WHERE u.email = 'demo@sillon.local';
+
+                IF FOUND THEN
+                    EXECUTE format('GRANT sillon_tutoriel_lecteurs TO %I', _role_pg);
+                    INSERT INTO public.partages (base_id, beneficiaire_id, accorde_par_id, autorise_scripts)
+                    VALUES (_demo_base_id, _user_id, _demo_id, true)
+                    ON CONFLICT (base_id, beneficiaire_id) DO NOTHING;
+                END IF;
+            END IF;
+        END;
+        \$\$ LANGUAGE plpgsql SECURITY DEFINER;
+
+        REVOKE EXECUTE ON FUNCTION public.creer_utilisateur(text, text, text, public.profil_utilisateur) FROM PUBLIC;
+        GRANT EXECUTE ON FUNCTION public.creer_utilisateur(text, text, text, public.profil_utilisateur) TO administrateur;
+    " >/dev/null
+
     # Les secrets existants sont conservés tels quels (§12.3) : les
     # régénérer invaliderait toutes les sessions actives et romprait la
     # connexion des paquets déjà installés (sillon-orchestrateur, sillon-worker).

@@ -237,6 +237,9 @@ DECLARE
     _work_mem_mo    TEXT;
     _maintenance_mo TEXT;
     _connexions_max INTEGER;
+    _user_id        INTEGER;
+    _demo_id        INTEGER;
+    _demo_base_id   INTEGER;
 BEGIN
     _role_pg := auth.nom_role_personnel(_email);
 
@@ -265,7 +268,44 @@ BEGIN
 
     -- 3. Enregistrement dans le catalogue.
     INSERT INTO public.utilisateurs (email, mot_de_passe_hash, nom_complet, profil, role_pg)
-    VALUES (_email, crypt(_password, gen_salt('bf')), _nom_complet, _profil, _role_pg);
+    VALUES (_email, crypt(_password, gen_salt('bf')), _nom_complet, _profil, _role_pg)
+    RETURNING id INTO _user_id;
+
+    -- 4. Partage automatique du jeu de donnees du tutoriel (paquet optionnel
+    -- sillon-tutoriel, §7.2), pour que chaque compte reel puisse suivre le
+    -- tutoriel avec sa propre identite plutot que le compte demo partage.
+    -- Le role de groupe "sillon_tutoriel_lecteurs" n'existe que si ce
+    -- paquet est installe (cree par son postinst, jamais par ce schema de
+    -- base) : un simple test d'existence evite toute dependance dure
+    -- envers un paquet optionnel, absent sur un deploiement de production.
+    -- Jamais applique au compte demo lui-meme (il est deja proprietaire de
+    -- cette base, se la partager n'aurait aucun sens).
+    IF _email <> 'demo@sillon.local' AND EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'sillon_tutoriel_lecteurs') THEN
+        SELECT u.id, b.id INTO _demo_id, _demo_base_id
+        FROM public.utilisateurs u JOIN public.bases b ON b.proprietaire_id = u.id
+        WHERE u.email = 'demo@sillon.local';
+
+        IF FOUND THEN
+            -- Droit cluster (appartenance de role, CONNECT sur la base du
+            -- compte demo herite via ce role de groupe) : suffisant sans
+            -- reconnexion a cette base precise, contrairement a
+            -- partager_base()/orchestrateur.py (§7 ci-dessous) qui traitent
+            -- un partage individuel quelconque. Le role de groupe et les
+            -- GRANT USAGE/SELECT + ALTER DEFAULT PRIVILEGES sur ses tables
+            -- sont prepares une bonne fois pour toutes par le postinst de
+            -- sillon-tutoriel (donnees publiques, en lecture seule).
+            EXECUTE format('GRANT sillon_tutoriel_lecteurs TO %I', _role_pg);
+
+            -- autorise_scripts a true (contrairement au defaut de
+            -- partager_base) : le tutoriel comporte des exercices Python/R
+            -- (parties 2 et 3) executes contre ce jeu de donnees public et
+            -- sans consequence, indispensable pour que le compte reel de
+            -- l'utilisateur puisse les suivre integralement.
+            INSERT INTO public.partages (base_id, beneficiaire_id, accorde_par_id, autorise_scripts)
+            VALUES (_demo_base_id, _user_id, _demo_id, true)
+            ON CONFLICT (base_id, beneficiaire_id) DO NOTHING;
+        END IF;
+    END IF;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 

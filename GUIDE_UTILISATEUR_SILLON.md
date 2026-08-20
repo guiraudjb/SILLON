@@ -6,12 +6,13 @@
 
 ## À propos de ce guide
 
-Ce guide illustre, captures d'écran réelles à l'appui, l'ensemble des fonctionnalités de SILLON telles qu'elles se présentent à l'écran. Il complète deux autres documents disponibles depuis la modale « À propos » de l'application :
+Ce guide illustre, captures d'écran réelles à l'appui, l'ensemble des fonctionnalités de SILLON telles qu'elles se présentent à l'écran. Il complète trois autres documents disponibles depuis la modale « À propos » de l'application :
 
-- Le **cahier des charges**, qui détaille précisément le comportement attendu de chaque fonctionnalité.
 - Le **guide d'installation administrateur**, pour la mise en place du serveur.
+- La **nomenclature logicielle (SBOM)**, qui recense l'ensemble des composants installés (réglementation NIS2).
+- Le **cahier des charges**, qui détaille précisément le comportement attendu de chaque fonctionnalité.
 
-Les captures de ce guide ont été réalisées avec le compte de démonstration du paquet optionnel `sillon-tutoriel` (jeu de données réel de communes françaises) et avec les fichiers d'exemple pour la cartographie, les graphiques et les représentations DSFR, également téléchargeables depuis la modale « À propos ».
+Les captures de ce guide ont été réalisées avec le jeu de données réel de communes françaises du paquet optionnel `sillon-tutoriel` (partagé automatiquement avec tout compte dès lors que ce paquet est installé, plus besoin du compte de démonstration) et avec les fichiers d'exemple pour la cartographie, les graphiques et les représentations DSFR, également téléchargeables depuis la modale « À propos ».
 
 ---
 
@@ -175,11 +176,11 @@ Pour produire manuellement cinq blocs visuels du système de design de l'État, 
 
 ## Modale « À propos »
 
-Accessible à tout moment depuis l'en-tête de l'application, elle regroupe la documentation technique téléchargeable (guide administrateur, cahier des charges, ce guide utilisateur), ainsi que les fichiers d'exemple pour les onglets Carto, Graphiques et Représentations DSFR.
+Accessible à tout moment depuis l'en-tête de l'application, elle regroupe la documentation technique téléchargeable (guide administrateur, nomenclature logicielle SBOM, cahier des charges, ce guide utilisateur), ainsi que les fichiers d'exemple pour les onglets Carto, Graphiques et Représentations DSFR.
 
 ![Modale À propos](19_a_propos.jpg)
 
-Pour le compte de démonstration du paquet optionnel `sillon-tutoriel`, une section « Formation » supplémentaire donne accès au tutoriel complet et aux corrigés téléchargeables de tous ses exercices.
+Si le paquet optionnel `sillon-tutoriel` est installé, une section « Formation » supplémentaire donne accès au tutoriel complet et aux corrigés téléchargeables de tous ses exercices — visible pour **tout compte**, plus seulement celui de démonstration : le jeu de données du tutoriel lui est partagé automatiquement (onglet Bases), chacun le suit avec sa propre identité.
 
 ---
 
@@ -207,6 +208,7 @@ Réservé aux comptes de profil administrateur, ce panneau permet de gérer l'en
 
 - Le **cahier des charges** détaille le comportement attendu de chaque fonctionnalité, la sécurité, les performances et le packaging de la plateforme.
 - Le **guide d'installation administrateur** couvre la mise en place du serveur, la sauvegarde et la maintenance courante.
-- Si le paquet optionnel `sillon-tutoriel` est installé, le **tutoriel** propose une prise en main progressive en SQL, Python et R sur un vrai jeu de données, avec tous les corrigés téléchargeables.
+- La **nomenclature logicielle (SBOM)** recense l'ensemble des composants installés, pour la conformité NIS2.
+- Si le paquet optionnel `sillon-tutoriel` est installé, le **tutoriel** propose une prise en main progressive en SQL, Python et R sur un vrai jeu de données, avec tous les corrigés téléchargeables — avec votre propre compte, sans identifiant à part.
 
-Ces trois documents sont accessibles depuis la modale « À propos » de l'application.
+Ces quatre documents sont accessibles depuis la modale « À propos » de l'application.
