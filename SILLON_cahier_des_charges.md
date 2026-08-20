@@ -8,8 +8,8 @@
 
 | Champ | Valeur |
 |---|---|
-| Version | 2.1 |
-| Date | 15 août 2026 |
+| Version | 2.2 |
+| Date | 20 août 2026 |
 | Statut | Avant-projet — en cours de validation |
 | Périmètre | Direction locale — hors lac de données national |
 | Stack technique | PostgreSQL 17, PostgREST, Nginx, DSFR — architecture sans framework applicatif lourd côté front |
@@ -404,7 +404,7 @@ L'agent, propriétaire de sa base, reste ensuite libre de créer ou de supprimer
 - Les fichiers importés peuvent contenir des données à caractère personnel. La responsabilité de la base légale du traitement relève de l'agent qui réalise l'import ; l'assistant d'import rappelle explicitement cette responsabilité au moment du dépôt.
 - Aucune donnée n'est transmise à un système tiers ou national depuis SILLON.
 - La suppression d'une table ou d'une base par son propriétaire est immédiate et définitive : purge effective des données, pas de suppression logique laissant l'information accessible en arrière-plan.
-- Une politique de conservation encadre la durée de vie des fichiers produits par les jobs (résultats d'export, journaux d'exécution des scripts), au-delà de laquelle ils sont purgés automatiquement.
+- Une politique de conservation encadre la durée de vie des fichiers produits par les jobs (résultats d'export, journaux d'exécution des scripts), au-delà de laquelle ils sont purgés automatiquement — 90 jours par défaut, mise en œuvre par le paquet optionnel `sillon-purge` (§12.9), durée modifiable à chaud sans reconstruction de paquet. Le même mécanisme couvre les dépôts temporaires d'import CSV jamais menés à leur terme (48 heures par défaut).
 
 ### 8.10 Téléchargement et distribution des résultats
 
@@ -421,7 +421,7 @@ L'agent, propriétaire de sa base, reste ensuite libre de créer ou de supprimer
 
 - Toute création ou suppression de base ou de table, tout partage accordé ou révoqué, toute action d'administration (création de compte, changement de profil, réinitialisation de mot de passe) est journalisée avec l'identité de l'auteur, la date et un résumé de l'action.
 - Le journal est rendu immuable au niveau du moteur de base de données lui-même : les entrées ne peuvent être ni modifiées ni supprimées par un compte applicatif, y compris administrateur — seule une intervention hors du périmètre applicatif le permettrait.
-- Une politique de purge automatique s'applique au journal après une durée de conservation définie, pour éviter une croissance indéfinie sans compromettre sa valeur probante sur la période couverte.
+- Une politique de purge automatique s'applique au journal après une durée de conservation définie, pour éviter une croissance indéfinie sans compromettre sa valeur probante sur la période couverte — 12 mois par défaut, mise en œuvre par le paquet optionnel `sillon-purge` (§12.9), durée modifiable à chaud sans reconstruction de paquet. La suppression reste réservée au rôle système du moteur de base de données, jamais à un compte applicatif (y compris administrateur), cohérent avec l'immuabilité du journal ci-dessus.
 
 ### 8.13 Détection d'anomalies et réponse à incident
 
@@ -496,6 +496,7 @@ L'application est distribuée sous forme de paquets Debian indépendants, pour p
 | `sillon-image-execution` | Environnement d'exécution des scripts | `sillon-worker` | Image de base figée contenant l'environnement Python et R validé (§8.7) ; paquet séparé pour permettre sa mise à jour indépendamment du reste de l'application |
 | `sillon-tutoriel` | **Optionnel** — démonstration et formation (§12.7) | `sillon-image-execution` | Compte de démonstration, jeu de données réel, tutoriel PDF et corrigés d'exercices ; jamais installé sur un déploiement de production |
 | `sillon-demo-sirene` | **Optionnel** — démonstration à l'échelle (§12.8) | `sillon-tutoriel` | Jeu de données Sirene complet (~43,9 millions de lignes), téléchargé à l'installation, et scripts Python/R démontrant les possibilités de l'environnement d'exécution à cette échelle ; jamais installé sur un déploiement de production |
+| `sillon-purge` | **Optionnel, recommandé en production** — maîtrise de la volumétrie (§12.9) | `sillon-server` | Purge quotidienne automatisée des résultats de jobs, des dépôts temporaires orphelins et du journal d'audit (§8.9, §8.12) |
 
 ### 12.3 Comportement d'installation
 
@@ -537,6 +538,14 @@ L'application est distribuée sous forme de paquets Debian indépendants, pour p
 - Il fournit un jeu de scripts Python et R distinct de celui de `sillon-tutoriel`, chacun démontrant une possibilité différente de l'environnement d'exécution (types de graphiques, tableau croisé, export Excel avec graphique natif, rapport PDF multi-pages, cartographie croisée avec les contours départementaux de `sillon-tutoriel`, diagramme Mermaid) — chacun agrégeant systématiquement côté PostgreSQL plutôt que de charger la table complète en mémoire dans le conteneur d'exécution. Comme pour `sillon-tutoriel` (§12.7), ces scripts sont téléchargeables sous forme de fichiers réellement fonctionnels depuis la modale « À propos » — visibles uniquement si ce paquet est installé (vérification d'existence côté client, `sillon-tutoriel` seul ne suffisant pas à les publier).
 - Les quotas généraux (taille maximale d'un CSV importé, durée maximale d'un job, §11) sont relevés par ce paquet à l'installation pour accueillir un import de cette taille, sans être restaurés à leur valeur par défaut ensuite — cohérent avec le caractère non-production déjà assumé pour toute la famille de paquets de démonstration.
 
+### 12.9 Purge automatique de la volumétrie (`sillon-purge`)
+
+- Paquet séparé et optionnel, à la différence de `sillon-tutoriel`/`sillon-demo-sirene` (§12.7, §12.8) **recommandé sur tout déploiement, y compris de production** : sans lui, trois points s'accumulent indéfiniment sur le disque du serveur au fil de l'usage — résultats de jobs, dépôts temporaires d'import CSV jamais menés à leur terme (§5.1), et journal d'audit (§8.12).
+- Dépend uniquement de `sillon-server` : installable indépendamment de la file d'attente (`sillon-orchestrateur`/`sillon-worker`), puisqu'il n'agit que sur des fichiers déjà produits et sur le catalogue applicatif.
+- Exécution planifiée quotidienne unique, en tant que compte système `root` — nécessaire pour atteindre les fichiers de résultats appartenant à l'identifiant remappé du conteneur d'exécution (§8.7) — qui délègue au rôle système du moteur de base de données les opérations touchant le journal d'audit (même principe de séparation des privilèges qu'au §8.12).
+- Les trois durées de conservation (résultats de jobs, dépôts temporaires orphelins, journal d'audit) sont modifiables à chaud par un administrateur, par le même mécanisme que les quotas du §11, sans reconstruction de paquet ni redémarrage de service — plutôt que figées dans la configuration système, pour permettre un ajustement a posteriori à la volumétrie réellement observée (§15.2).
+- N'agit que sur des artefacts techniques (fichiers produits par les jobs, entrées du journal d'audit) : ne touche jamais aux bases de travail ni à leurs tables, dont la suppression reste un acte exclusivement volontaire de leur propriétaire (§8.9).
+
 ---
 
 ## 13. Exigences non fonctionnelles
@@ -575,7 +584,7 @@ L'application est distribuée sous forme de paquets Debian indépendants, pour p
 
 ### 15.2 Points de vigilance à confirmer avant le développement
 
-- Format et durée de rétention des résultats de jobs (fichiers produits, logs) sur le disque du serveur.
+- ~~Format et durée de rétention des résultats de jobs (fichiers produits, logs) sur le disque du serveur.~~ Résolu : purge automatique quotidienne (§8.9, §8.12, §12.9), valeurs par défaut de 90 jours (résultats), 48 heures (dépôts temporaires orphelins) et 12 mois (journal d'audit) — modifiables à chaud si l'usage réel en production s'avère différent des hypothèses posées ici.
 - Volumétrie réelle attendue par import (pour calibrer précisément les quotas du §11 et le besoin de séparation des volumes de stockage du §7.2, posés ici à dire d'expert).
 - Liste précise des librairies Python/R à inclure dans l'image d'exécution figée.
 - Modalités de contact en cas de dépassement de quota disque récurrent (message applicatif seul, ou remontée à l'administrateur).
