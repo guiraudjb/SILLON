@@ -34,8 +34,13 @@ Les dépendances sont déclarées dans chaque paquet SILLON et installées autom
 | `sillon-tutoriel` *(optionnel)* | Jeu de données réel et tutoriel PDF, partagés automatiquement avec tous les comptes — VM de démo/formation uniquement, voir §7.2 | `sillon-image-execution` |
 | `sillon-demo-sirene` *(optionnel)* | Jeu de données Sirene massif (~43,9 millions de lignes) et scripts de démonstration à l'échelle — VM de démo/formation uniquement, voir §7.2 | `sillon-tutoriel` |
 | `sillon-purge` *(optionnel, recommandé en production)* | Purge automatique quotidienne des résultats de jobs, dépôts temporaires orphelins et journal d'audit — voir §7.4 | `sillon-server` |
+| `sillon-backup-client` *(optionnel, recommandé en production)* | Sauvegarde physique planifiée du cluster PostgreSQL (pgBackRest) vers un partage NFS distant — voir §7.5 | `sillon-server`, `pgbackrest`, `nfs-common` |
+| `sillon-backup-server` *(optionnel, recommandé en production, sur une machine distincte)* | Serveur de sauvegarde : partage NFS restreint par IP recevant les sauvegardes — voir §7.5 | `nfs-kernel-server`, `pgbackrest` |
+| `sillon-backup-server-survey` *(optionnel)* | Sonde de surveillance quotidienne des sauvegardes, alerte par e-mail — voir §7.5 | `sillon-backup-server`, `mailutils`, `postfix` |
 
-**L'ordre d'installation ci-dessus est obligatoire** : chaque paquet vérifie au `postinst` que le précédent est déjà configuré (présence de `/etc/sillon/secrets.env`, service actif) et refuse de s'installer sinon.
+**L'ordre d'installation ci-dessus est obligatoire pour la chaîne applicative** (`sillon-server` → `sillon-orchestrateur` → `sillon-worker` → `sillon-image-execution`, puis les paquets de démonstration optionnels) : chaque paquet vérifie au `postinst` que le précédent est déjà configuré (présence de `/etc/sillon/secrets.env`, service actif) et refuse de s'installer sinon.
+
+Les paquets de sauvegarde sont indépendants de cette chaîne et se répartissent sur deux machines distinctes : `sillon-backup-client` s'installe sur le serveur SILLON lui-même (à côté de `sillon-server`), tandis que `sillon-backup-server` et `sillon-backup-server-survey` s'installent sur une machine de sauvegarde séparée — voir §7.5.
 
 ---
 
@@ -289,6 +294,53 @@ journalctl -t sillon-purge -n 50
 
 **Avant `sillon-purge` (`sillon-server` < 0.1.32)** : ces mêmes durées étaient réparties dans deux `/etc/cron.d` livrés directement par `sillon-server` (résultats de jobs et journal d'audit uniquement — pas de purge des dépôts orphelins), avec des valeurs codées en dur plutôt que modifiables via `parametres`. Une mise à niveau de `sillon-server` vers 0.1.32 ou ultérieur retire proprement ces deux anciens fichiers ; installer ensuite `sillon-purge` pour retrouver une purge active.
 
+### 7.5 Sauvegarde et restauration (`sillon-backup-client` / `sillon-backup-server` / `sillon-backup-server-survey`)
+
+La base de SILLON n'est pas une base unique comme la plupart des applications : c'est le catalogue applicatif (`sillon_catalog`) **plus une base physique par agent**, alimentées par des imports CSV pouvant atteindre plusieurs centaines de Mo chacune. Un dump complet quotidien (`pg_dump`) de l'ensemble du cluster n'est pas envisageable à cette échelle — la sauvegarde repose donc sur **pgBackRest** (paquet Debian officiel, `apt`/`dpkg` standard, rien à vendoriser), qui ne recopie que les blocs modifiés depuis la dernière sauvegarde.
+
+**Politique appliquée** : une sauvegarde **complète le 1er de chaque mois**, une **incrémentale les autres jours** (2 h du matin), **rétention de 3 mois** (une sauvegarde complète et toutes les incrémentales qui en dépendent expirent ensemble 90 jours après sa prise).
+
+**Installation** — sur le serveur SILLON :
+
+```bash
+sudo dpkg -i sillon-backup-client_0.1.0_all.deb
+```
+
+Éditer `/etc/sillon-backup/client.env` (adresse du partage NFS distant) puis relancer l'installation pour appliquer :
+
+```bash
+sudo apt-get install --reinstall sillon-backup-client
+```
+
+Sur la machine de sauvegarde (distincte, recommandé) :
+
+```bash
+sudo dpkg -i sillon-backup-server_0.1.0_all.deb
+# éditer /etc/sillon-backup/server.env (adresse IP du serveur SILLON)
+sudo apt-get install --reinstall sillon-backup-server
+
+sudo dpkg -i sillon-backup-server-survey_0.1.0_all.deb
+# éditer /etc/sillon-backup/survey.env (destinataires, relais SMTP interne)
+```
+
+`ADMIN_EMAIL` (destinataires des alertes) est relu à chaque exécution de la sonde, sans réinstallation nécessaire. `SMTP_RELAY` (relais interne), comme `NFS_SHARE`/`CLIENT_IP` ci-dessus, n'est appliqué qu'à l'installation — toute modification exige `apt-get install --reinstall`.
+
+**Vérification** :
+
+```bash
+sudo -u postgres pgbackrest --stanza=sillon info
+```
+
+**Restauration à une date choisie** — sur le serveur SILLON, en root :
+
+```bash
+sudo /opt/sillon-backup/sillon_restore.sh
+```
+
+L'outil affiche les sauvegardes disponibles, demande une date/heure cible (« AAAA-MM-JJ HH:MM:SS »), puis restaure **automatiquement** la sauvegarde complète et la chaîne d'incrémentales nécessaires jusqu'à cet instant précis (pgBackRest détermine seul la chaîne à rejouer — rien à choisir manuellement au-delà de la date). Toute l'application (catalogue **et** l'ensemble des bases agents) est ramenée à cet état ; les services SILLON sont arrêtés puis relancés automatiquement par l'outil, secret JWT resynchronisé compris.
+
+**Suivi** : la sonde envoie chaque jour à 8 h un bilan par e-mail — statut `[OK]` si une sauvegarde récente et saine existe, `[AVERTISSEMENT]` si la dernière sauvegarde date de plus de 30 h, `[ALERTE CRITIQUE]` si aucune sauvegarde n'existe ou qu'une sauvegarde est en erreur.
+
 ---
 
 ## 8. Désinstallation
@@ -322,7 +374,11 @@ sudo -u postgres dropdb <nom_de_la_base>
 sudo apt-get purge sillon-tutoriel
 ```
 
-Rappel : aucun mécanisme de sauvegarde n'est porté par l'application — la protection contre la perte de données relève de l'infrastructure d'hébergement de la direction.
+**Paquets de sauvegarde** : ni `remove` ni `purge` de `sillon-backup-client`/`sillon-backup-server` ne suppriment les sauvegardes déjà déposées sur le partage NFS — seule la configuration locale (montage, export, tâches planifiées) est retirée, par cohérence avec le principe général « jamais de perte de données » du §12.6 du cahier des charges. `sillon-backup-server-survey` ne porte aucune donnée propre.
+
+```bash
+sudo apt-get remove sillon-backup-server-survey sillon-backup-client sillon-backup-server
+```
 
 ---
 
@@ -336,6 +392,8 @@ Rappel : aucun mécanisme de sauvegarde n'est porté par l'application — la pr
 | Requêtes SQL normales, mais tous les scripts échouent (statut « erreur ») après un changement d'adresse IP ou un redémarrage du serveur | Adresse hôte détectée par le `postinst` de `sillon-worker` obsolète (§9.1) | `journalctl -u sillon-worker -n 50`, rechercher une erreur de connexion PostgreSQL |
 | Bouton « Journal » (onglet Suivi) affiche systématiquement « journal vide pour l'instant », même pour un job en cours | Corrigé (`python3 -u` / `stdbuf`, worker.py) : la sortie standard d'un interprète non attaché à un terminal était mise en tampon par blocs, jamais vidée avant la fin d'un script court — le journal réellement produit n'apparaissait qu'une fois le job déjà terminé (et donc déjà uniquement dans l'archive téléchargeable, plus dans la fenêtre « en cours ») | `sudo dpkg -i sillon-worker_0.1.0_all.deb` puis `systemctl restart sillon-worker` si une version antérieure au correctif est installée |
 | Import « depuis data.gouv.fr » échoue avec « URL de ressource non autorisée » | Depuis la version 0.1.6 de `sillon-orchestrateur`, seules les URL `http(s)://` dont l'adresse résolue est publique (ni privée/RFC 1918, ni loopback, ni lien-local) sont acceptées — protection contre le détournement de cet import vers un fichier local ou un service interne (SSRF, cf. rapport d'audit de sécurité). **Pas de restriction par nom de domaine** : les ressources data.gouv.fr sont hébergées sur des domaines tiers très divers (portails opendata régionaux, ArcGIS...), une restriction à `data.gouv.fr` casserait la quasi-totalité des imports réels — testé et corrigé en ce sens (§9, non-régression VM de test). Ce message ne devrait donc apparaître que pour une ressource pointant réellement vers une adresse privée/interne | `journalctl -u sillon-orchestrateur -n 50` |
+| `sillon-backup-client` s'installe mais affiche « stanza pgBackRest non initialisee » | Partage NFS injoignable au moment de l'installation (adresse erronée dans `client.env`, ou `sillon-backup-server` pas encore installé/configuré sur l'autre machine) — non bloquant, la tâche planifiée quotidienne (2 h) réessaiera d'elle-même | `df -h /mnt/savesillon` ; une fois le partage accessible, `sudo -u postgres pgbackrest --stanza=sillon stanza-create` |
+| `sillon-backup-server-survey` envoie une alerte « aucune sauvegarde disponible » alors que `sillon-backup-client` semble fonctionner | Décalage d'horloge entre les deux machines, ou tâche cron du client non exécutée (voir ligne ci-dessus) | Sur le serveur SILLON : `journalctl -t sillon-backup -n 50` ; comparer les horloges des deux machines (`date`) |
 
 ### 9.1 Changement d'adresse IP du serveur (ou redémarrage avec IP dynamique)
 
