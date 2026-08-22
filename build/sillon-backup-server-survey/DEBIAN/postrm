@@ -1,0 +1,12 @@
+#!/bin/bash
+set -e
+
+if [ "$1" = "remove" ] || [ "$1" = "purge" ]; then
+    echo "Retrait de la sonde de surveillance des sauvegardes SILLON..."
+    systemctl reload cron 2>/dev/null || true
+    echo "Sonde retiree."
+    # Note : Postfix n'est pas desinstalle pour ne pas casser d'autres
+    # services eventuels du serveur (meme choix que TRACE).
+fi
+
+exit 0

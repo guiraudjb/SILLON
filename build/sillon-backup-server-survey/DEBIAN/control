@@ -1,0 +1,12 @@
+Package: sillon-backup-server-survey
+Version: 0.1.0
+Architecture: all
+Maintainer: Administrateur SILLON <admin@sillon.local>
+Depends: sillon-backup-server, mailutils, postfix
+Section: admin
+Priority: optional
+Description: SILLON - Sonde de surveillance des sauvegardes.
+ Verifie quotidiennement (via "pgbackrest info") la presence d'une
+ sauvegarde recente et l'absence de sauvegarde en erreur pour la
+ stanza SILLON, et alerte par e-mail via le proxy SMTP interne en cas
+ de defaillance. Voir cahier des charges §12.2.

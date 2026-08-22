@@ -1,0 +1,135 @@
+#!/bin/bash
+set -e
+
+echo "=== Installation de SILLON (sillon-backup-client) ==="
+
+CONF_ENV="/etc/sillon-backup/client.env"
+MOUNT_POINT="/mnt/savesillon"
+FSTAB="/etc/fstab"
+PGBACKREST_CONF="/etc/pgbackrest.conf"
+STANZA="sillon"
+
+if [ ! -f "$CONF_ENV" ]; then
+    echo "ERREUR : $CONF_ENV introuvable (devrait etre livre par le paquet)." >&2
+    exit 1
+fi
+# shellcheck disable=SC1090
+source "$CONF_ENV"
+
+if [ -z "$NFS_SHARE" ]; then
+    echo "ERREUR : NFS_SHARE non renseigne dans $CONF_ENV." >&2
+    exit 1
+fi
+
+echo "Cible NFS : $NFS_SHARE"
+
+# =====================================================================
+# 1. POINT DE MONTAGE ET MONTAGE AUTOMATIQUE
+# =====================================================================
+# Meme mecanique que le point de montage NFS deja eprouve en production
+# (projet TRACE) : automount systemd (pas de montage bloquant au
+# demarrage) plutot qu'une entree fstab classique, pour ne jamais
+# retarder un boot sur un partage momentanement injoignable.
+mkdir -p "$MOUNT_POINT"
+# soft,timeo=30,retrans=2 (~6s par tentative) : borne l'attente en cas de
+# partage injoignable (constate en pratique lors du premier test reel -
+# le defaut "hard" de NFS retente indefiniment et bloquait ce postinst
+# plusieurs minutes avant le repli non bloquant de l'etape 4). Sans
+# risque pour l'integrite des donnees SILLON elles-memes : PGDATA reste
+# toujours sur le disque local, seul le depot pgBackRest est sur ce
+# montage - un backup interrompu par un timeout est simplement rejete
+# par pgBackRest, jamais applique partiellement.
+FSTAB_LINE="${NFS_SHARE} ${MOUNT_POINT} nfs noauto,x-systemd.automount,x-systemd.idle-timeout=600,_netdev,soft,timeo=30,retrans=2 0 0"
+if ! grep -q "[[:space:]]${MOUNT_POINT}[[:space:]]" "$FSTAB"; then
+    cp "$FSTAB" "${FSTAB}.bak_sillon"
+    echo "$FSTAB_LINE" >> "$FSTAB"
+fi
+systemctl daemon-reload
+systemctl restart mnt-savesillon.automount || true
+
+# =====================================================================
+# 2. CONFIGURATION PGBACKREST
+# =====================================================================
+# Politique : sauvegarde complete mensuelle, incrementale quotidienne,
+# retention 3 mois (voir sillon_backup.sh pour le detail). Fichier
+# entierement regenere a chaque installation/mise a jour (comme
+# /etc/sillon-api.conf pour sillon-server) : la seule valeur veritablement
+# propre a ce site est NFS_SHARE, deja lue depuis client.env ci-dessus.
+PG_VERSION=$(pg_lsclusters -h 2>/dev/null | awk 'NR==1{print $1}')
+PG_VERSION="${PG_VERSION:-17}"
+PGDATA="/var/lib/postgresql/${PG_VERSION}/main"
+NB_CPU=$(nproc 2>/dev/null || echo 1)
+
+cat << EOF > "$PGBACKREST_CONF"
+[global]
+repo1-path=${MOUNT_POINT}
+repo1-retention-full-type=time
+repo1-retention-full=90
+process-max=${NB_CPU}
+
+[${STANZA}]
+pg1-path=${PGDATA}
+pg1-port=5432
+EOF
+chmod 644 "$PGBACKREST_CONF"
+
+# =====================================================================
+# 3. ARCHIVAGE CONTINU DES JOURNAUX DE TRANSACTION
+# =====================================================================
+# Prerequis de fonctionnement de pgBackRest, pas une option de confort :
+# meme une sauvegarde "full" isolee doit pouvoir rejouer les journaux
+# generes pendant sa propre prise pour atteindre un etat coherent.
+PG_CONF_DIR="/etc/postgresql/${PG_VERSION}/main"
+if [ -f "$PG_CONF_DIR/postgresql.conf" ]; then
+    REDEMARRAGE_REQUIS=0
+    regler_pg() {
+        cle="$1"; valeur="$2"
+        if grep -qE "^${cle}\s*=\s*${valeur}(\s|\$)" "$PG_CONF_DIR/postgresql.conf"; then
+            return
+        fi
+        if grep -qE "^#?${cle}\b" "$PG_CONF_DIR/postgresql.conf"; then
+            sed -i "s|^#\?${cle}[[:space:]]*=.*|${cle} = ${valeur}|" "$PG_CONF_DIR/postgresql.conf"
+        else
+            echo "${cle} = ${valeur}" >> "$PG_CONF_DIR/postgresql.conf"
+        fi
+        REDEMARRAGE_REQUIS=1
+    }
+    regler_pg "archive_mode" "on"
+    regler_pg "archive_command" "'pgbackrest --stanza=${STANZA} archive-push %p'"
+    if [ "$REDEMARRAGE_REQUIS" = "1" ]; then
+        # "systemctl restart postgresql" est une unite factice sur Debian
+        # (ExecStart=/bin/true) qui ne redemarre rien reellement - constate
+        # en pratique sur ce projet (cf. sillon-worker) : pg_ctlcluster est
+        # la seule voie fiable pour un vrai redemarrage du cluster.
+        pg_ctlcluster "$PG_VERSION" main restart 2>/dev/null || true
+    fi
+fi
+
+# =====================================================================
+# 4. CREATION DE LA STANZA ET PREMIERE SAUVEGARDE
+# =====================================================================
+# Non bloquant : le partage NFS peut ne pas encore etre exporte cote
+# serveur au moment de cette installation (sillon-backup-server pas
+# encore installe/configure sur l'autre machine) - l'installation de
+# sillon-backup-client ne doit pas echouer pour autant, la tache
+# planifiee (cron.d/sillon_backup) reessaiera chaque jour.
+if sudo -u postgres pgbackrest --stanza="$STANZA" stanza-create; then
+    echo "Stanza pgBackRest '${STANZA}' initialisee."
+    echo "Premiere sauvegarde complete..."
+    sudo -u postgres pgbackrest --stanza="$STANZA" --type=full backup || \
+        echo "AVERTISSEMENT : premiere sauvegarde impossible pour l'instant - reessaiera a la prochaine execution planifiee (02h00)." >&2
+else
+    echo "AVERTISSEMENT : stanza pgBackRest non initialisee (partage NFS probablement injoignable)." >&2
+    echo "Une fois sillon-backup-server installe et le partage accessible, relancer :" >&2
+    echo "  sudo -u postgres pgbackrest --stanza=${STANZA} stanza-create" >&2
+fi
+
+# =====================================================================
+# 5. SCRIPTS ET TACHE PLANIFIEE
+# =====================================================================
+chmod 755 /opt/sillon-backup/sillon_backup.sh /opt/sillon-backup/sillon_restore.sh
+chown root:root /etc/cron.d/sillon_backup
+chmod 644 /etc/cron.d/sillon_backup
+
+echo "=== Installation de SILLON (sillon-backup-client) terminee ==="
+exit 0

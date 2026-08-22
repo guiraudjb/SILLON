@@ -1,0 +1,5 @@
+# Controle quotidien de l'etat des sauvegardes SILLON (pgBackRest, bilan
+# de la veille) - voir /opt/sillon-backup-survey/verifier_sauvegarde.py
+# pour le detail des criteres d'alerte (absence de sauvegarde, sauvegarde
+# en erreur, retard sur la sauvegarde quotidienne attendue).
+0 8 * * * root /usr/bin/python3 /opt/sillon-backup-survey/verifier_sauvegarde.py >/dev/null 2>&1

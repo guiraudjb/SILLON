@@ -1,0 +1,28 @@
+#!/bin/bash
+set -e
+
+echo "=== Installation de SILLON (sillon-backup-server-survey) ==="
+
+CONF_ENV="/etc/sillon-backup/survey.env"
+
+if [ ! -f "$CONF_ENV" ]; then
+    echo "ERREUR : $CONF_ENV introuvable (devrait etre livre par le paquet)." >&2
+    exit 1
+fi
+# shellcheck disable=SC1090
+source "$CONF_ENV"
+
+if [ -n "$SMTP_RELAY" ]; then
+    echo "Configuration du relais SMTP Postfix vers : $SMTP_RELAY"
+    postconf -e "relayhost = $SMTP_RELAY"
+    systemctl restart postfix || true
+else
+    echo "Aucun relais SMTP specifie - Postfix utilisera la distribution directe."
+fi
+
+chmod 755 /opt/sillon-backup-survey/verifier_sauvegarde.py
+chown root:root /etc/cron.d/sillon_backup_survey
+chmod 644 /etc/cron.d/sillon_backup_survey
+
+echo "=== Installation de SILLON (sillon-backup-server-survey) terminee ==="
+exit 0

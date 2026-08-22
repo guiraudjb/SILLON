@@ -1,0 +1,12 @@
+Package: sillon-backup-server
+Version: 0.1.0
+Architecture: all
+Maintainer: Administrateur SILLON <admin@sillon.local>
+Depends: nfs-kernel-server, pgbackrest
+Section: admin
+Priority: optional
+Description: SILLON - Serveur de sauvegarde NFS distant.
+ Configure un point de montage NFS restreint par adresse IP, destine a
+ recevoir les sauvegardes pgBackRest (completes mensuelles et
+ incrementales quotidiennes) du serveur SILLON. Voir cahier des
+ charges §12.2.

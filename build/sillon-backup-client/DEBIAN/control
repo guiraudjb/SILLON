@@ -1,0 +1,14 @@
+Package: sillon-backup-client
+Version: 0.1.0
+Architecture: all
+Maintainer: Administrateur SILLON <admin@sillon.local>
+Depends: sillon-server, pgbackrest, nfs-common
+Section: admin
+Priority: optional
+Description: SILLON - Client de sauvegarde NFS (pgBackRest).
+ Configure la sauvegarde physique du cluster PostgreSQL de SILLON
+ (catalogue et bases de travail des agents) : montage automatique du
+ partage NFS distant, sauvegarde complete mensuelle et incrementale
+ quotidienne via pgBackRest, retention de 3 mois. Fournit
+ sillon_backup.sh (execution planifiee) et sillon_restore.sh
+ (restauration a une date choisie). Voir cahier des charges §12.2.

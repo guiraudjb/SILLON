@@ -1,0 +1,13 @@
+# Sauvegarde quotidienne SILLON (pgBackRest) : complete le 1er du mois,
+# incrementale les autres jours - voir sillon_backup.sh pour le detail des
+# types et la politique de retention. Execute par l'utilisateur systeme
+# "postgres" (seul a avoir acces en lecture a PGDATA et a la connexion
+# socket locale necessaires a pgBackRest).
+#
+# Sortie envoyee au journal via "logger" (consultable par
+# "journalctl -t sillon-backup") : pas de fichier de log dedie, qui
+# redeviendrait lui-meme un element a purger, et pas d'envoi de mail cron
+# (aucun agent de transport de courrier n'est requis sur le serveur
+# SILLON lui-meme - la surveillance/alerte est du ressort de
+# sillon-backup-server-survey, installe sur le serveur de sauvegarde).
+0 2 * * * postgres /opt/sillon-backup/sillon_backup.sh 2>&1 | /usr/bin/logger -t sillon-backup

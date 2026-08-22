@@ -1,0 +1,20 @@
+#!/bin/bash
+set -e
+
+SHARE_DIR="/var/nfs/backupSILLON"
+
+if [ "$1" = "remove" ] || [ "$1" = "purge" ]; then
+    echo "Nettoyage de la configuration NFS de sauvegarde SILLON..."
+
+    sed -i "\|^${SHARE_DIR} |d" /etc/exports || true
+    exportfs -ra || true
+    systemctl restart nfs-kernel-server || true
+
+    echo "Configuration NFS retiree. Les fichiers de sauvegarde ont ete conserves."
+fi
+
+if [ "$1" = "purge" ]; then
+    rm -f /etc/pgbackrest.conf
+fi
+
+exit 0
