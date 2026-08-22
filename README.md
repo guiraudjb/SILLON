@@ -43,8 +43,14 @@ Philosophie identique aux autres applicatifs de la direction : pas de framework 
 | `sillon-orchestrateur` | Création/suppression des bases, requêtes SQL libres, import CSV, partage |
 | `sillon-worker` | Consommation de la file d'attente, lancement des conteneurs d'exécution |
 | `sillon-image-execution` | Image figée (Python/R) utilisée pour l'exécution des scripts |
+| `sillon-tutoriel` *(optionnel)* | Jeu de données réel et tutoriel PDF — VM de démo/formation uniquement |
+| `sillon-demo-sirene` *(optionnel)* | Jeu de données Sirene massif pour démonstration à l'échelle |
+| `sillon-purge` *(optionnel, recommandé en production)* | Purge automatique des résultats de jobs, dépôts orphelins et journal d'audit |
+| `sillon-backup-client` *(optionnel, recommandé en production)* | Sauvegarde physique planifiée du cluster (pgBackRest) vers un partage NFS distant, outil de restauration |
+| `sillon-backup-server` *(optionnel, sur une machine distincte)* | Serveur de sauvegarde NFS restreint par IP |
+| `sillon-backup-server-survey` *(optionnel)* | Sonde de surveillance quotidienne des sauvegardes, alerte par e-mail |
 
-Ordre d'installation recommandé : `sillon-server` → `sillon-orchestrateur` → `sillon-worker` → `sillon-image-execution`.
+Ordre d'installation recommandé : `sillon-server` → `sillon-orchestrateur` → `sillon-worker` → `sillon-image-execution`. Voir `GUIDE_INSTALLATION_ADMINISTRATEUR.md` pour le détail des paquets optionnels.
 
 ---
 
@@ -57,7 +63,7 @@ Ordre d'installation recommandé : `sillon-server` → `sillon-orchestrateur` �
 - Anti-bruteforce Nginx + Fail2Ban sur l'authentification.
 - Journal d'audit immuable au niveau du moteur de base de données.
 
-Aucun mécanisme de sauvegarde n'est porté par l'application : la protection contre la perte de données relève de l'infrastructure d'hébergement de la direction.
+Sauvegarde physique planifiée du cluster PostgreSQL (pgBackRest) et restauration à une date choisie, portées par les paquets optionnels `sillon-backup-client`/`sillon-backup-server`/`sillon-backup-server-survey` (complète mensuelle, incrémentale quotidienne, rétention 3 mois).
 
 ---
 

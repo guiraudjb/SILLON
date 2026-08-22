@@ -2,9 +2,9 @@
   "bomFormat": "CycloneDX",
   "specVersion": "1.6",
   "serialNumber": "urn:uuid:8b56adab-02f4-4542-a041-19de6bc2d07f",
-  "version": 1,
+  "version": 2,
   "metadata": {
-    "timestamp": "2026-08-19T21:07:05Z",
+    "timestamp": "2026-08-22T07:00:00Z",
     "lifecycles": [
       {
         "phase": "build"
@@ -29,7 +29,7 @@
     "properties": [
       {
         "name": "sillon:methodology",
-        "value": "Depends declares releves depuis DEBIAN/control de chaque .deb. Fermeture transitive et versions resolues le 2026-08-19 directement depuis la VM de test SILLON reelle (192.168.122.114, Debian 13/Trixie) : dpkg-query -W pour l'univers hote (195 paquets), extraction du fichier var/lib/dpkg/status de la couche image du Dockerfile (podman save) pour l'univers image d'execution (378 paquets, sillon-image-execution:latest chargee sur cette VM)."
+        "value": "Depends declares releves depuis DEBIAN/control de chaque .deb. Fermeture transitive et versions resolues le 2026-08-19 directement depuis la VM de test SILLON reelle (192.168.122.114, Debian 13/Trixie) : dpkg-query -W pour l'univers hote (195 paquets), extraction du fichier var/lib/dpkg/status de la couche image du Dockerfile (podman save) pour l'univers image d'execution (378 paquets, sillon-image-execution:latest chargee sur cette VM). Mise a jour du 22 aout 2026 : ajout de sillon-purge (aucune nouvelle dependance Debian) et des paquets sillon-backup-client/server/server-survey (pgBackRest) - univers hote complete via dpkg-query -W reel sur la VM de test apres installation reelle ; univers 'machine de sauvegarde' (sillon-backup-server/server-survey, machine distincte non disponible pour verification directe) resolu par fermeture theorique de dependances Debian (apt-cache depends --recurse), non confirme sur une machine physique separee - limite documentee au §2/§7. Versions de sillon-server (0.1.29->0.1.34) et sillon-tutoriel (0.1.0->0.2.0) corrigees a cette occasion (constatees perimees, sans reprise complete des 195+378 paquets deja resolus le 19 aout, hors perimetre de cette mise a jour)."
       },
       {
         "name": "sillon:target-os",
@@ -44,11 +44,11 @@
   "components": [
     {
       "type": "application",
-      "bom-ref": "sillon:sillon-server@0.1.29",
+      "bom-ref": "sillon:sillon-server@0.1.34",
       "name": "sillon-server",
-      "version": "0.1.29",
+      "version": "0.1.34",
       "description": "Socle applicatif SILLON : PostgreSQL, Nginx, API de requetage, catalogue applicatif, anti-bruteforce.",
-      "purl": "pkg:deb/sillon/sillon-server@0.1.29?arch=amd64",
+      "purl": "pkg:deb/sillon/sillon-server@0.1.34?arch=amd64",
       "properties": [
         {
           "name": "sillon:architecture",
@@ -58,7 +58,7 @@
       "hashes": [
         {
           "alg": "SHA-256",
-          "content": "c3e22be05165d5b4eb77372b82d7df07b830da4643bb21637e10fe16fe1aed6a"
+          "content": "155c6bf8877f9726d1188df7c07e745dc387335ff99b25b50150d1c193a03cbf"
         }
       ]
     },
@@ -124,11 +124,11 @@
     },
     {
       "type": "application",
-      "bom-ref": "sillon:sillon-tutoriel@0.1.0",
+      "bom-ref": "sillon:sillon-tutoriel@0.2.0",
       "name": "sillon-tutoriel",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "description": "Tutoriel et jeu de donnees de demonstration (compte demo, donnees communes/regions France). Jamais en production.",
-      "purl": "pkg:deb/sillon/sillon-tutoriel@0.1.0?arch=all",
+      "purl": "pkg:deb/sillon/sillon-tutoriel@0.2.0?arch=all",
       "properties": [
         {
           "name": "sillon:architecture",
@@ -138,7 +138,7 @@
       "hashes": [
         {
           "alg": "SHA-256",
-          "content": "7ab74cb735c3167eeb659c3f9b835458504b9800e246fa05a3eab79a64fac203"
+          "content": "a55cadb49fae2fbb89f85899acb2fe8c1f73ea6ccbaff309928bae4ff8718a0b"
         }
       ]
     },
@@ -15495,22 +15495,2875 @@
           "url": "http://zlib.net/"
         }
       ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:host:nfs-common@1:2.8.3-1:amd64",
+      "name": "nfs-common",
+      "version": "1:2.8.3-1",
+      "purl": "pkg:deb/debian/nfs-common@1:2.8.3-1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "host"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "nfs-utils"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:host:pgbackrest@2.55.1-1:amd64",
+      "name": "pgbackrest",
+      "version": "2.55.1-1",
+      "purl": "pkg:deb/debian/pgbackrest@2.55.1-1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "host"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:host:keyutils@1.6.3-6:amd64",
+      "name": "keyutils",
+      "version": "1.6.3-6",
+      "purl": "pkg:deb/debian/keyutils@1.6.3-6?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "host"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:host:libevent-core-2.1-7t64@2.1.12-stable-10+b1:amd64",
+      "name": "libevent-core-2.1-7t64",
+      "version": "2.1.12-stable-10+b1",
+      "purl": "pkg:deb/debian/libevent-core-2.1-7t64@2.1.12-stable-10+b1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "host"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "libevent"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:host:libnfsidmap1@1:2.8.3-1:amd64",
+      "name": "libnfsidmap1",
+      "version": "1:2.8.3-1",
+      "purl": "pkg:deb/debian/libnfsidmap1@1:2.8.3-1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "host"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "nfs-utils"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:host:rpcbind@1.2.7-1:amd64",
+      "name": "rpcbind",
+      "version": "1.2.7-1",
+      "purl": "pkg:deb/debian/rpcbind@1.2.7-1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "host"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:adduser@3.152:all",
+      "name": "adduser",
+      "version": "3.152",
+      "purl": "pkg:deb/debian/adduser@3.152?arch=all&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:base-passwd@3.6.7:amd64",
+      "name": "base-passwd",
+      "version": "3.6.7",
+      "purl": "pkg:deb/debian/base-passwd@3.6.7?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:debconf@1.5.91:all",
+      "name": "debconf",
+      "version": "1.5.91",
+      "purl": "pkg:deb/debian/debconf@1.5.91?arch=all&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:dmsetup@2:1.02.205-2:amd64",
+      "name": "dmsetup",
+      "version": "2:1.02.205-2",
+      "purl": "pkg:deb/debian/dmsetup@2:1.02.205-2?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "lvm2 (2.03.31-2)"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:gcc-14-base@14.2.0-19:amd64",
+      "name": "gcc-14-base",
+      "version": "14.2.0-19",
+      "purl": "pkg:deb/debian/gcc-14-base@14.2.0-19?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "gcc-14"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:guile-3.0-libs@3.0.10+really3.0.10-4:amd64",
+      "name": "guile-3.0-libs",
+      "version": "3.0.10+really3.0.10-4",
+      "purl": "pkg:deb/debian/guile-3.0-libs@3.0.10+really3.0.10-4?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "guile-3.0"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:init-system-helpers@1.69~deb13u1:all",
+      "name": "init-system-helpers",
+      "version": "1.69~deb13u1",
+      "purl": "pkg:deb/debian/init-system-helpers@1.69~deb13u1?arch=all&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:keyutils@1.6.3-6:amd64",
+      "name": "keyutils",
+      "version": "1.6.3-6",
+      "purl": "pkg:deb/debian/keyutils@1.6.3-6?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libacl1@2.3.2-2+b1:amd64",
+      "name": "libacl1",
+      "version": "2.3.2-2+b1",
+      "purl": "pkg:deb/debian/libacl1@2.3.2-2+b1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "acl (2.3.2-2)"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libattr1@1:2.5.2-3:amd64",
+      "name": "libattr1",
+      "version": "1:2.5.2-3",
+      "purl": "pkg:deb/debian/libattr1@1:2.5.2-3?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "attr"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libaudit1@1:4.0.2-2+b2:amd64",
+      "name": "libaudit1",
+      "version": "1:4.0.2-2+b2",
+      "purl": "pkg:deb/debian/libaudit1@1:4.0.2-2+b2?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "audit (1:4.0.2-2)"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libaudit-common@1:4.0.2-2:all",
+      "name": "libaudit-common",
+      "version": "1:4.0.2-2",
+      "purl": "pkg:deb/debian/libaudit-common@1:4.0.2-2?arch=all&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "audit"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libblkid1@2.41.5-0+deb13u1:amd64",
+      "name": "libblkid1",
+      "version": "2.41.5-0+deb13u1",
+      "purl": "pkg:deb/debian/libblkid1@2.41.5-0+deb13u1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "util-linux"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libbsd0@0.12.2-2:amd64",
+      "name": "libbsd0",
+      "version": "0.12.2-2",
+      "purl": "pkg:deb/debian/libbsd0@0.12.2-2?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "libbsd"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libbz2-1.0@1.0.8-6:amd64",
+      "name": "libbz2-1.0",
+      "version": "1.0.8-6",
+      "purl": "pkg:deb/debian/libbz2-1.0@1.0.8-6?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "bzip2"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libc6@2.41-12+deb13u3:amd64",
+      "name": "libc6",
+      "version": "2.41-12+deb13u3",
+      "purl": "pkg:deb/debian/libc6@2.41-12+deb13u3?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "glibc"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libcap2@1:2.75-10+deb13u1+b1:amd64",
+      "name": "libcap2",
+      "version": "1:2.75-10+deb13u1+b1",
+      "purl": "pkg:deb/debian/libcap2@1:2.75-10+deb13u1+b1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "libcap2 (1:2.75-10+deb13u1)"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libcap-ng0@0.8.5-4+b1:amd64",
+      "name": "libcap-ng0",
+      "version": "0.8.5-4+b1",
+      "purl": "pkg:deb/debian/libcap-ng0@0.8.5-4+b1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "libcap-ng (0.8.5-4)"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libcom-err2@1.47.2-3+b11:amd64",
+      "name": "libcom-err2",
+      "version": "1.47.2-3+b11",
+      "purl": "pkg:deb/debian/libcom-err2@1.47.2-3+b11?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "e2fsprogs (1.47.2-3)"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libcrypt1@1:4.4.38-1:amd64",
+      "name": "libcrypt1",
+      "version": "1:4.4.38-1",
+      "purl": "pkg:deb/debian/libcrypt1@1:4.4.38-1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "libxcrypt"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libdb5.3t64@5.3.28+dfsg2-9:amd64",
+      "name": "libdb5.3t64",
+      "version": "5.3.28+dfsg2-9",
+      "purl": "pkg:deb/debian/libdb5.3t64@5.3.28+dfsg2-9?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "db5.3"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libdebconfclient0@0.280:amd64",
+      "name": "libdebconfclient0",
+      "version": "0.280",
+      "purl": "pkg:deb/debian/libdebconfclient0@0.280?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "cdebconf"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libdevmapper1.02.1@2:1.02.205-2:amd64",
+      "name": "libdevmapper1.02.1",
+      "version": "2:1.02.205-2",
+      "purl": "pkg:deb/debian/libdevmapper1.02.1@2:1.02.205-2?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "lvm2 (2.03.31-2)"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libevent-core-2.1-7t64@2.1.12-stable-10+b1:amd64",
+      "name": "libevent-core-2.1-7t64",
+      "version": "2.1.12-stable-10+b1",
+      "purl": "pkg:deb/debian/libevent-core-2.1-7t64@2.1.12-stable-10+b1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "libevent (2.1.12-stable-10)"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libexpat1@2.8.2-1~deb13u1:amd64",
+      "name": "libexpat1",
+      "version": "2.8.2-1~deb13u1",
+      "purl": "pkg:deb/debian/libexpat1@2.8.2-1~deb13u1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "expat"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libffi8@3.4.8-2:amd64",
+      "name": "libffi8",
+      "version": "3.4.8-2",
+      "purl": "pkg:deb/debian/libffi8@3.4.8-2?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "libffi"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libfribidi0@1.0.16-1:amd64",
+      "name": "libfribidi0",
+      "version": "1.0.16-1",
+      "purl": "pkg:deb/debian/libfribidi0@1.0.16-1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "fribidi"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libgc1@1:8.2.8-1:amd64",
+      "name": "libgc1",
+      "version": "1:8.2.8-1",
+      "purl": "pkg:deb/debian/libgc1@1:8.2.8-1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "libgc"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libgcc-s1@14.2.0-19:amd64",
+      "name": "libgcc-s1",
+      "version": "14.2.0-19",
+      "purl": "pkg:deb/debian/libgcc-s1@14.2.0-19?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "gcc-14"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libgdbm6t64@1.24-2:amd64",
+      "name": "libgdbm6t64",
+      "version": "1.24-2",
+      "purl": "pkg:deb/debian/libgdbm6t64@1.24-2?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "gdbm"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libgdbm-compat4t64@1.24-2:amd64",
+      "name": "libgdbm-compat4t64",
+      "version": "1.24-2",
+      "purl": "pkg:deb/debian/libgdbm-compat4t64@1.24-2?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "gdbm"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libgmp10@2:6.3.0+dfsg-3:amd64",
+      "name": "libgmp10",
+      "version": "2:6.3.0+dfsg-3",
+      "purl": "pkg:deb/debian/libgmp10@2:6.3.0+dfsg-3?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "gmp"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libgnutls30t64@3.8.9-3+deb13u4:amd64",
+      "name": "libgnutls30t64",
+      "version": "3.8.9-3+deb13u4",
+      "purl": "pkg:deb/debian/libgnutls30t64@3.8.9-3+deb13u4?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "gnutls28"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libgsasl18@2.2.2-1.1+deb13u2:amd64",
+      "name": "libgsasl18",
+      "version": "2.2.2-1.1+deb13u2",
+      "purl": "pkg:deb/debian/libgsasl18@2.2.2-1.1+deb13u2?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "gsasl"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libgssapi-krb5-2@1.21.3-5+deb13u1:amd64",
+      "name": "libgssapi-krb5-2",
+      "version": "1.21.3-5+deb13u1",
+      "purl": "pkg:deb/debian/libgssapi-krb5-2@1.21.3-5+deb13u1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "krb5"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libgssglue1@0.9-1.1:amd64",
+      "name": "libgssglue1",
+      "version": "0.9-1.1",
+      "purl": "pkg:deb/debian/libgssglue1@0.9-1.1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "libgssglue"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libhogweed6t64@3.10.1-1:amd64",
+      "name": "libhogweed6t64",
+      "version": "3.10.1-1",
+      "purl": "pkg:deb/debian/libhogweed6t64@3.10.1-1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "nettle"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libicu76@76.1-4:amd64",
+      "name": "libicu76",
+      "version": "76.1-4",
+      "purl": "pkg:deb/debian/libicu76@76.1-4?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "icu"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libidn12@1.43-1:amd64",
+      "name": "libidn12",
+      "version": "1.43-1",
+      "purl": "pkg:deb/debian/libidn12@1.43-1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "libidn"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libidn2-0@2.3.8-2:amd64",
+      "name": "libidn2-0",
+      "version": "2.3.8-2",
+      "purl": "pkg:deb/debian/libidn2-0@2.3.8-2?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "libidn2"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libio-pty-perl@1:1.20-1+b3:amd64",
+      "name": "libio-pty-perl",
+      "version": "1:1.20-1+b3",
+      "purl": "pkg:deb/debian/libio-pty-perl@1:1.20-1+b3?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "libio-pty-perl (1:1.20-1)"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libipc-run-perl@20231003.0-2:all",
+      "name": "libipc-run-perl",
+      "version": "20231003.0-2",
+      "purl": "pkg:deb/debian/libipc-run-perl@20231003.0-2?arch=all&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libjson-perl@4.10000-1:all",
+      "name": "libjson-perl",
+      "version": "4.10000-1",
+      "purl": "pkg:deb/debian/libjson-perl@4.10000-1?arch=all&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libk5crypto3@1.21.3-5+deb13u1:amd64",
+      "name": "libk5crypto3",
+      "version": "1.21.3-5+deb13u1",
+      "purl": "pkg:deb/debian/libk5crypto3@1.21.3-5+deb13u1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "krb5"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libkeyutils1@1.6.3-6:amd64",
+      "name": "libkeyutils1",
+      "version": "1.6.3-6",
+      "purl": "pkg:deb/debian/libkeyutils1@1.6.3-6?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "keyutils"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libkrb5-3@1.21.3-5+deb13u1:amd64",
+      "name": "libkrb5-3",
+      "version": "1.21.3-5+deb13u1",
+      "purl": "pkg:deb/debian/libkrb5-3@1.21.3-5+deb13u1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "krb5"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libkrb5support0@1.21.3-5+deb13u1:amd64",
+      "name": "libkrb5support0",
+      "version": "1.21.3-5+deb13u1",
+      "purl": "pkg:deb/debian/libkrb5support0@1.21.3-5+deb13u1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "krb5"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libldap2@2.6.10+dfsg-1:amd64",
+      "name": "libldap2",
+      "version": "2.6.10+dfsg-1",
+      "purl": "pkg:deb/debian/libldap2@2.6.10+dfsg-1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "openldap"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libltdl7@2.5.4-4:amd64",
+      "name": "libltdl7",
+      "version": "2.5.4-4",
+      "purl": "pkg:deb/debian/libltdl7@2.5.4-4?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "libtool"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:liblz4-1@1.10.0-4:amd64",
+      "name": "liblz4-1",
+      "version": "1.10.0-4",
+      "purl": "pkg:deb/debian/liblz4-1@1.10.0-4?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "lz4"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:liblzma5@5.8.1-1+deb13u1:amd64",
+      "name": "liblzma5",
+      "version": "5.8.1-1+deb13u1",
+      "purl": "pkg:deb/debian/liblzma5@5.8.1-1+deb13u1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "xz-utils"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libmailutils9t64@1:3.19-1:amd64",
+      "name": "libmailutils9t64",
+      "version": "1:3.19-1",
+      "purl": "pkg:deb/debian/libmailutils9t64@1:3.19-1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "mailutils"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libmariadb3@1:11.8.6-0+deb13u1:amd64",
+      "name": "libmariadb3",
+      "version": "1:11.8.6-0+deb13u1",
+      "purl": "pkg:deb/debian/libmariadb3@1:11.8.6-0+deb13u1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "mariadb"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libmd0@1.1.0-2+b1:amd64",
+      "name": "libmd0",
+      "version": "1.1.0-2+b1",
+      "purl": "pkg:deb/debian/libmd0@1.1.0-2+b1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "libmd (1.1.0-2)"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libmount1@2.41.5-0+deb13u1:amd64",
+      "name": "libmount1",
+      "version": "2.41.5-0+deb13u1",
+      "purl": "pkg:deb/debian/libmount1@2.41.5-0+deb13u1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "util-linux"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libncurses6@6.5+20250216-2:amd64",
+      "name": "libncurses6",
+      "version": "6.5+20250216-2",
+      "purl": "pkg:deb/debian/libncurses6@6.5+20250216-2?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "ncurses"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libncursesw6@6.5+20250216-2:amd64",
+      "name": "libncursesw6",
+      "version": "6.5+20250216-2",
+      "purl": "pkg:deb/debian/libncursesw6@6.5+20250216-2?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "ncurses"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libnettle8t64@3.10.1-1:amd64",
+      "name": "libnettle8t64",
+      "version": "3.10.1-1",
+      "purl": "pkg:deb/debian/libnettle8t64@3.10.1-1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "nettle"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libnewt0.52@0.52.25-1:amd64",
+      "name": "libnewt0.52",
+      "version": "0.52.25-1",
+      "purl": "pkg:deb/debian/libnewt0.52@0.52.25-1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "newt"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libnfsidmap1@1:2.8.3-1:amd64",
+      "name": "libnfsidmap1",
+      "version": "1:2.8.3-1",
+      "purl": "pkg:deb/debian/libnfsidmap1@1:2.8.3-1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "nfs-utils"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libnl-3-200@3.7.0-2:amd64",
+      "name": "libnl-3-200",
+      "version": "3.7.0-2",
+      "purl": "pkg:deb/debian/libnl-3-200@3.7.0-2?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "libnl3"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libnl-genl-3-200@3.7.0-2:amd64",
+      "name": "libnl-genl-3-200",
+      "version": "3.7.0-2",
+      "purl": "pkg:deb/debian/libnl-genl-3-200@3.7.0-2?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "libnl3"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libnsl2@1.3.0-3+b3:amd64",
+      "name": "libnsl2",
+      "version": "1.3.0-3+b3",
+      "purl": "pkg:deb/debian/libnsl2@1.3.0-3+b3?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "libnsl (1.3.0-3)"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libntlm0@1.8-4:amd64",
+      "name": "libntlm0",
+      "version": "1.8-4",
+      "purl": "pkg:deb/debian/libntlm0@1.8-4?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "libntlm"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libp11-kit0@0.25.5-3:amd64",
+      "name": "libp11-kit0",
+      "version": "0.25.5-3",
+      "purl": "pkg:deb/debian/libp11-kit0@0.25.5-3?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "p11-kit"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libpam0g@1.7.0-5:amd64",
+      "name": "libpam0g",
+      "version": "1.7.0-5",
+      "purl": "pkg:deb/debian/libpam0g@1.7.0-5?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "pam"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libpam-modules@1.7.0-5:amd64",
+      "name": "libpam-modules",
+      "version": "1.7.0-5",
+      "purl": "pkg:deb/debian/libpam-modules@1.7.0-5?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "pam"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libpam-modules-bin@1.7.0-5:amd64",
+      "name": "libpam-modules-bin",
+      "version": "1.7.0-5",
+      "purl": "pkg:deb/debian/libpam-modules-bin@1.7.0-5?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "pam"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libpcre2-8-0@10.46-1~deb13u1:amd64",
+      "name": "libpcre2-8-0",
+      "version": "10.46-1~deb13u1",
+      "purl": "pkg:deb/debian/libpcre2-8-0@10.46-1~deb13u1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "pcre2"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libperl5.40@5.40.1-6:amd64",
+      "name": "libperl5.40",
+      "version": "5.40.1-6",
+      "purl": "pkg:deb/debian/libperl5.40@5.40.1-6?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "perl"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libpq5@17.11-0+deb13u1:amd64",
+      "name": "libpq5",
+      "version": "17.11-0+deb13u1",
+      "purl": "pkg:deb/debian/libpq5@17.11-0+deb13u1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "postgresql-17"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libproc2-0@2:4.0.4-9:amd64",
+      "name": "libproc2-0",
+      "version": "2:4.0.4-9",
+      "purl": "pkg:deb/debian/libproc2-0@2:4.0.4-9?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "procps"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libpython3.13@3.13.5-2+deb13u4:amd64",
+      "name": "libpython3.13",
+      "version": "3.13.5-2+deb13u4",
+      "purl": "pkg:deb/debian/libpython3.13@3.13.5-2+deb13u4?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "python3.13"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libpython3.13-minimal@3.13.5-2+deb13u4:amd64",
+      "name": "libpython3.13-minimal",
+      "version": "3.13.5-2+deb13u4",
+      "purl": "pkg:deb/debian/libpython3.13-minimal@3.13.5-2+deb13u4?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "python3.13"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libpython3.13-stdlib@3.13.5-2+deb13u4:amd64",
+      "name": "libpython3.13-stdlib",
+      "version": "3.13.5-2+deb13u4",
+      "purl": "pkg:deb/debian/libpython3.13-stdlib@3.13.5-2+deb13u4?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "python3.13"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libreadline8t64@8.2-6:amd64",
+      "name": "libreadline8t64",
+      "version": "8.2-6",
+      "purl": "pkg:deb/debian/libreadline8t64@8.2-6?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "readline"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libsasl2-2@2.1.28+dfsg1-9:amd64",
+      "name": "libsasl2-2",
+      "version": "2.1.28+dfsg1-9",
+      "purl": "pkg:deb/debian/libsasl2-2@2.1.28+dfsg1-9?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "cyrus-sasl2"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libsasl2-modules-db@2.1.28+dfsg1-9:amd64",
+      "name": "libsasl2-modules-db",
+      "version": "2.1.28+dfsg1-9",
+      "purl": "pkg:deb/debian/libsasl2-modules-db@2.1.28+dfsg1-9?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "cyrus-sasl2"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libselinux1@3.8.1-1:amd64",
+      "name": "libselinux1",
+      "version": "3.8.1-1",
+      "purl": "pkg:deb/debian/libselinux1@3.8.1-1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "libselinux"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libsemanage2@3.8.1-1:amd64",
+      "name": "libsemanage2",
+      "version": "3.8.1-1",
+      "purl": "pkg:deb/debian/libsemanage2@3.8.1-1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "libsemanage"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libsemanage-common@3.8.1-1:all",
+      "name": "libsemanage-common",
+      "version": "3.8.1-1",
+      "purl": "pkg:deb/debian/libsemanage-common@3.8.1-1?arch=all&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "libsemanage"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libsepol2@3.8.1-1:amd64",
+      "name": "libsepol2",
+      "version": "3.8.1-1",
+      "purl": "pkg:deb/debian/libsepol2@3.8.1-1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "libsepol"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libslang2@2.3.3-5+b2:amd64",
+      "name": "libslang2",
+      "version": "2.3.3-5+b2",
+      "purl": "pkg:deb/debian/libslang2@2.3.3-5+b2?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "slang2 (2.3.3-5)"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libsqlite3-0@3.46.1-7+deb13u1:amd64",
+      "name": "libsqlite3-0",
+      "version": "3.46.1-7+deb13u1",
+      "purl": "pkg:deb/debian/libsqlite3-0@3.46.1-7+deb13u1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "sqlite3"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libssh2-1t64@1.11.1-1+deb13u1:amd64",
+      "name": "libssh2-1t64",
+      "version": "1.11.1-1+deb13u1",
+      "purl": "pkg:deb/debian/libssh2-1t64@1.11.1-1+deb13u1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "libssh2"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libssl3t64@3.5.6-1~deb13u2:amd64",
+      "name": "libssl3t64",
+      "version": "3.5.6-1~deb13u2",
+      "purl": "pkg:deb/debian/libssl3t64@3.5.6-1~deb13u2?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "openssl"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libstdc++6@14.2.0-19:amd64",
+      "name": "libstdc++6",
+      "version": "14.2.0-19",
+      "purl": "pkg:deb/debian/libstdc++6@14.2.0-19?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "gcc-14"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libsystemd0@257.13-1~deb13u1:amd64",
+      "name": "libsystemd0",
+      "version": "257.13-1~deb13u1",
+      "purl": "pkg:deb/debian/libsystemd0@257.13-1~deb13u1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "systemd"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libtasn1-6@4.20.0-2+deb13u1:amd64",
+      "name": "libtasn1-6",
+      "version": "4.20.0-2+deb13u1",
+      "purl": "pkg:deb/debian/libtasn1-6@4.20.0-2+deb13u1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libtext-charwidth-perl@0.04-11+b4:amd64",
+      "name": "libtext-charwidth-perl",
+      "version": "0.04-11+b4",
+      "purl": "pkg:deb/debian/libtext-charwidth-perl@0.04-11+b4?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "libtext-charwidth-perl (0.04-11)"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libtext-wrapi18n-perl@0.06-10:all",
+      "name": "libtext-wrapi18n-perl",
+      "version": "0.06-10",
+      "purl": "pkg:deb/debian/libtext-wrapi18n-perl@0.06-10?arch=all&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libtinfo6@6.5+20250216-2:amd64",
+      "name": "libtinfo6",
+      "version": "6.5+20250216-2",
+      "purl": "pkg:deb/debian/libtinfo6@6.5+20250216-2?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "ncurses"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libtirpc3t64@1.3.6+ds-1:amd64",
+      "name": "libtirpc3t64",
+      "version": "1.3.6+ds-1",
+      "purl": "pkg:deb/debian/libtirpc3t64@1.3.6+ds-1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "libtirpc"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libtirpc-common@1.3.6+ds-1:all",
+      "name": "libtirpc-common",
+      "version": "1.3.6+ds-1",
+      "purl": "pkg:deb/debian/libtirpc-common@1.3.6+ds-1?arch=all&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "libtirpc"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libtlsrpt0@0.5.0rc1-2:amd64",
+      "name": "libtlsrpt0",
+      "version": "0.5.0rc1-2",
+      "purl": "pkg:deb/debian/libtlsrpt0@0.5.0rc1-2?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "libtlsrpt"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libudev1@257.13-1~deb13u1:amd64",
+      "name": "libudev1",
+      "version": "257.13-1~deb13u1",
+      "purl": "pkg:deb/debian/libudev1@257.13-1~deb13u1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "systemd"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libunistring5@1.3-2:amd64",
+      "name": "libunistring5",
+      "version": "1.3-2",
+      "purl": "pkg:deb/debian/libunistring5@1.3-2?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "libunistring"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libuuid1@2.41.5-0+deb13u1:amd64",
+      "name": "libuuid1",
+      "version": "2.41.5-0+deb13u1",
+      "purl": "pkg:deb/debian/libuuid1@2.41.5-0+deb13u1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "util-linux"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libwrap0@7.6.q-36:amd64",
+      "name": "libwrap0",
+      "version": "7.6.q-36",
+      "purl": "pkg:deb/debian/libwrap0@7.6.q-36?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "tcp-wrappers"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libxml2@2.12.7+dfsg+really2.9.14-2.1+deb13u3:amd64",
+      "name": "libxml2",
+      "version": "2.12.7+dfsg+really2.9.14-2.1+deb13u3",
+      "purl": "pkg:deb/debian/libxml2@2.12.7+dfsg+really2.9.14-2.1+deb13u3?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libxxhash0@0.8.3-2:amd64",
+      "name": "libxxhash0",
+      "version": "0.8.3-2",
+      "purl": "pkg:deb/debian/libxxhash0@0.8.3-2?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "xxhash"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:libzstd1@1.5.7+dfsg-1:amd64",
+      "name": "libzstd1",
+      "version": "1.5.7+dfsg-1",
+      "purl": "pkg:deb/debian/libzstd1@1.5.7+dfsg-1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "libzstd"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:login.defs@1:4.17.4-2:all",
+      "name": "login.defs",
+      "version": "1:4.17.4-2",
+      "purl": "pkg:deb/debian/login.defs@1:4.17.4-2?arch=all&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "shadow"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:mailutils@1:3.19-1:amd64",
+      "name": "mailutils",
+      "version": "1:3.19-1",
+      "purl": "pkg:deb/debian/mailutils@1:3.19-1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:mailutils-common@1:3.19-1:all",
+      "name": "mailutils-common",
+      "version": "1:3.19-1",
+      "purl": "pkg:deb/debian/mailutils-common@1:3.19-1?arch=all&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "mailutils"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:mariadb-common@1:11.8.6-0+deb13u1:all",
+      "name": "mariadb-common",
+      "version": "1:11.8.6-0+deb13u1",
+      "purl": "pkg:deb/debian/mariadb-common@1:11.8.6-0+deb13u1?arch=all&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "mariadb"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:media-types@13.0.0:all",
+      "name": "media-types",
+      "version": "13.0.0",
+      "purl": "pkg:deb/debian/media-types@13.0.0?arch=all&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:mysql-common@5.8+1.1.1:all",
+      "name": "mysql-common",
+      "version": "5.8+1.1.1",
+      "purl": "pkg:deb/debian/mysql-common@5.8+1.1.1?arch=all&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "mysql-defaults (1.1.1)"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:netbase@6.5:all",
+      "name": "netbase",
+      "version": "6.5",
+      "purl": "pkg:deb/debian/netbase@6.5?arch=all&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:nfs-common@1:2.8.3-1:amd64",
+      "name": "nfs-common",
+      "version": "1:2.8.3-1",
+      "purl": "pkg:deb/debian/nfs-common@1:2.8.3-1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "nfs-utils"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:nfs-kernel-server@1:2.8.3-1:amd64",
+      "name": "nfs-kernel-server",
+      "version": "1:2.8.3-1",
+      "purl": "pkg:deb/debian/nfs-kernel-server@1:2.8.3-1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "nfs-utils"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:openssl@3.5.6-1~deb13u2:amd64",
+      "name": "openssl",
+      "version": "3.5.6-1~deb13u2",
+      "purl": "pkg:deb/debian/openssl@3.5.6-1~deb13u2?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:openssl-provider-legacy@3.5.6-1~deb13u2:amd64",
+      "name": "openssl-provider-legacy",
+      "version": "3.5.6-1~deb13u2",
+      "purl": "pkg:deb/debian/openssl-provider-legacy@3.5.6-1~deb13u2?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "openssl"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:passwd@1:4.17.4-2:amd64",
+      "name": "passwd",
+      "version": "1:4.17.4-2",
+      "purl": "pkg:deb/debian/passwd@1:4.17.4-2?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "shadow"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:perl@5.40.1-6:amd64",
+      "name": "perl",
+      "version": "5.40.1-6",
+      "purl": "pkg:deb/debian/perl@5.40.1-6?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:perl-base@5.40.1-6:amd64",
+      "name": "perl-base",
+      "version": "5.40.1-6",
+      "purl": "pkg:deb/debian/perl-base@5.40.1-6?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "perl"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:perl-modules-5.40@5.40.1-6:all",
+      "name": "perl-modules-5.40",
+      "version": "5.40.1-6",
+      "purl": "pkg:deb/debian/perl-modules-5.40@5.40.1-6?arch=all&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "perl"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:pgbackrest@2.55.1-1:amd64",
+      "name": "pgbackrest",
+      "version": "2.55.1-1",
+      "purl": "pkg:deb/debian/pgbackrest@2.55.1-1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:postfix@3.10.13-0+deb13u1:amd64",
+      "name": "postfix",
+      "version": "3.10.13-0+deb13u1",
+      "purl": "pkg:deb/debian/postfix@3.10.13-0+deb13u1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:postgresql-client-common@278:all",
+      "name": "postgresql-client-common",
+      "version": "278",
+      "purl": "pkg:deb/debian/postgresql-client-common@278?arch=all&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "postgresql-common"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:postgresql-common@278:all",
+      "name": "postgresql-common",
+      "version": "278",
+      "purl": "pkg:deb/debian/postgresql-common@278?arch=all&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:postgresql-common-dev@278:all",
+      "name": "postgresql-common-dev",
+      "version": "278",
+      "purl": "pkg:deb/debian/postgresql-common-dev@278?arch=all&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "postgresql-common"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:procps@2:4.0.4-9:amd64",
+      "name": "procps",
+      "version": "2:4.0.4-9",
+      "purl": "pkg:deb/debian/procps@2:4.0.4-9?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:readline-common@8.2-6:all",
+      "name": "readline-common",
+      "version": "8.2-6",
+      "purl": "pkg:deb/debian/readline-common@8.2-6?arch=all&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "readline"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:rpcbind@1.2.7-1:amd64",
+      "name": "rpcbind",
+      "version": "1.2.7-1",
+      "purl": "pkg:deb/debian/rpcbind@1.2.7-1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:sensible-utils@0.0.25:all",
+      "name": "sensible-utils",
+      "version": "0.0.25",
+      "purl": "pkg:deb/debian/sensible-utils@0.0.25?arch=all&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:ssl-cert@1.1.3:all",
+      "name": "ssl-cert",
+      "version": "1.1.3",
+      "purl": "pkg:deb/debian/ssl-cert@1.1.3?arch=all&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:sysvinit-utils@3.14-4:amd64",
+      "name": "sysvinit-utils",
+      "version": "3.14-4",
+      "purl": "pkg:deb/debian/sysvinit-utils@3.14-4?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "sysvinit"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:tzdata@2026b-0+deb13u1:all",
+      "name": "tzdata",
+      "version": "2026b-0+deb13u1",
+      "purl": "pkg:deb/debian/tzdata@2026b-0+deb13u1?arch=all&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:ucf@3.0052:all",
+      "name": "ucf",
+      "version": "3.0052",
+      "purl": "pkg:deb/debian/ucf@3.0052?arch=all&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:backup-server:zlib1g@1:1.3.dfsg+really1.3.1-1+b1:amd64",
+      "name": "zlib1g",
+      "version": "1:1.3.dfsg+really1.3.1-1+b1",
+      "purl": "pkg:deb/debian/zlib1g@1:1.3.dfsg+really1.3.1-1+b1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "backup-server"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "zlib (1:1.3.dfsg+really1.3.1-1)"
+        }
+      ]
+    },
+    {
+      "type": "application",
+      "bom-ref": "sillon:sillon-purge@0.1.0",
+      "name": "sillon-purge",
+      "version": "0.1.0",
+      "description": "Purge automatique quotidienne des resultats de jobs, des depots temporaires orphelins et du journal d'audit.",
+      "purl": "pkg:deb/sillon/sillon-purge@0.1.0?arch=all",
+      "properties": [
+        {
+          "name": "sillon:architecture",
+          "value": "all"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "40179feafaf27f9e6b5fcfe6edde8ef84071074805def6d47e69ad8c9d1beee0"
+        }
+      ]
+    },
+    {
+      "type": "application",
+      "bom-ref": "sillon:sillon-backup-client@0.1.0",
+      "name": "sillon-backup-client",
+      "version": "0.1.0",
+      "description": "Sauvegarde physique planifiee du cluster PostgreSQL (pgBackRest) vers un partage NFS distant ; montage automatique du partage, outil de restauration a une date choisie.",
+      "purl": "pkg:deb/sillon/sillon-backup-client@0.1.0?arch=all",
+      "properties": [
+        {
+          "name": "sillon:architecture",
+          "value": "all"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "090c3bfdd410863eb1b9e1bdebca00d8e07e96ea5f83543cd0978f638805ce25"
+        }
+      ]
+    },
+    {
+      "type": "application",
+      "bom-ref": "sillon:sillon-backup-server@0.1.0",
+      "name": "sillon-backup-server",
+      "version": "0.1.0",
+      "description": "Serveur de sauvegarde NFS distant : partage restreint par adresse IP recevant les sauvegardes pgBackRest de sillon-backup-client.",
+      "purl": "pkg:deb/sillon/sillon-backup-server@0.1.0?arch=all",
+      "properties": [
+        {
+          "name": "sillon:architecture",
+          "value": "all"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "b61f2023b2421ed5f4e14fc9451455b9e11658dc99778c95f20d4bc93eab9448"
+        }
+      ]
+    },
+    {
+      "type": "application",
+      "bom-ref": "sillon:sillon-backup-server-survey@0.1.0",
+      "name": "sillon-backup-server-survey",
+      "version": "0.1.0",
+      "description": "Sonde de surveillance quotidienne des sauvegardes (pgbackrest info), alerte par e-mail via le proxy SMTP interne en cas de defaillance.",
+      "purl": "pkg:deb/sillon/sillon-backup-server-survey@0.1.0?arch=all",
+      "properties": [
+        {
+          "name": "sillon:architecture",
+          "value": "all"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "fec78b71655dacdda35c8359ca9494e03c188866ef9569e41a4976a8569d885b"
+        }
+      ]
     }
   ],
   "dependencies": [
     {
       "ref": "sillon-application",
       "dependsOn": [
-        "sillon:sillon-server@0.1.29",
+        "sillon:sillon-server@0.1.34",
         "sillon:sillon-orchestrateur@0.1.13",
         "sillon:sillon-worker@0.1.3",
         "sillon:sillon-image-execution@0.1.2",
-        "sillon:sillon-tutoriel@0.1.0",
-        "sillon:sillon-demo-sirene@0.1.4"
+        "sillon:sillon-tutoriel@0.2.0",
+        "sillon:sillon-demo-sirene@0.1.4",
+        "sillon:sillon-purge@0.1.0",
+        "sillon:sillon-backup-client@0.1.0",
+        "sillon:sillon-backup-server@0.1.0",
+        "sillon:sillon-backup-server-survey@0.1.0"
       ]
     },
     {
-      "ref": "sillon:sillon-server@0.1.29",
+      "ref": "sillon:sillon-server@0.1.34",
       "dependsOn": [
         "deb:host:postgresql-17@17.11-0+deb13u1:amd64",
         "deb:host:nginx@1.26.3-3+deb13u7:amd64",
@@ -15532,7 +18385,7 @@
     {
       "ref": "sillon:sillon-orchestrateur@0.1.13",
       "dependsOn": [
-        "sillon:sillon-server@0.1.29",
+        "sillon:sillon-server@0.1.34",
         "deb:host:python3-flask@3.1.1-1:all",
         "deb:host:python3-psycopg2@2.9.10-1+b1:amd64",
         "deb:host:python3-jwt@2.10.1-2+deb13u1:all",
@@ -15555,9 +18408,9 @@
       ]
     },
     {
-      "ref": "sillon:sillon-tutoriel@0.1.0",
+      "ref": "sillon:sillon-tutoriel@0.2.0",
       "dependsOn": [
-        "sillon:sillon-server@0.1.29",
+        "sillon:sillon-server@0.1.34",
         "sillon:sillon-orchestrateur@0.1.13",
         "sillon:sillon-worker@0.1.3",
         "sillon:sillon-image-execution@0.1.2",
@@ -15567,8 +18420,168 @@
     {
       "ref": "sillon:sillon-demo-sirene@0.1.4",
       "dependsOn": [
-        "sillon:sillon-tutoriel@0.1.0",
+        "sillon:sillon-tutoriel@0.2.0",
         "deb:host:python3@3.13.5-1:amd64"
+      ]
+    },
+    {
+      "ref": "sillon:sillon-purge@0.1.0",
+      "dependsOn": [
+        "sillon:sillon-server@0.1.34"
+      ]
+    },
+    {
+      "ref": "sillon:sillon-backup-client@0.1.0",
+      "dependsOn": [
+        "sillon:sillon-server@0.1.34",
+        "deb:host:nfs-common@1:2.8.3-1:amd64",
+        "deb:host:pgbackrest@2.55.1-1:amd64",
+        "deb:host:keyutils@1.6.3-6:amd64",
+        "deb:host:libevent-core-2.1-7t64@2.1.12-stable-10+b1:amd64",
+        "deb:host:libnfsidmap1@1:2.8.3-1:amd64",
+        "deb:host:rpcbind@1.2.7-1:amd64"
+      ]
+    },
+    {
+      "ref": "sillon:sillon-backup-server@0.1.0",
+      "dependsOn": [
+        "deb:backup-server:adduser@3.152:all",
+        "deb:backup-server:base-passwd@3.6.7:amd64",
+        "deb:backup-server:debconf@1.5.91:all",
+        "deb:backup-server:dmsetup@2:1.02.205-2:amd64",
+        "deb:backup-server:gcc-14-base@14.2.0-19:amd64",
+        "deb:backup-server:guile-3.0-libs@3.0.10+really3.0.10-4:amd64",
+        "deb:backup-server:init-system-helpers@1.69~deb13u1:all",
+        "deb:backup-server:keyutils@1.6.3-6:amd64",
+        "deb:backup-server:libacl1@2.3.2-2+b1:amd64",
+        "deb:backup-server:libattr1@1:2.5.2-3:amd64",
+        "deb:backup-server:libaudit1@1:4.0.2-2+b2:amd64",
+        "deb:backup-server:libaudit-common@1:4.0.2-2:all",
+        "deb:backup-server:libblkid1@2.41.5-0+deb13u1:amd64",
+        "deb:backup-server:libbsd0@0.12.2-2:amd64",
+        "deb:backup-server:libbz2-1.0@1.0.8-6:amd64",
+        "deb:backup-server:libc6@2.41-12+deb13u3:amd64",
+        "deb:backup-server:libcap2@1:2.75-10+deb13u1+b1:amd64",
+        "deb:backup-server:libcap-ng0@0.8.5-4+b1:amd64",
+        "deb:backup-server:libcom-err2@1.47.2-3+b11:amd64",
+        "deb:backup-server:libcrypt1@1:4.4.38-1:amd64",
+        "deb:backup-server:libdb5.3t64@5.3.28+dfsg2-9:amd64",
+        "deb:backup-server:libdebconfclient0@0.280:amd64",
+        "deb:backup-server:libdevmapper1.02.1@2:1.02.205-2:amd64",
+        "deb:backup-server:libevent-core-2.1-7t64@2.1.12-stable-10+b1:amd64",
+        "deb:backup-server:libexpat1@2.8.2-1~deb13u1:amd64",
+        "deb:backup-server:libffi8@3.4.8-2:amd64",
+        "deb:backup-server:libfribidi0@1.0.16-1:amd64",
+        "deb:backup-server:libgc1@1:8.2.8-1:amd64",
+        "deb:backup-server:libgcc-s1@14.2.0-19:amd64",
+        "deb:backup-server:libgdbm6t64@1.24-2:amd64",
+        "deb:backup-server:libgdbm-compat4t64@1.24-2:amd64",
+        "deb:backup-server:libgmp10@2:6.3.0+dfsg-3:amd64",
+        "deb:backup-server:libgnutls30t64@3.8.9-3+deb13u4:amd64",
+        "deb:backup-server:libgsasl18@2.2.2-1.1+deb13u2:amd64",
+        "deb:backup-server:libgssapi-krb5-2@1.21.3-5+deb13u1:amd64",
+        "deb:backup-server:libgssglue1@0.9-1.1:amd64",
+        "deb:backup-server:libhogweed6t64@3.10.1-1:amd64",
+        "deb:backup-server:libicu76@76.1-4:amd64",
+        "deb:backup-server:libidn12@1.43-1:amd64",
+        "deb:backup-server:libidn2-0@2.3.8-2:amd64",
+        "deb:backup-server:libio-pty-perl@1:1.20-1+b3:amd64",
+        "deb:backup-server:libipc-run-perl@20231003.0-2:all",
+        "deb:backup-server:libjson-perl@4.10000-1:all",
+        "deb:backup-server:libk5crypto3@1.21.3-5+deb13u1:amd64",
+        "deb:backup-server:libkeyutils1@1.6.3-6:amd64",
+        "deb:backup-server:libkrb5-3@1.21.3-5+deb13u1:amd64",
+        "deb:backup-server:libkrb5support0@1.21.3-5+deb13u1:amd64",
+        "deb:backup-server:libldap2@2.6.10+dfsg-1:amd64",
+        "deb:backup-server:libltdl7@2.5.4-4:amd64",
+        "deb:backup-server:liblz4-1@1.10.0-4:amd64",
+        "deb:backup-server:liblzma5@5.8.1-1+deb13u1:amd64",
+        "deb:backup-server:libmailutils9t64@1:3.19-1:amd64",
+        "deb:backup-server:libmariadb3@1:11.8.6-0+deb13u1:amd64",
+        "deb:backup-server:libmd0@1.1.0-2+b1:amd64",
+        "deb:backup-server:libmount1@2.41.5-0+deb13u1:amd64",
+        "deb:backup-server:libncurses6@6.5+20250216-2:amd64",
+        "deb:backup-server:libncursesw6@6.5+20250216-2:amd64",
+        "deb:backup-server:libnettle8t64@3.10.1-1:amd64",
+        "deb:backup-server:libnewt0.52@0.52.25-1:amd64",
+        "deb:backup-server:libnfsidmap1@1:2.8.3-1:amd64",
+        "deb:backup-server:libnl-3-200@3.7.0-2:amd64",
+        "deb:backup-server:libnl-genl-3-200@3.7.0-2:amd64",
+        "deb:backup-server:libnsl2@1.3.0-3+b3:amd64",
+        "deb:backup-server:libntlm0@1.8-4:amd64",
+        "deb:backup-server:libp11-kit0@0.25.5-3:amd64",
+        "deb:backup-server:libpam0g@1.7.0-5:amd64",
+        "deb:backup-server:libpam-modules@1.7.0-5:amd64",
+        "deb:backup-server:libpam-modules-bin@1.7.0-5:amd64",
+        "deb:backup-server:libpcre2-8-0@10.46-1~deb13u1:amd64",
+        "deb:backup-server:libperl5.40@5.40.1-6:amd64",
+        "deb:backup-server:libpq5@17.11-0+deb13u1:amd64",
+        "deb:backup-server:libproc2-0@2:4.0.4-9:amd64",
+        "deb:backup-server:libpython3.13@3.13.5-2+deb13u4:amd64",
+        "deb:backup-server:libpython3.13-minimal@3.13.5-2+deb13u4:amd64",
+        "deb:backup-server:libpython3.13-stdlib@3.13.5-2+deb13u4:amd64",
+        "deb:backup-server:libreadline8t64@8.2-6:amd64",
+        "deb:backup-server:libsasl2-2@2.1.28+dfsg1-9:amd64",
+        "deb:backup-server:libsasl2-modules-db@2.1.28+dfsg1-9:amd64",
+        "deb:backup-server:libselinux1@3.8.1-1:amd64",
+        "deb:backup-server:libsemanage2@3.8.1-1:amd64",
+        "deb:backup-server:libsemanage-common@3.8.1-1:all",
+        "deb:backup-server:libsepol2@3.8.1-1:amd64",
+        "deb:backup-server:libslang2@2.3.3-5+b2:amd64",
+        "deb:backup-server:libsqlite3-0@3.46.1-7+deb13u1:amd64",
+        "deb:backup-server:libssh2-1t64@1.11.1-1+deb13u1:amd64",
+        "deb:backup-server:libssl3t64@3.5.6-1~deb13u2:amd64",
+        "deb:backup-server:libstdc++6@14.2.0-19:amd64",
+        "deb:backup-server:libsystemd0@257.13-1~deb13u1:amd64",
+        "deb:backup-server:libtasn1-6@4.20.0-2+deb13u1:amd64",
+        "deb:backup-server:libtext-charwidth-perl@0.04-11+b4:amd64",
+        "deb:backup-server:libtext-wrapi18n-perl@0.06-10:all",
+        "deb:backup-server:libtinfo6@6.5+20250216-2:amd64",
+        "deb:backup-server:libtirpc3t64@1.3.6+ds-1:amd64",
+        "deb:backup-server:libtirpc-common@1.3.6+ds-1:all",
+        "deb:backup-server:libtlsrpt0@0.5.0rc1-2:amd64",
+        "deb:backup-server:libudev1@257.13-1~deb13u1:amd64",
+        "deb:backup-server:libunistring5@1.3-2:amd64",
+        "deb:backup-server:libuuid1@2.41.5-0+deb13u1:amd64",
+        "deb:backup-server:libwrap0@7.6.q-36:amd64",
+        "deb:backup-server:libxml2@2.12.7+dfsg+really2.9.14-2.1+deb13u3:amd64",
+        "deb:backup-server:libxxhash0@0.8.3-2:amd64",
+        "deb:backup-server:libzstd1@1.5.7+dfsg-1:amd64",
+        "deb:backup-server:login.defs@1:4.17.4-2:all",
+        "deb:backup-server:mailutils@1:3.19-1:amd64",
+        "deb:backup-server:mailutils-common@1:3.19-1:all",
+        "deb:backup-server:mariadb-common@1:11.8.6-0+deb13u1:all",
+        "deb:backup-server:media-types@13.0.0:all",
+        "deb:backup-server:mysql-common@5.8+1.1.1:all",
+        "deb:backup-server:netbase@6.5:all",
+        "deb:backup-server:nfs-common@1:2.8.3-1:amd64",
+        "deb:backup-server:nfs-kernel-server@1:2.8.3-1:amd64",
+        "deb:backup-server:openssl@3.5.6-1~deb13u2:amd64",
+        "deb:backup-server:openssl-provider-legacy@3.5.6-1~deb13u2:amd64",
+        "deb:backup-server:passwd@1:4.17.4-2:amd64",
+        "deb:backup-server:perl@5.40.1-6:amd64",
+        "deb:backup-server:perl-base@5.40.1-6:amd64",
+        "deb:backup-server:perl-modules-5.40@5.40.1-6:all",
+        "deb:backup-server:pgbackrest@2.55.1-1:amd64",
+        "deb:backup-server:postfix@3.10.13-0+deb13u1:amd64",
+        "deb:backup-server:postgresql-client-common@278:all",
+        "deb:backup-server:postgresql-common@278:all",
+        "deb:backup-server:postgresql-common-dev@278:all",
+        "deb:backup-server:procps@2:4.0.4-9:amd64",
+        "deb:backup-server:readline-common@8.2-6:all",
+        "deb:backup-server:rpcbind@1.2.7-1:amd64",
+        "deb:backup-server:sensible-utils@0.0.25:all",
+        "deb:backup-server:ssl-cert@1.1.3:all",
+        "deb:backup-server:sysvinit-utils@3.14-4:amd64",
+        "deb:backup-server:tzdata@2026b-0+deb13u1:all",
+        "deb:backup-server:ucf@3.0052:all",
+        "deb:backup-server:zlib1g@1:1.3.dfsg+really1.3.1-1+b1:amd64"
+      ]
+    },
+    {
+      "ref": "sillon:sillon-backup-server-survey@0.1.0",
+      "dependsOn": [
+        "sillon:sillon-backup-server@0.1.0"
       ]
     }
   ],

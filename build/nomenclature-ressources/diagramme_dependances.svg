@@ -1,19 +1,22 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 980 700" width="980" height="700">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 980 900" width="980" height="900">
   <defs>
     <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M0,0 L10,5 L0,10 z" fill="#17212b"/>
     </marker>
   </defs>
-  <rect x="0" y="0" width="980" height="700" fill="#ffffff"/>
+  <rect x="0" y="0" width="980" height="900" fill="#ffffff"/>
 
   <rect x="16" y="16" width="948" height="330" rx="14" fill="none" stroke="#17212b" stroke-opacity="0.35" stroke-dasharray="4 5"/>
-  <text x="34" y="42" font-family="Helvetica, Arial, sans-serif" font-size="12" letter-spacing="0.06em" fill="#17212b" fill-opacity="0.6">UNIVERS DPKG — HOTE (195 PAQUETS)</text>
+  <text x="34" y="42" font-family="Helvetica, Arial, sans-serif" font-size="12" letter-spacing="0.06em" fill="#17212b" fill-opacity="0.6">UNIVERS DPKG — HOTE, SERVEUR SILLON (201 PAQUETS)</text>
 
   <rect x="16" y="366" width="948" height="150" rx="14" fill="none" stroke="#17212b" stroke-opacity="0.35" stroke-dasharray="4 5"/>
   <text x="34" y="392" font-family="Helvetica, Arial, sans-serif" font-size="12" letter-spacing="0.06em" fill="#17212b" fill-opacity="0.6">UNIVERS DPKG — IMAGE D'EXECUTION (378 PAQUETS)</text>
 
   <rect x="16" y="536" width="948" height="150" rx="14" fill="none" stroke="#17212b" stroke-opacity="0.35" stroke-dasharray="4 5"/>
-  <text x="34" y="562" font-family="Helvetica, Arial, sans-serif" font-size="12" letter-spacing="0.06em" fill="#17212b" fill-opacity="0.6">UNIVERS DPKG — HOTE (SUITE)</text>
+  <text x="34" y="562" font-family="Helvetica, Arial, sans-serif" font-size="12" letter-spacing="0.06em" fill="#17212b" fill-opacity="0.6">UNIVERS DPKG — HOTE, SERVEUR SILLON (SUITE)</text>
+
+  <rect x="16" y="706" width="948" height="178" rx="14" fill="none" stroke="#a5651c" stroke-opacity="0.55" stroke-width="1.4"/>
+  <text x="34" y="732" font-family="Helvetica, Arial, sans-serif" font-size="12" letter-spacing="0.06em" fill="#a5651c">MACHINE DE SAUVEGARDE — DISTINCTE DU SERVEUR SILLON (131 PAQUETS, RESOLUTION THEORIQUE)</text>
 
   <rect x="60" y="70" width="230" height="60" rx="10" fill="none" stroke="#17212b" stroke-width="1.6"/>
   <text x="175" y="94" text-anchor="middle" font-family="Courier New, monospace" font-size="14" font-weight="700" fill="#17212b">sillon-server</text>
@@ -35,6 +38,19 @@
   <text x="175" y="312" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="11" fill="#17212b" fill-opacity="0.65">podman</text>
   <line x1="175" y1="230" x2="175" y2="266" stroke="#17212b" marker-end="url(#arrow)"/>
   <text x="192" y="252" font-family="Helvetica, Arial, sans-serif" font-size="11" fill="#17212b" fill-opacity="0.65">Depends</text>
+
+  <line x1="290" y1="100" x2="311" y2="100" stroke="#17212b" stroke-opacity="0.7"/>
+  <line x1="311" y1="100" x2="311" y2="285" stroke="#17212b" stroke-opacity="0.7"/>
+  <line x1="311" y1="200" x2="330" y2="200" stroke="#17212b" stroke-opacity="0.7" marker-end="url(#arrow)"/>
+  <line x1="311" y1="285" x2="330" y2="285" stroke="#17212b" stroke-opacity="0.7" marker-end="url(#arrow)"/>
+
+  <rect x="330" y="170" width="230" height="60" rx="10" fill="none" stroke="#17212b" stroke-width="1.6"/>
+  <text x="445" y="194" text-anchor="middle" font-family="Courier New, monospace" font-size="14" font-weight="700" fill="#17212b">sillon-purge</text>
+  <text x="445" y="212" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="11" fill="#17212b" fill-opacity="0.65">optionnel — aucune dépendance nouvelle</text>
+
+  <rect x="330" y="270" width="230" height="60" rx="10" fill="none" stroke="#17212b" stroke-width="1.6"/>
+  <text x="445" y="294" text-anchor="middle" font-family="Courier New, monospace" font-size="14" font-weight="700" fill="#17212b">sillon-backup-client</text>
+  <text x="445" y="312" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="11" fill="#17212b" fill-opacity="0.65">+ pgbackrest, nfs-common (6 paquets)</text>
 
   <rect x="600" y="401" width="300" height="60" rx="10" fill="none" stroke="#17212b" stroke-width="1.6"/>
   <text x="750" y="425" text-anchor="middle" font-family="Courier New, monospace" font-size="14" font-weight="700" fill="#17212b">sillon-image-execution</text>
@@ -60,4 +76,17 @@
   <text x="770" y="613" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="10.5" fill="#a5651c" font-weight="700">accès Internet requis à l'install.</text>
   <line x1="565" y1="601" x2="636" y2="601" stroke="#17212b" marker-end="url(#arrow)"/>
   <text x="600" y="592" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="11" fill="#17212b" fill-opacity="0.65">Depends</text>
+
+  <rect x="60" y="750" width="230" height="60" rx="10" fill="none" stroke="#a5651c" stroke-width="1.6"/>
+  <text x="175" y="774" text-anchor="middle" font-family="Courier New, monospace" font-size="14" font-weight="700" fill="#a5651c">sillon-backup-server</text>
+  <text x="175" y="792" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="11" fill="#a5651c" fill-opacity="0.8">nfs-kernel-server, pgbackrest</text>
+
+  <rect x="330" y="750" width="270" height="60" rx="10" fill="none" stroke="#a5651c" stroke-width="1.6"/>
+  <text x="465" y="774" text-anchor="middle" font-family="Courier New, monospace" font-size="13.5" font-weight="700" fill="#a5651c">sillon-backup-server-survey</text>
+  <text x="465" y="792" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="11" fill="#a5651c" fill-opacity="0.8">mailutils, postfix</text>
+  <line x1="290" y1="780" x2="330" y2="780" stroke="#a5651c" marker-end="url(#arrow)"/>
+  <text x="310" y="768" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="10.5" fill="#a5651c">Depends</text>
+
+  <path d="M560,300 C 900,300 940,300 940,300 L940,780 L604,780" fill="none" stroke="#a5651c" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#arrow)"/>
+  <text x="947" y="540" font-family="Helvetica, Arial, sans-serif" font-size="11" fill="#a5651c" transform="rotate(90 947 540)">partage NFS (réseau, pas une dépendance dpkg)</text>
 </svg>

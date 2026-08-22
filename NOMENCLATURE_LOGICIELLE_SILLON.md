@@ -4,11 +4,11 @@
 
 | Champ | Valeur |
 |---|---|
-| Date | 19 août 2026 |
-| Périmètre | Les 6 paquets `.deb` de SILLON (`build/build.sh`), leur fermeture de dépendances Debian complète, et les composants vendorisés hors `dpkg` |
-| Méthode | Dépendances directes relevées dans `DEBIAN/control` et le `Dockerfile` de l'image d'exécution ; fermeture transitive et versions résolues **directement depuis la VM de test SILLON réelle** (`192.168.122.114`, Debian 13/Trixie), reprise en conditions réelles après une première version basée sur des dépôts Debian génériques |
-| Format | Ce document (synthèse de lecture) + `sbom/sillon-sbom-cyclonedx.json` (référence machine-lisible, CycloneDX 1.6, 590 composants, validée sans erreur contre le schéma officiel) |
-| Statut | Nomenclature établie pour appuyer les obligations de gestion de la chaîne d'approvisionnement logicielle et de gestion des vulnérabilités du règlement **NIS2** — voir « Limites » (§7) |
+| Date | 22 août 2026 |
+| Périmètre | Les 10 paquets `.deb` de SILLON (`build/build.sh`), leur fermeture de dépendances Debian complète, et les composants vendorisés hors `dpkg` |
+| Méthode | Dépendances directes relevées dans `DEBIAN/control` et le `Dockerfile` de l'image d'exécution ; fermeture transitive et versions résolues **directement depuis la VM de test SILLON réelle** (`192.168.122.114`, Debian 13/Trixie) pour l'univers hôte et l'univers image d'exécution. Exception : l'univers de la machine de sauvegarde (`sillon-backup-server`/`sillon-backup-server-survey`, machine physiquement distincte, non disponible pour audit direct) est résolu par fermeture théorique de dépendances Debian (`apt-cache depends --recurse`) plutôt que par observation réelle — voir §2 et §12 |
+| Format | Ce document (synthèse de lecture) + `sbom/sillon-sbom-cyclonedx.json` (référence machine-lisible, CycloneDX 1.6, 731 composants, validée sans erreur contre le schéma officiel) |
+| Statut | Nomenclature établie pour appuyer les obligations de gestion de la chaîne d'approvisionnement logicielle et de gestion des vulnérabilités du règlement **NIS2** — voir « Limites » (§12) |
 | Dernière mise à jour de sécurité appliquée | **19 août 2026** — PapaParse et DSFR corrigés dans `sillon-server` (0.1.28 → **0.1.29**, déployé et vérifié) ; `debian:13-slim` épinglé par digest dans `sillon-image-execution` (0.1.0 → **0.1.2**, déployé et vérifié par une exécution réelle de script après correction d'une régression de build détectée en cours de route) — voir §6.1, §7 et journal ci-dessous |
 
 **Journal des révisions** (même journée, 19 août 2026) :
@@ -19,29 +19,31 @@
 | 2 | Dépendances Debian ré-résolues **en conditions réelles** directement sur la VM de test SILLON (`192.168.122.114`, redevenue joignable) — 11 écarts de version constatés et documentés (§7, constat 7) |
 | 3 | Vérification des correctifs de sécurité amont des 10 composants vendorisés (§6.1) — 1 CVE active trouvée (PapaParse) et 1 correctif de sécurité manquant (DSFR) |
 | 4 | **Correction construite** : PapaParse 5.0.2 → 5.6.0 et DSFR 1.14.3 → 1.15.2 vendorisés dans `sillon-server` (nouvelle version `0.1.29`), package reconstruit et vérifié statiquement (voir §6.1 et §7, constats 8-9) |
-| 5 | **Correction déployée et vérifiée en conditions réelles** : `sillon-server` 0.1.29 installé sur la VM de test (mise à niveau propre depuis 0.1.28), application réelle testée en HTTPS — connexion, chargement de toutes les ressources front, import CSV réel via PapaParse 5.6.0. Constats §7.8-7.9 clos (voir §11) |
+| 5 | **Correction déployée et vérifiée en conditions réelles** : `sillon-server` 0.1.29 installé sur la VM de test (mise à niveau propre depuis 0.1.28), application réelle testée en HTTPS — connexion, chargement de toutes les ressources front, import CSV réel via PapaParse 5.6.0. Constats §7.8-7.9 clos (voir §12) |
 | 6 | `FROM debian:13-slim` épinglé par empreinte de digest dans le `Dockerfile` de `sillon-image-execution` (constat §7.1) ; image reconstruite à l'identique (`sillon-image-execution` 0.1.0 → 0.1.1), `.deb` déposé sur la VM de test |
 | 7 | **Régression détectée avant tout impact sur la cible** : la reconstruction 0.1.1 chargeait sans erreur sur la VM (`podman load` silencieux) mais tout script échouait aussitôt, journal vide — Docker BuildKit enveloppe par défaut l'image dans un index de provenance/attestation que `podman load` ne sait pas déplier. Corrigé en 0.1.2 (`docker build --provenance=false --sbom=false`), `build/build.sh` mis à jour pour ne plus jamais reproduire cette régression, exécution réelle vérifiée sur la VM (job `script_python` abouti) — voir §7, constat 1 |
 | 8 | **20 août 2026** — Ce document, jusqu'ici distribué à part (racine du dépôt, jamais embarqué dans un `.deb`), est désormais aussi publié en PDF depuis `sillon-server` (`build/generer_pdf_nomenclature.py` génère directement dans `Documentation/`), exposé dans la modale « À propos » de l'application juste sous le Guide Administrateur — accessible à tout compte connecté. La copie à la racine du dépôt est conservée pour une remise directe à un auditeur, hors installation de l'application. |
+| 9 | **22 août 2026** — Ajout de `sillon-purge` (déjà en production depuis le 20 août, jusqu'ici omis de cette nomenclature — aucune dépendance Debian nouvelle) et des trois paquets `sillon-backup-client`/`sillon-backup-server`/`sillon-backup-server-survey` (sauvegarde pgBackRest, voir cahier des charges §12.10). Univers hôte complété (+6 paquets : `pgbackrest`, `nfs-common` et leurs dépendances) et vérifié en conditions réelles sur la VM de test après installation réelle (`dpkg-query -W`/journal `dpkg.log`). Nouvel univers « machine de sauvegarde » (131 paquets, `sillon-backup-server`/`sillon-backup-server-survey`) documenté par fermeture théorique de dépendances, faute d'une seconde machine physique disponible pour audit direct — limite assumée, voir §12. Versions de `sillon-server` (0.1.29 → 0.1.34) et `sillon-tutoriel` (0.1.0 → 0.2.0) corrigées au passage (constatées périmées ; pas de reprise complète des 573 paquets Debian déjà résolus le 19 août, hors périmètre de cette mise à jour). |
 
 ---
 
 ## 1. Contexte
 
-SILLON s'installe comme 6 paquets `.deb` interdépendants, sur une cible Debian 13 sans accès réseau hors dépôts Debian (proxy d'entreprise) — voir `GUIDE_INSTALLATION_ADMINISTRATEUR.md`. Cette contrainte se retrouve dans la manière dont les dépendances sont assemblées : tout ce qui n'est pas un paquet Debian officiel est vendorisé (téléchargé et embarqué) au moment du build, jamais installé à la volée sur la cible.
+SILLON s'installe comme 10 paquets `.deb` interdépendants, répartis sur deux machines (le serveur SILLON, et une machine de sauvegarde distincte pour `sillon-backup-server`/`sillon-backup-server-survey`), sur une cible Debian 13 sans accès réseau hors dépôts Debian (proxy d'entreprise) — voir `GUIDE_INSTALLATION_ADMINISTRATEUR.md`. Cette contrainte se retrouve dans la manière dont les dépendances sont assemblées : tout ce qui n'est pas un paquet Debian officiel est vendorisé (téléchargé et embarqué) au moment du build, jamais installé à la volée sur la cible.
 
 Le règlement NIS2 impose aux entités concernées de documenter la composition de leurs logiciels critiques (nomenclature logicielle, *Software Bill of Materials*) et d'assurer un suivi des vulnérabilités sur cette composition. Ce document — et son pendant machine-lisible `sbom/sillon-sbom-cyclonedx.json` — répond à ce besoin pour SILLON : il énumère l'intégralité des composants installés, qu'ils proviennent des dépôts Debian ou qu'ils soient vendorisés, avec leur version exacte, leur provenance et, quand elle est identifiable, leur licence.
 
 ## 2. Méthodologie
 
-**Dépendances directes** — relevées depuis le champ `Depends` de `DEBIAN/control` de chacun des 6 paquets `.deb` construits par `build/build.sh`, et depuis le `Dockerfile` de `sillon-image-execution`.
+**Dépendances directes** — relevées depuis le champ `Depends` de `DEBIAN/control` de chacun des 10 paquets `.deb` construits par `build/build.sh`, et depuis le `Dockerfile` de `sillon-image-execution`.
 
-**Fermeture transitive et versions** — résolues le 19 août 2026 directement sur la VM de test SILLON réelle (`192.168.122.114`, Debian 13/Trixie, les 5 paquets `sillon-*` installables déjà présents — voir §5), en conditions réelles plutôt que par simulation :
+**Fermeture transitive et versions** — résolues le 19 août 2026 (paquets applicatifs originels) puis complétées le 22 août 2026 (`sillon-purge`, `sillon-backup-*`) directement sur la VM de test SILLON réelle (`192.168.122.114`, Debian 13/Trixie), en conditions réelles plutôt que par simulation, pour deux des trois univers :
 
-- **Univers hôte** (195 paquets) : `dpkg-query -W` exécuté sur la VM elle-même, filtré sur l'ensemble des paquets réellement tirés par les dépendances directes de `sillon-server`, `sillon-orchestrateur`, `sillon-worker`, `sillon-tutoriel`.
+- **Univers hôte** (201 paquets) : `dpkg-query -W` exécuté sur la VM elle-même, filtré sur l'ensemble des paquets réellement tirés par les dépendances directes de `sillon-server`, `sillon-orchestrateur`, `sillon-worker`, `sillon-tutoriel`, `sillon-backup-client` (les 6 paquets ajoutés le 22 août — `pgbackrest`, `nfs-common` et leurs dépendances — installés réellement sur cette VM, confirmés via `dpkg-query -W` et le journal `/var/log/dpkg.log`).
 - **Univers de l'image d'exécution** (378 paquets) : l'image `sillon-image-execution:latest` réellement chargée sur cette VM (`podman load`, jamais reconstruite sur cible) a été inspectée directement — extraction du fichier `var/lib/dpkg/status` de la couche `apt-get install` de l'image (`/usr/lib/sillon/image-execution.tar`), sans exécuter le conteneur.
+- **Univers de la machine de sauvegarde** (131 paquets, ajouté le 22 août 2026) : `sillon-backup-server` et `sillon-backup-server-survey` s'installent par conception sur une machine physiquement distincte du serveur SILLON (voir cahier des charges §12.10), non disponible pour un audit direct pendant cette session. Résolu par fermeture théorique de dépendances Debian (`apt-cache depends --recurse --no-recommends`, exécuté contre les dépôts Debian 13 réels), méthode moins forte que l'observation directe et donc **non confirmée sur une machine physique séparée** — voir limite correspondante en §12.
 
-Une première résolution, antérieure, s'appuyait sur des conteneurs Debian 13 éphémères interrogeant les dépôts Debian génériques (la VM étant alors injoignable) : 11 versions différaient de l'état réel de la VM (dérive de correctifs de sécurité Debian publiés entre-temps, dans les deux sens — voir §7, constat 7).
+Une première résolution, antérieure (paquets applicatifs originels, 19 août 2026), s'appuyait sur des conteneurs Debian 13 éphémères interrogeant les dépôts Debian génériques (la VM étant alors injoignable) : 11 versions différaient de l'état réel de la VM (dérive de correctifs de sécurité Debian publiés entre-temps, dans les deux sens — voir §7, constat 7).
 
 **Composants vendorisés** — inventoriés manuellement à partir des scripts de vendoring de `build/build.sh` (PostgREST, somme SHA-256 incluse) et des en-têtes de licence présents dans chaque bibliothèque JS livrée sous `var/www/html/SILLON/`.
 
@@ -51,45 +53,54 @@ Une première résolution, antérieure, s'appuyait sur des conteneurs Debian 13 
 
 | Indicateur | Valeur |
 |---|---|
-| Paquets `.deb` SILLON | 6 |
-| Paquets Debian résolus — univers hôte | 195 (134 paquets source uniques) |
+| Paquets `.deb` SILLON | 10 |
+| Paquets Debian résolus — univers hôte | 201 (dont 6 ajoutés le 22/08/2026 pour `sillon-backup-client` : `pgbackrest`, `nfs-common`…) |
 | Paquets Debian résolus — univers image d'exécution | 378 (314 paquets source uniques) |
+| Paquets Debian résolus — univers machine de sauvegarde | 131 (ajouté le 22/08/2026, résolution théorique — voir §2 et §12) |
 | Composants vendorisés hors `dpkg` | 10 (1 binaire, 9 bibliothèques JS) |
 | Images conteneur figées | 1 (`image-execution.tar`, 384 Mo) |
 | Licences front identifiées | 10/10, toutes permissives (MIT, BSD-3-Clause, ISC) |
 | CVE connue affectant un composant vendorisé | 0 — **CVE-2020-36649** (PapaParse) détectée puis **corrigée le 19/08/2026**, voir §6.1 et §7 |
-| Composants vendorisés en retard sur un correctif de sécurité amont | 0/10 (PapaParse et DSFR corrigés le 19/08/2026 — `sillon-server` 0.1.29) |
-| Composants totaux (fichier CycloneDX) | 590 |
+| Composants vendorisés en retard sur un correctif de sécurité amont | 0/10 (PapaParse et DSFR corrigés le 19/08/2026 — `sillon-server` 0.1.29, depuis mis à niveau vers 0.1.34) |
+| Composants totaux (fichier CycloneDX) | 731 |
 
 ## 4. Architecture et chaîne de dépendances
 
-Les 6 paquets SILLON dépendent les uns des autres en chaîne, mais traversent surtout **deux univers de paquets Debian distincts et hermétiques** : celui de l'hôte, et celui, isolé, de l'image conteneur d'exécution. Le passage de l'un à l'autre ne se fait pas par une dépendance `apt` mais par un `podman run` au moment de l'exécution — un point qui ne se lit pas dans les fichiers `control`.
+Les 10 paquets SILLON dépendent les uns des autres en chaîne, mais traversent surtout **trois univers de paquets Debian distincts et hermétiques** : celui de l'hôte (serveur SILLON), celui, isolé, de l'image conteneur d'exécution, et depuis le 22 août 2026 celui d'une **machine de sauvegarde physiquement séparée** (`sillon-backup-server`/`sillon-backup-server-survey`). Le passage vers l'image d'exécution ne se fait pas par une dépendance `apt` mais par un `podman run` au moment de l'exécution ; le passage vers la machine de sauvegarde ne se fait par aucune dépendance `apt` non plus, mais par un partage réseau NFS entre les deux machines — deux points qui ne se lisent pas dans les fichiers `control`.
 
-![Chaîne de dépendances des 6 paquets SILLON, univers hôte et univers image d'exécution](diagramme_dependances.png){width=17cm}
+![Chaîne de dépendances des 10 paquets SILLON, univers hôte, univers image d'exécution et machine de sauvegarde](diagramme_dependances.png){width=17cm}
 
-## 5. Les 6 paquets SILLON
+## 5. Les 10 paquets SILLON
 
 | Paquet | Version | Arch. | Dépend de (Debian) | Dépend de (SILLON) | Vendorisé |
 |---|---|---|---|---|---|
-| `sillon-server` | 0.1.29 | amd64 | postgresql-17, nginx, openssl, sudo, fail2ban | — | PostgREST 14.8, 9 libs JS, DSFR 1.15.2 |
+| `sillon-server` | 0.1.34 | amd64 | postgresql-17, nginx, openssl, sudo, fail2ban | — | PostgREST 14.8, 9 libs JS, DSFR 1.15.2 |
 | `sillon-orchestrateur` | 0.1.13 | all | python3-flask, python3-psycopg2, python3-jwt, gunicorn, python3-ijson | sillon-server | — |
 | `sillon-worker` | 0.1.3 | all | podman | sillon-orchestrateur | — |
 | `sillon-image-execution` | 0.1.2 | amd64 | *(univers séparé, §4)* | sillon-worker | image podman figée (384 Mo), base épinglée par digest |
-| `sillon-tutoriel` | 0.1.0 | all | python3 | sillon-server, sillon-orchestrateur, sillon-worker, sillon-image-execution | — |
+| `sillon-tutoriel` | 0.2.0 | all | python3 | sillon-server, sillon-orchestrateur, sillon-worker, sillon-image-execution | — |
 | `sillon-demo-sirene` | 0.1.4 | all | python3 | sillon-tutoriel | — |
+| `sillon-purge` | 0.1.0 | all | *(aucune — s'appuie sur `sudo`/`postgresql-17` déjà requis par `sillon-server`)* | sillon-server | — |
+| `sillon-backup-client` | 0.1.0 | all | pgbackrest, nfs-common | sillon-server | — |
+| `sillon-backup-server` | 0.1.0 | all | nfs-kernel-server, pgbackrest | *(machine distincte, aucune dépendance à un autre paquet SILLON)* | — |
+| `sillon-backup-server-survey` | 0.1.0 | all | mailutils, postfix | sillon-backup-server | — |
 
-Les 5 premiers paquets sont installés sur la VM de test SILLON (`192.168.122.114`) avec exactement ces versions (`dpkg -l`, 19 août 2026) — `sillon-server` en particulier a été mis à niveau de 0.1.28 vers **0.1.29** le jour même, une fois la correction §6.1/§7 construite et vérifiée (voir §11 pour le détail de cette vérification en conditions réelles). `sillon-demo-sirene` n'y est pas installé (paquet optionnel, voir §11).
+Les 7 premiers paquets sont installés sur la VM de test SILLON (`192.168.122.114`) avec exactement ces versions (`dpkg -l`, 22 août 2026) — `sillon-server` a été mis à niveau de 0.1.29 (19 août) vers **0.1.34** et `sillon-tutoriel` de 0.1.0 vers **0.2.0** au fil d'évolutions applicatives distinctes de ce document, versions corrigées ici en cette occasion. `sillon-demo-sirene` n'y est pas installé (paquet optionnel, voir §12). `sillon-backup-client` a également été installé et vérifié en conditions réelles sur cette même VM (montage NFS, sauvegarde complète/incrémentale, restauration à une date choisie — voir cahier des charges §12.10) ; `sillon-backup-server`/`sillon-backup-server-survey` ont été vérifiés sur cette même VM utilisée temporairement comme partage NFS bouclé (faute d'une seconde machine physique), voir §12 pour la limite que cela implique sur la résolution de leur univers Debian propre.
 
 **Empreintes SHA-256 des `.deb` construits** (traçabilité de provenance) :
 
 | Paquet | SHA-256 |
 |---|---|
-| `sillon-server_0.1.29_amd64.deb` | `c3e22be05165d5b4eb77372b82d7df07b830da4643bb21637e10fe16fe1aed6a` |
+| `sillon-server_0.1.34_amd64.deb` | `155c6bf8877f9726d1188df7c07e745dc387335ff99b25b50150d1c193a03cbf` |
 | `sillon-orchestrateur_0.1.13_all.deb` | `d408ecaa5481a026759a2602e8267e2a8be4465e7c0df2768ca283870f1b07da` |
 | `sillon-worker_0.1.3_all.deb` | `a8543ce76490628c2d4ccfdf42472ae88afa6f68230c7c3759bd6ac9e8a1cc34` |
 | `sillon-image-execution_0.1.2_amd64.deb` | `2609a036c884f9ede1692c11ce77a060c3fec23064bb58c04babeb4193dfa4a3` |
-| `sillon-tutoriel_0.1.0_all.deb` | `7ab74cb735c3167eeb659c3f9b835458504b9800e246fa05a3eab79a64fac203` |
+| `sillon-tutoriel_0.2.0_all.deb` | `a55cadb49fae2fbb89f85899acb2fe8c1f73ea6ccbaff309928bae4ff8718a0b` |
 | `sillon-demo-sirene_0.1.4_all.deb` | `f0fabc42fa3f9d7949cde4f4f87ed942bbda421f73ff0c8a35059533d01055b4` |
+| `sillon-purge_0.1.0_all.deb` | `40179feafaf27f9e6b5fcfe6edde8ef84071074805def6d47e69ad8c9d1beee0` |
+| `sillon-backup-client_0.1.0_all.deb` | `090c3bfdd410863eb1b9e1bdebca00d8e07e96ea5f83543cd0978f638805ce25` |
+| `sillon-backup-server_0.1.0_all.deb` | `b61f2023b2421ed5f4e14fc9451455b9e11658dc99778c95f20d4bc93eab9448` |
+| `sillon-backup-server-survey_0.1.0_all.deb` | `fec78b71655dacdda35c8359ca9494e03c188866ef9569e41a4976a8569d885b` |
 
 ## 6. Composants vendorisés hors `dpkg`
 
@@ -133,20 +144,23 @@ Chacun des 10 composants a été confronté à sa dernière version amont (regis
 | 1 bis | **Régression de build découverte pendant la correction du constat 1, avant qu'elle n'affecte durablement la cible** : la première reconstruction (`sillon-image-execution` 0.1.1) se chargeait sans erreur sur la VM (`podman load` silencieux, taille et manifeste d'apparence normale) mais tout script y échouait aussitôt, avec un journal d'exécution vide — signe que le conteneur ne démarrait jamais. Cause : Docker BuildKit (utilisé en substitution de `podman build`, absent sur la machine de build) enveloppe désormais l'image par défaut dans un index de provenance/attestation que `podman load` sur la cible ne sait pas déplier correctement | **Corrigé (19/08/2026)** | `sillon-image-execution`, `build/build.sh` | Rebuild avec `docker build --provenance=false --sbom=false` (0.1.2) ; `build/build.sh` modifié pour appliquer systématiquement ces options quand `docker` est utilisé en substitution de `podman`, afin qu'un futur build complet ne reproduise pas cette régression |
 | 2 | `sillon-demo-sirene` télécharge ~2,86 Go depuis data.gouv.fr à l'installation — seule dérogation du système au principe « aucun accès réseau hors dépôts Debian » ; rien dans le paquet lui-même n'empêche techniquement son installation en production | Attention | `sillon-demo-sirene` | Exclure explicitement ce paquet de tout inventaire ou déploiement de production dans les procédures d'exploitation |
 | 3 | `r-cran-tidyverse` entraîne des paquets R à capacité réseau (`httr`, `curl`, `googledrive`, `googlesheets4`) à l'intérieur de l'image d'exécution ; l'isolation réseau effective repose entièrement sur les options d'exécution imposées par `worker.py` (`--network` interne), pas sur l'absence de ces bibliothèques | À noter | `sillon-image-execution` | Défense en profondeur souhaitable si cette garantie d'exécution venait à être retirée par erreur |
-| 4 | Aucun fichier `LICENSE` à la racine du dépôt pour le code propre à SILLON (les 6 paquets `.deb`) | À noter | Dépôt SILLON | À clarifier si cette nomenclature ou le code doivent circuler en dehors de l'organisation |
+| 4 | Aucun fichier `LICENSE` à la racine du dépôt pour le code propre à SILLON (les 10 paquets `.deb`) | À noter | Dépôt SILLON | À clarifier si cette nomenclature ou le code doivent circuler en dehors de l'organisation |
 | 5 | PostgREST vendorisé avec intégrité vérifiée par somme SHA-256 à la construction | Conforme | `sillon-server` | Bonne pratique de traçabilité de provenance pour un composant vendorisé binaire, à reconduire |
 | 6 | Les 10 composants vendorisés hors `dpkg` portent tous une licence permissive identifiée (MIT, BSD-3-Clause, ISC) | Conforme | Front (`sillon-server`) | Aucun risque de licence contaminante (copyleft) identifié côté front |
 | 7 | 11 des 573 paquets Debian relevés sur la VM de test (192.168.122.114) portent une version différente de celle publiée sur les dépôts Debian au 19 août 2026 (`util-linux` et ses paquets liés en retard d'un correctif de sécurité ; `libexpat1` inversement plus récent sur les dépôts que sur la VM) | À noter | Univers hôte et image d'exécution | Confirme l'absence de mise à jour automatique (`apt upgrade`) de la cible depuis son installation — comportement attendu en production, mais à surveiller explicitement via le suivi de vulnérabilités (§8) plutôt que de supposer une cible toujours à jour |
-| 8 | PapaParse 5.0.2 (vendorisé) était concerné par CVE-2020-36649 (déni de service par expression régulière, CVSS 3.1 7,5/10), corrigée en amont depuis la version 5.2.0 (novembre 2020) — la version vendorisée en était dépourvue depuis près de 6 ans | **Corrigé et déployé (19/08/2026)** | `sillon-server` (front, import CSV) | Mis à jour vers PapaParse 5.6.0, `sillon-server` reconstruit en 0.1.29, **installé sur la VM de test et vérifié** : import CSV réel abouti (§11) |
-| 9 | DSFR 1.14.3 (vendorisé) n'intégrait pas le correctif de sécurité publié en 1.15.0 (17/07/2026 — sanitisation du chargement de pictogrammes SVG en ligne, contournement d'injection sur IE11) | **Corrigé et déployé (19/08/2026)** | `sillon-server` (front) | Mis à jour vers DSFR 1.15.2, `sillon-server` reconstruit en 0.1.29, **installé sur la VM de test et vérifié** : rendu conforme, aucune régression visuelle (§11) |
+| 8 | PapaParse 5.0.2 (vendorisé) était concerné par CVE-2020-36649 (déni de service par expression régulière, CVSS 3.1 7,5/10), corrigée en amont depuis la version 5.2.0 (novembre 2020) — la version vendorisée en était dépourvue depuis près de 6 ans | **Corrigé et déployé (19/08/2026)** | `sillon-server` (front, import CSV) | Mis à jour vers PapaParse 5.6.0, `sillon-server` reconstruit en 0.1.29, **installé sur la VM de test et vérifié** : import CSV réel abouti (§12) |
+| 9 | DSFR 1.14.3 (vendorisé) n'intégrait pas le correctif de sécurité publié en 1.15.0 (17/07/2026 — sanitisation du chargement de pictogrammes SVG en ligne, contournement d'injection sur IE11) | **Corrigé et déployé (19/08/2026)** | `sillon-server` (front) | Mis à jour vers DSFR 1.15.2, `sillon-server` reconstruit en 0.1.29, **installé sur la VM de test et vérifié** : rendu conforme, aucune régression visuelle (§12) |
+| 10 | L'univers Debian de la machine de sauvegarde (`sillon-backup-server`/`sillon-backup-server-survey`, 131 paquets) est résolu par fermeture théorique de dépendances (`apt-cache depends --recurse`), faute d'une seconde machine physique distincte du serveur SILLON disponible pour un audit direct — contrairement aux univers hôte et image d'exécution, tous deux vérifiés par observation réelle | À noter | `sillon-backup-server`, `sillon-backup-server-survey` | Reprendre cette résolution par `dpkg-query -W` réel dès qu'une machine de sauvegarde physique distincte sera disponible pour audit |
 
 ## 8. Veille des vulnérabilités
 
-**Paquets Debian** — Les 573 paquets Debian de cette nomenclature (§9) sont, par construction, tous suivis par le [Debian Security Tracker](https://security-tracker.debian.org/tracker/) via leur paquet source (colonne « Paquet source Debian » des tableaux ci-dessous). Rapprocher périodiquement `sbom/sillon-sbom-cyclonedx.json` de ce suivi — ou d'un scanner tel que `grype`/`trivy` exécuté directement contre la VM cible — constitue la mécanique de veille recommandée pour couvrir l'obligation de gestion des vulnérabilités du règlement NIS2.
+**Paquets Debian** — Les 710 paquets Debian de cette nomenclature (§9, §10, §11) sont, par construction, tous suivis par le [Debian Security Tracker](https://security-tracker.debian.org/tracker/) via leur paquet source (colonne « Paquet source Debian » des tableaux ci-dessous). Rapprocher périodiquement `sbom/sillon-sbom-cyclonedx.json` de ce suivi — ou d'un scanner tel que `grype`/`trivy` exécuté directement contre la VM cible — constitue la mécanique de veille recommandée pour couvrir l'obligation de gestion des vulnérabilités du règlement NIS2.
 
 **Composants vendorisés hors `dpkg`** — ne bénéficient d'aucun suivi automatique de type `apt upgrade` et ont été vérifiés manuellement le 19 août 2026 (résultat détaillé en §6.1) : dernière version amont relevée via l'API GitHub et le registre npm, vulnérabilités connues interrogées via [OSV.dev](https://osv.dev/) sur la version exacte vendorisée de chaque composant JS, changelog/notes de version parcourus pour PostgREST et DSFR à la recherche de correctifs de sécurité non couverts par une CVE publiée. Un composant s'est révélé concerné par une CVE active (PapaParse, constat §7.8) et un autre par un correctif de sécurité non couvert par une CVE (DSFR, constat §7.9) ; les deux ont été corrigés le jour même (§6.1). Cette vérification n'est pas automatisée : à rejouer manuellement à chaque nouvelle version de `sillon-server`, ou via un outil dédié (`npm audit`, `osv-scanner`) intégré au build si cette charge devient récurrente.
 
-## 9. Annexe A — Paquets Debian résolus, univers hôte (195)
+## 9. Annexe A — Paquets Debian résolus, univers hôte (201)
+
+*Les 6 lignes marquées `†` ont été ajoutées le 22 août 2026 (`sillon-backup-client` — `pgbackrest`, `nfs-common` et leurs dépendances), vérifiées en conditions réelles sur la VM de test.*
 
 | Paquet | Version | Paquet source Debian | Arch. |
 |---|---|---|---|
@@ -185,6 +199,7 @@ Chacun des 10 composants a été confronté à sa dernière version amont (regis
 | `init-system-helpers` | 1.69~deb13u1 | `init-system-helpers` | all |
 | `iproute2` | 6.15.0-1 | `iproute2` | amd64 |
 | `iptables` | 1.8.11-2 | `iptables` | amd64 |
+| `keyutils` † | 1.6.3-6 | `keyutils` | amd64 |
 | `libacl1` | 2.3.2-2+b1 | `acl` | amd64 |
 | `libapparmor1` | 4.1.0-1 | `apparmor` | amd64 |
 | `libapt-pkg7.0` | 3.0.3 | `apt` | amd64 |
@@ -209,6 +224,7 @@ Chacun des 10 composants a été confronté à sa dernière version amont (regis
 | `libdebconfclient0` | 0.280 | `cdebconf` | amd64 |
 | `libedit2` | 3.1-20250104-1 | `libedit` | amd64 |
 | `libelf1t64` | 0.192-4 | `elfutils` | amd64 |
+| `libevent-core-2.1-7t64` † | 2.1.12-stable-10+b1 | `libevent` | amd64 |
 | `libexpat1` | 2.8.2-1~deb13u1 | `expat` | amd64 |
 | `libffi8` | 3.4.8-2 | `libffi` | amd64 |
 | `libgcc-s1` | 14.2.0-19 | `gcc-14` | amd64 |
@@ -246,6 +262,7 @@ Chacun des 10 composants a été confronté à sa dernière version amont (regis
 | `libnetfilter-conntrack3` | 1.1.0-1 | `libnetfilter-conntrack` | amd64 |
 | `libnettle8t64` | 3.10.1-1 | `nettle` | amd64 |
 | `libnfnetlink0` | 1.0.2-3 | `libnfnetlink` | amd64 |
+| `libnfsidmap1` † | 1:2.8.3-1 | `nfs-utils` | amd64 |
 | `libnftnl11` | 1.2.9-1 | `libnftnl` | amd64 |
 | `libnpth0t64` | 1.8-3 | `npth` | amd64 |
 | `libp11-kit0` | 0.25.5-3 | `p11-kit` | amd64 |
@@ -300,6 +317,7 @@ Chacun des 10 composants a été confronté à sa dernière version amont (regis
 | `ncurses-bin` | 6.5+20250216-2 | `ncurses` | amd64 |
 | `netavark` | 1.14.0-2 | `netavark` | amd64 |
 | `netbase` | 6.5 | `netbase` | all |
+| `nfs-common` † | 1:2.8.3-1 | `nfs-utils` | amd64 |
 | `nginx` | 1.26.3-3+deb13u7 | `nginx` | amd64 |
 | `nginx-common` | 1.26.3-3+deb13u7 | `nginx` | all |
 | `openssl` | 3.5.6-1~deb13u2 | `openssl` | amd64 |
@@ -308,6 +326,7 @@ Chacun des 10 composants a été confronté à sa dernière version amont (regis
 | `perl` | 5.40.1-6 | `perl` | amd64 |
 | `perl-base` | 5.40.1-6 | `perl` | amd64 |
 | `perl-modules-5.40` | 5.40.1-6 | `perl` | all |
+| `pgbackrest` † | 2.55.1-1 | `pgbackrest` | amd64 |
 | `pinentry-curses` | 1.3.1-2 | `pinentry` | amd64 |
 | `podman` | 5.4.2+ds1-2+b2 | `podman` | amd64 |
 | `postgresql-17` | 17.11-0+deb13u1 | `postgresql-17` | amd64 |
@@ -334,6 +353,7 @@ Chacun des 10 composants a été confronté à sa dernière version amont (regis
 | `python3.13` | 3.13.5-2+deb13u4 | `python3.13` | amd64 |
 | `python3.13-minimal` | 3.13.5-2+deb13u4 | `python3.13` | amd64 |
 | `readline-common` | 8.2-6 | `readline` | all |
+| `rpcbind` † | 1.2.7-1 | `rpcbind` | amd64 |
 | `sed` | 4.9-2+deb13u1 | `sed` | amd64 |
 | `sensible-utils` | 0.0.25 | `sensible-utils` | all |
 | `sqv` | 1.3.0-3+b2 | `rust-sequoia-sqv` | amd64 |
@@ -729,19 +749,159 @@ Chacun des 10 composants a été confronté à sa dernière version amont (regis
 | `zip` | 3.0-15+deb13u1 | `zip` | amd64 |
 | `zlib1g` | 1:1.3.dfsg+really1.3.1-1+b1 | `zlib` | amd64 |
 
-## 11. Limites
+## 11. Annexe C — Paquets Debian résolus, univers machine de sauvegarde (131)
 
-- **Une seule VM cible auditée** : les annexes A et B reflètent l'état réellement installé sur `192.168.122.114` au 19 août 2026. Une autre installation de SILLON (autre date, autre séquence de correctifs Debian appliqués) peut légitimement différer sur quelques paquets — voir le constat §7.7, déjà observé entre deux résolutions successives de cette même nomenclature.
+*Univers de `sillon-backup-server`/`sillon-backup-server-survey`, machine physiquement distincte du serveur SILLON — résolu par fermeture théorique de dépendances (`apt-cache depends --recurse --no-recommends --no-suggests --no-conflicts --no-breaks --no-replaces --no-enhances nfs-kernel-server mailutils postfix pgbackrest`, contre les dépôts Debian 13 réels), non confirmé par observation directe sur une machine physique séparée — voir §2 et §12 (Limites).*
+
+| Paquet | Version | Paquet source Debian | Arch. |
+|---|---|---|---|
+| `adduser` | 3.152 | `adduser` | all |
+| `base-passwd` | 3.6.7 | `base-passwd` | amd64 |
+| `debconf` | 1.5.91 | `debconf` | all |
+| `dmsetup` | 2:1.02.205-2 | `lvm2` | amd64 |
+| `gcc-14-base` | 14.2.0-19 | `gcc-14` | amd64 |
+| `guile-3.0-libs` | 3.0.10+really3.0.10-4 | `guile-3.0` | amd64 |
+| `init-system-helpers` | 1.69~deb13u1 | `init-system-helpers` | all |
+| `keyutils` | 1.6.3-6 | `keyutils` | amd64 |
+| `libacl1` | 2.3.2-2+b1 | `acl` | amd64 |
+| `libattr1` | 1:2.5.2-3 | `attr` | amd64 |
+| `libaudit1` | 1:4.0.2-2+b2 | `audit` | amd64 |
+| `libaudit-common` | 1:4.0.2-2 | `audit` | all |
+| `libblkid1` | 2.41.5-0+deb13u1 | `util-linux` | amd64 |
+| `libbsd0` | 0.12.2-2 | `libbsd` | amd64 |
+| `libbz2-1.0` | 1.0.8-6 | `bzip2` | amd64 |
+| `libc6` | 2.41-12+deb13u3 | `glibc` | amd64 |
+| `libcap2` | 1:2.75-10+deb13u1+b1 | `libcap2` | amd64 |
+| `libcap-ng0` | 0.8.5-4+b1 | `libcap-ng` | amd64 |
+| `libcom-err2` | 1.47.2-3+b11 | `e2fsprogs` | amd64 |
+| `libcrypt1` | 1:4.4.38-1 | `libxcrypt` | amd64 |
+| `libdb5.3t64` | 5.3.28+dfsg2-9 | `db5.3` | amd64 |
+| `libdebconfclient0` | 0.280 | `cdebconf` | amd64 |
+| `libdevmapper1.02.1` | 2:1.02.205-2 | `lvm2` | amd64 |
+| `libevent-core-2.1-7t64` | 2.1.12-stable-10+b1 | `libevent` | amd64 |
+| `libexpat1` | 2.8.2-1~deb13u1 | `expat` | amd64 |
+| `libffi8` | 3.4.8-2 | `libffi` | amd64 |
+| `libfribidi0` | 1.0.16-1 | `fribidi` | amd64 |
+| `libgc1` | 1:8.2.8-1 | `libgc` | amd64 |
+| `libgcc-s1` | 14.2.0-19 | `gcc-14` | amd64 |
+| `libgdbm6t64` | 1.24-2 | `gdbm` | amd64 |
+| `libgdbm-compat4t64` | 1.24-2 | `gdbm` | amd64 |
+| `libgmp10` | 2:6.3.0+dfsg-3 | `gmp` | amd64 |
+| `libgnutls30t64` | 3.8.9-3+deb13u4 | `gnutls28` | amd64 |
+| `libgsasl18` | 2.2.2-1.1+deb13u2 | `gsasl` | amd64 |
+| `libgssapi-krb5-2` | 1.21.3-5+deb13u1 | `krb5` | amd64 |
+| `libgssglue1` | 0.9-1.1 | `libgssglue` | amd64 |
+| `libhogweed6t64` | 3.10.1-1 | `nettle` | amd64 |
+| `libicu76` | 76.1-4 | `icu` | amd64 |
+| `libidn12` | 1.43-1 | `libidn` | amd64 |
+| `libidn2-0` | 2.3.8-2 | `libidn2` | amd64 |
+| `libio-pty-perl` | 1:1.20-1+b3 | `libio-pty-perl` | amd64 |
+| `libipc-run-perl` | 20231003.0-2 | `libipc-run-perl` | all |
+| `libjson-perl` | 4.10000-1 | `libjson-perl` | all |
+| `libk5crypto3` | 1.21.3-5+deb13u1 | `krb5` | amd64 |
+| `libkeyutils1` | 1.6.3-6 | `keyutils` | amd64 |
+| `libkrb5-3` | 1.21.3-5+deb13u1 | `krb5` | amd64 |
+| `libkrb5support0` | 1.21.3-5+deb13u1 | `krb5` | amd64 |
+| `libldap2` | 2.6.10+dfsg-1 | `openldap` | amd64 |
+| `libltdl7` | 2.5.4-4 | `libtool` | amd64 |
+| `liblz4-1` | 1.10.0-4 | `lz4` | amd64 |
+| `liblzma5` | 5.8.1-1+deb13u1 | `xz-utils` | amd64 |
+| `libmailutils9t64` | 1:3.19-1 | `mailutils` | amd64 |
+| `libmariadb3` | 1:11.8.6-0+deb13u1 | `mariadb` | amd64 |
+| `libmd0` | 1.1.0-2+b1 | `libmd` | amd64 |
+| `libmount1` | 2.41.5-0+deb13u1 | `util-linux` | amd64 |
+| `libncurses6` | 6.5+20250216-2 | `ncurses` | amd64 |
+| `libncursesw6` | 6.5+20250216-2 | `ncurses` | amd64 |
+| `libnettle8t64` | 3.10.1-1 | `nettle` | amd64 |
+| `libnewt0.52` | 0.52.25-1 | `newt` | amd64 |
+| `libnfsidmap1` | 1:2.8.3-1 | `nfs-utils` | amd64 |
+| `libnl-3-200` | 3.7.0-2 | `libnl3` | amd64 |
+| `libnl-genl-3-200` | 3.7.0-2 | `libnl3` | amd64 |
+| `libnsl2` | 1.3.0-3+b3 | `libnsl` | amd64 |
+| `libntlm0` | 1.8-4 | `libntlm` | amd64 |
+| `libp11-kit0` | 0.25.5-3 | `p11-kit` | amd64 |
+| `libpam0g` | 1.7.0-5 | `pam` | amd64 |
+| `libpam-modules` | 1.7.0-5 | `pam` | amd64 |
+| `libpam-modules-bin` | 1.7.0-5 | `pam` | amd64 |
+| `libpcre2-8-0` | 10.46-1~deb13u1 | `pcre2` | amd64 |
+| `libperl5.40` | 5.40.1-6 | `perl` | amd64 |
+| `libpq5` | 17.11-0+deb13u1 | `postgresql-17` | amd64 |
+| `libproc2-0` | 2:4.0.4-9 | `procps` | amd64 |
+| `libpython3.13` | 3.13.5-2+deb13u4 | `python3.13` | amd64 |
+| `libpython3.13-minimal` | 3.13.5-2+deb13u4 | `python3.13` | amd64 |
+| `libpython3.13-stdlib` | 3.13.5-2+deb13u4 | `python3.13` | amd64 |
+| `libreadline8t64` | 8.2-6 | `readline` | amd64 |
+| `libsasl2-2` | 2.1.28+dfsg1-9 | `cyrus-sasl2` | amd64 |
+| `libsasl2-modules-db` | 2.1.28+dfsg1-9 | `cyrus-sasl2` | amd64 |
+| `libselinux1` | 3.8.1-1 | `libselinux` | amd64 |
+| `libsemanage2` | 3.8.1-1 | `libsemanage` | amd64 |
+| `libsemanage-common` | 3.8.1-1 | `libsemanage` | all |
+| `libsepol2` | 3.8.1-1 | `libsepol` | amd64 |
+| `libslang2` | 2.3.3-5+b2 | `slang2` | amd64 |
+| `libsqlite3-0` | 3.46.1-7+deb13u1 | `sqlite3` | amd64 |
+| `libssh2-1t64` | 1.11.1-1+deb13u1 | `libssh2` | amd64 |
+| `libssl3t64` | 3.5.6-1~deb13u2 | `openssl` | amd64 |
+| `libstdc++6` | 14.2.0-19 | `gcc-14` | amd64 |
+| `libsystemd0` | 257.13-1~deb13u1 | `systemd` | amd64 |
+| `libtasn1-6` | 4.20.0-2+deb13u1 | `libtasn1-6` | amd64 |
+| `libtext-charwidth-perl` | 0.04-11+b4 | `libtext-charwidth-perl` | amd64 |
+| `libtext-wrapi18n-perl` | 0.06-10 | `libtext-wrapi18n-perl` | all |
+| `libtinfo6` | 6.5+20250216-2 | `ncurses` | amd64 |
+| `libtirpc3t64` | 1.3.6+ds-1 | `libtirpc` | amd64 |
+| `libtirpc-common` | 1.3.6+ds-1 | `libtirpc` | all |
+| `libtlsrpt0` | 0.5.0rc1-2 | `libtlsrpt` | amd64 |
+| `libudev1` | 257.13-1~deb13u1 | `systemd` | amd64 |
+| `libunistring5` | 1.3-2 | `libunistring` | amd64 |
+| `libuuid1` | 2.41.5-0+deb13u1 | `util-linux` | amd64 |
+| `libwrap0` | 7.6.q-36 | `tcp-wrappers` | amd64 |
+| `libxml2` | 2.12.7+dfsg+really2.9.14-2.1+deb13u3 | `libxml2` | amd64 |
+| `libxxhash0` | 0.8.3-2 | `xxhash` | amd64 |
+| `libzstd1` | 1.5.7+dfsg-1 | `libzstd` | amd64 |
+| `login.defs` | 1:4.17.4-2 | `shadow` | all |
+| `mailutils` | 1:3.19-1 | `mailutils` | amd64 |
+| `mailutils-common` | 1:3.19-1 | `mailutils` | all |
+| `mariadb-common` | 1:11.8.6-0+deb13u1 | `mariadb` | all |
+| `media-types` | 13.0.0 | `media-types` | all |
+| `mysql-common` | 5.8+1.1.1 | `mysql-defaults` | all |
+| `netbase` | 6.5 | `netbase` | all |
+| `nfs-common` | 1:2.8.3-1 | `nfs-utils` | amd64 |
+| `nfs-kernel-server` | 1:2.8.3-1 | `nfs-utils` | amd64 |
+| `openssl` | 3.5.6-1~deb13u2 | `openssl` | amd64 |
+| `openssl-provider-legacy` | 3.5.6-1~deb13u2 | `openssl` | amd64 |
+| `passwd` | 1:4.17.4-2 | `shadow` | amd64 |
+| `perl` | 5.40.1-6 | `perl` | amd64 |
+| `perl-base` | 5.40.1-6 | `perl` | amd64 |
+| `perl-modules-5.40` | 5.40.1-6 | `perl` | all |
+| `pgbackrest` | 2.55.1-1 | `pgbackrest` | amd64 |
+| `postfix` | 3.10.13-0+deb13u1 | `postfix` | amd64 |
+| `postgresql-client-common` | 278 | `postgresql-common` | all |
+| `postgresql-common` | 278 | `postgresql-common` | all |
+| `postgresql-common-dev` | 278 | `postgresql-common` | all |
+| `procps` | 2:4.0.4-9 | `procps` | amd64 |
+| `readline-common` | 8.2-6 | `readline` | all |
+| `rpcbind` | 1.2.7-1 | `rpcbind` | amd64 |
+| `sensible-utils` | 0.0.25 | `sensible-utils` | all |
+| `ssl-cert` | 1.1.3 | `ssl-cert` | all |
+| `sysvinit-utils` | 3.14-4 | `sysvinit` | amd64 |
+| `tzdata` | 2026b-0+deb13u1 | `tzdata` | all |
+| `ucf` | 3.0052 | `ucf` | all |
+| `zlib1g` | 1:1.3.dfsg+really1.3.1-1+b1 | `zlib` | amd64 |
+
+## 12. Limites
+
+- **Une seule VM cible auditée pour les univers hôte et image d'exécution** : les annexes A et B reflètent l'état réellement installé sur `192.168.122.114` au 19 août 2026 (univers hôte recomplété le 22 août pour `sillon-backup-client`). Une autre installation de SILLON (autre date, autre séquence de correctifs Debian appliqués) peut légitimement différer sur quelques paquets — voir le constat §7.7, déjà observé entre deux résolutions successives de cette même nomenclature.
+- **Univers de la machine de sauvegarde jamais audité sur une machine physique séparée** (Annexe C, 131 paquets) : `sillon-backup-server`/`sillon-backup-server-survey` sont conçus pour s'installer sur une machine distincte du serveur SILLON (cahier des charges §12.10), non disponible pendant cette session — testés en pratique sur la VM de test SILLON elle-même, utilisée temporairement comme partage NFS bouclé sur elle-même, ce qui valide le comportement fonctionnel des deux paquets mais ne constitue pas un audit de dépendances Debian sur une machine réellement vierge. L'Annexe C reflète donc une fermeture théorique de dépendances (`apt-cache depends --recurse`), pas une observation réelle comme les annexes A et B — à reprendre par `dpkg-query -W` dès qu'une telle machine sera disponible.
 - **`sillon-demo-sirene` non installé sur la VM auditée** : ce paquet optionnel n'était pas présent sur `192.168.122.114` au moment de cette résolution ; ses dépendances Debian (`python3` seul, déjà couvert par l'univers hôte) restent inchangées depuis la première version de cette nomenclature.
-- **Aucun scan de vulnérabilités connues (CVE) réalisé sur les paquets Debian** : seuls les 10 composants vendorisés hors `dpkg` ont fait l'objet d'une vérification individuelle (§6.1) ; les 573 paquets Debian listés en annexe n'ont pas été confrontés un à un au Debian Security Tracker — voir §8 pour la mécanique de veille recommandée sur ce périmètre.
+- **Aucun scan de vulnérabilités connues (CVE) réalisé sur les paquets Debian** : seuls les 10 composants vendorisés hors `dpkg` ont fait l'objet d'une vérification individuelle (§6.1) ; les 710 paquets Debian listés en annexe n'ont pas été confrontés un à un au Debian Security Tracker — voir §8 pour la mécanique de veille recommandée sur ce périmètre.
 - **Couverture OSV.dev non exhaustive** : la vérification des composants vendorisés (§6.1) s'appuie sur OSV.dev, le registre npm et les changelogs/notes de version amont — une base fiable et largement utilisée, mais qui ne garantit pas l'absence de vulnérabilité non encore publiée ou non répertoriée (0-day, faille signalée mais non encore publiée sous forme d'avis).
-- **Revue de licence non exhaustive** : les licences des paquets Debian (annexes A et B) ne sont pas reproduites ici (elles sont chacune consultables via `apt-cache show` ou `/usr/share/doc/<paquet>/copyright` sur une machine Debian) ; seules celles des 10 composants vendorisés hors `dpkg` (§6) ont été relevées individuellement.
-- Cette nomenclature couvre les 6 paquets `.deb` de SILLON. Elle ne couvre pas les outils de build eux-mêmes (`build/build.sh`, scripts `generer_pdf_*.py`, `pandoc`, `libreoffice`), qui ne sont jamais installés sur la cible de production.
+- **Revue de licence non exhaustive** : les licences des paquets Debian (annexes A, B et C) ne sont pas reproduites ici (elles sont chacune consultables via `apt-cache show` ou `/usr/share/doc/<paquet>/copyright` sur une machine Debian) ; seules celles des 10 composants vendorisés hors `dpkg` (§6) ont été relevées individuellement.
+- Cette nomenclature couvre les 10 paquets `.deb` de SILLON. Elle ne couvre pas les outils de build eux-mêmes (`build/build.sh`, scripts `generer_pdf_*.py`, `pandoc`, `libreoffice`, `inkscape`), qui ne sont jamais installés sur la cible de production.
 - **Correctif construit, déployé et vérifié en conditions réelles** : `sillon-server` 0.1.29 (PapaParse 5.6.0, DSFR 1.15.2) a été reconstruit le 19 août 2026, installé sur la VM de test (`apt install`, mise à niveau propre depuis 0.1.28, migrations incrémentales appliquées sans recréation du catalogue) et vérifié de bout en bout sur l'application réelle servie en HTTPS par cette VM : connexion avec le compte de démonstration, chargement de toutes les ressources front (CSS, polices, icônes, PapaParse) sans erreur console ni requête en échec, et **import CSV réel** (onglet Import, fichier `graphique.csv`) analysé avec succès par PapaParse 5.6.0 jusqu'à la détection des colonnes. Aucune régression visuelle ou fonctionnelle constatée après la mise à jour de DSFR et PapaParse.
 - **Image de base épinglée, déployée et vérifiée par exécution réelle** : `sillon-image-execution` (base `debian:13-slim` épinglée par digest) a été reconstruit le 19 août 2026. Une première reconstruction (0.1.1) chargeait sans erreur sur la VM mais ne produisait plus aucun conteneur exécutable (constat §7.1 bis) — détecté en testant un script réel avant toute clôture du constat, pas seulement par relecture du build. Corrigée en 0.1.2, installée sur la VM de test (mise à niveau réelle, `podman load` confirmé dans la sortie de `postinst`) et vérifiée par un job `script_python` réel mené à terme (import `pandas`/`numpy`, sortie standard conforme).
 
-## 12. Suite possible
+## 13. Suite possible
 
 - Rejouer cette résolution à chaque nouvelle version des paquets `.deb`, ou périodiquement, pour tenir la nomenclature à jour des correctifs de sécurité Debian réellement appliqués sur la cible (constat §7.7) et des composants vendorisés (§6.1, §8).
 - Mettre en place un rapprochement périodique (par exemple à chaque publication d'un nouveau `.deb`) entre `sbom/sillon-sbom-cyclonedx.json` et le Debian Security Tracker ou un scanner de vulnérabilités.
 - Ajouter un fichier `LICENSE` à la racine du dépôt si le code SILLON doit circuler en dehors de l'organisation (constat §7.4).
+- Reprendre la résolution de l'Annexe C (univers machine de sauvegarde) par observation réelle (`dpkg-query -W`) dès qu'une machine physiquement distincte du serveur SILLON sera disponible pour `sillon-backup-server`/`sillon-backup-server-survey` (constat §7.10, §12).
