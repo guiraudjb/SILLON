@@ -8,8 +8,8 @@
 
 | Champ | Valeur |
 |---|---|
-| Version | 2.2 |
-| Date | 20 août 2026 |
+| Version | 2.3 |
+| Date | 22 août 2026 |
 | Statut | Avant-projet — en cours de validation |
 | Périmètre | Direction locale — hors lac de données national |
 | Stack technique | PostgreSQL 17, PostgREST, Nginx, DSFR — architecture sans framework applicatif lourd côté front |
@@ -80,7 +80,7 @@ L'architecture retenue est volontairement sobre : un front-end web utilisant le 
 | Synchronisation avec le lac de données national | — | Hors périmètre (v1) |
 | Fédération d'identité / SSO ministériel | — | Hors périmètre (v1) |
 | Visualisation de données intégrée (tableaux de bord) | Les scripts Python/R peuvent produire des graphiques en sortie de job, mais aucun module de dashboard natif n'est prévu | Hors périmètre (v1) |
-| Sauvegarde et plan de reprise des bases de données | La protection contre la perte de données (panne disque, erreur de manipulation) relève de l'infrastructure d'hébergement existante de la direction, pas de l'application elle-même | Hors périmètre |
+| Sauvegarde et restauration des bases de données | Sauvegarde physique planifiée (complète mensuelle, incrémentale quotidienne, rétention 3 mois) et restauration à une date choisie, portées par les paquets optionnels `sillon-backup-client`/`sillon-backup-server`/`sillon-backup-server-survey` (§12.10) | Dans le périmètre (optionnel, recommandé en production) |
 
 ---
 
@@ -497,6 +497,9 @@ L'application est distribuée sous forme de paquets Debian indépendants, pour p
 | `sillon-tutoriel` | **Optionnel** — démonstration et formation (§12.7) | `sillon-image-execution` | Compte de démonstration, jeu de données réel, tutoriel PDF et corrigés d'exercices ; jamais installé sur un déploiement de production |
 | `sillon-demo-sirene` | **Optionnel** — démonstration à l'échelle (§12.8) | `sillon-tutoriel` | Jeu de données Sirene complet (~43,9 millions de lignes), téléchargé à l'installation, et scripts Python/R démontrant les possibilités de l'environnement d'exécution à cette échelle ; jamais installé sur un déploiement de production |
 | `sillon-purge` | **Optionnel, recommandé en production** — maîtrise de la volumétrie (§12.9) | `sillon-server` | Purge quotidienne automatisée des résultats de jobs, des dépôts temporaires orphelins et du journal d'audit (§8.9, §8.12) |
+| `sillon-backup-client` | **Optionnel, recommandé en production** — sauvegarde et restauration (§12.10) | `sillon-server`, `pgbackrest`, `nfs-common` | Montage automatique du partage NFS distant, sauvegarde physique planifiée du cluster PostgreSQL (pgBackRest), outil de restauration à une date choisie |
+| `sillon-backup-server` | **Optionnel, recommandé en production, sur une machine distincte** — §12.10 | `nfs-kernel-server`, `pgbackrest` | Partage NFS restreint par adresse IP, destiné à recevoir les sauvegardes |
+| `sillon-backup-server-survey` | **Optionnel** — §12.10 | `sillon-backup-server`, `mailutils`, `postfix` | Sonde quotidienne vérifiant l'état des sauvegardes, alerte par e-mail via le proxy SMTP interne |
 
 ### 12.3 Comportement d'installation
 
@@ -521,6 +524,7 @@ L'application est distribuée sous forme de paquets Debian indépendants, pour p
 - Une désinstallation complète (`apt purge`) supprime en plus la configuration, mais ne supprime jamais les bases de travail créées par les agents (§4.4) sans confirmation explicite et distincte — la perte de données de la direction ne doit jamais être un effet de bord d'une commande de désinstallation de paquet.
 - Cas particulier de `sillon-tutoriel` (§12.7) : n'ayant par nature aucune donnée de la direction à protéger, sa désinstallation complète supprime intégralement le compte de démonstration, sa base et les documents publiés — comportement volontairement plus radical que le reste du paquet applicatif.
 - Cas particulier de `sillon-demo-sirene` (§12.8) : ne possède ni compte ni base propres (il ajoute une table à la base du compte de démonstration créé par `sillon-tutoriel`) — sa désinstallation complète se limite donc au nettoyage de son répertoire de travail temporaire, la donnée elle-même disparaissant avec celle de `sillon-tutoriel` quel que soit l'ordre de purge entre les deux paquets.
+- Cas particulier de `sillon-backup-client`/`sillon-backup-server` (§12.10) : ni `remove` ni `purge` ne suppriment les sauvegardes déjà déposées sur le partage NFS — seule la configuration locale (montage, export, tâche planifiée) est retirée, même principe que pour les bases de travail des agents ci-dessus.
 
 ### 12.7 Compte de démonstration et formation (`sillon-tutoriel`)
 
@@ -546,6 +550,14 @@ L'application est distribuée sous forme de paquets Debian indépendants, pour p
 - Les trois durées de conservation (résultats de jobs, dépôts temporaires orphelins, journal d'audit) sont modifiables à chaud par un administrateur, par le même mécanisme que les quotas du §11, sans reconstruction de paquet ni redémarrage de service — plutôt que figées dans la configuration système, pour permettre un ajustement a posteriori à la volumétrie réellement observée (§15.2).
 - N'agit que sur des artefacts techniques (fichiers produits par les jobs, entrées du journal d'audit) : ne touche jamais aux bases de travail ni à leurs tables, dont la suppression reste un acte exclusivement volontaire de leur propriétaire (§8.9).
 
+### 12.10 Sauvegarde et restauration des bases de données (`sillon-backup-client` / `sillon-backup-server` / `sillon-backup-server-survey`)
+
+- SILLON n'a pas une base unique mais un catalogue applicatif (`sillon_catalog`) **plus une base physique par agent** (§4.4), alimentées par des imports CSV pouvant atteindre plusieurs centaines de Mo chacune : un dump logique complet quotidien de l'ensemble du cluster (à la `pg_dump`) n'est pas soutenable à cette échelle. La sauvegarde repose donc sur une solution de sauvegarde **physique incrémentale** du cluster PostgreSQL (pgBackRest, distribué nativement par les dépôts Debian officiels — aucun vendoring nécessaire), qui ne recopie que les blocs modifiés depuis la dernière sauvegarde, indépendamment du nombre ou de la taille des bases individuelles.
+- **Politique de sauvegarde** : une sauvegarde complète le premier jour de chaque mois, une sauvegarde incrémentale les autres jours, rétention de 3 mois — une sauvegarde complète et l'ensemble des sauvegardes incrémentales qui en dépendent expirent ensemble, jamais avant qu'une sauvegarde complète plus récente n'existe déjà.
+- Trois paquets séparés, reflétant une architecture à deux machines : `sillon-backup-client` s'installe sur le serveur SILLON (dépend de `sillon-server` et `pgbackrest`, configure le montage automatique du partage NFS distant, l'archivage continu des journaux de transaction PostgreSQL et la tâche planifiée quotidienne) ; `sillon-backup-server` s'installe sur une machine de sauvegarde distincte (dépend de `nfs-kernel-server` et `pgbackrest`, expose un partage NFS restreint par adresse IP au seul serveur SILLON) ; `sillon-backup-server-survey`, optionnel, s'installe sur cette même machine de sauvegarde (dépend de `sillon-backup-server`, `mailutils` et `postfix`) et vérifie quotidiennement, sans avoir besoin de contacter le serveur SILLON, l'état des sauvegardes présentes sur le partage.
+- **Restauration à une date choisie** : l'administrateur indique une date/heure cible, et la solution de sauvegarde détermine elle-même la sauvegarde complète et la chaîne de sauvegardes incrémentales nécessaires jusqu'à cet instant précis, puis rejoue les journaux de transaction archivés jusqu'à la seconde demandée — rien à sélectionner manuellement au-delà de la date. L'ensemble du cluster (catalogue et toutes les bases agents) est ramené à cet état ; le secret de signature des jetons, dupliqué hors base de données (§12.3), est resynchronisé automatiquement à l'issue de la restauration pour éviter toute rupture silencieuse de l'authentification.
+- Alerte par e-mail via le proxy SMTP interne de la direction (même mécanisme que les notifications applicatives, §10) en l'absence de sauvegarde récente, en cas de sauvegarde marquée en erreur, ou en l'absence totale de sauvegarde disponible.
+
 ---
 
 ## 13. Exigences non fonctionnelles
@@ -565,7 +577,7 @@ L'application est distribuée sous forme de paquets Debian indépendants, pour p
 | Phase 1 — MVP | Authentification, import CSV avec qualification des colonnes, base personnelle par agent, onglet Travaux (SQL libre + export CSV), administration basique des comptes | Valider le socle d'usage principal avant d'ajouter la complexité de l'exécution de code |
 | Phase 2 | Partage de bases entre utilisateurs, journal d'audit complet | Ouvrir la collaboration une fois le socle stabilisé |
 | Phase 3 | Dépôt et exécution de scripts Python/R, isolation par conteneurs, file d'attente, notifications mail | Partie la plus sensible en sécurité — traitée après validation des fondations |
-| Phase 4 | Quotas fins par utilisateur, supervision, packaging complet, sauvegardes externalisées | Mise en exploitation pérenne |
+| Phase 4 | Quotas fins par utilisateur, supervision, packaging complet, sauvegardes externalisées (livré, §12.10) | Mise en exploitation pérenne |
 
 ---
 
@@ -588,4 +600,4 @@ L'application est distribuée sous forme de paquets Debian indépendants, pour p
 - Volumétrie réelle attendue par import (pour calibrer précisément les quotas du §11 et le besoin de séparation des volumes de stockage du §7.2, posés ici à dire d'expert).
 - Liste précise des librairies Python/R à inclure dans l'image d'exécution figée.
 - Modalités de contact en cas de dépassement de quota disque récurrent (message applicatif seul, ou remontée à l'administrateur).
-- Aucun mécanisme de sauvegarde n'est porté par l'application (voir §2) : la protection contre la perte de données au niveau du serveur repose entièrement sur la politique de sauvegarde déjà en place au niveau de l'infrastructure d'hébergement de la direction — à confirmer explicitement avant mise en production, pour s'assurer qu'elle couvre bien les volumes de données PostgreSQL.
+- ~~Aucun mécanisme de sauvegarde n'est porté par l'application.~~ Résolu : sauvegarde physique planifiée et restauration à une date choisie, portées par les paquets optionnels `sillon-backup-client`/`sillon-backup-server`/`sillon-backup-server-survey` (§2, §12.10) — reste à la charge de l'infrastructure d'hébergement de la direction : la protection de la machine de sauvegarde elle-même (redondance, localisation distincte du serveur SILLON).
