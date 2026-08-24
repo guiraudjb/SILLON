@@ -1,8 +1,8 @@
 Package: sillon-backup-client
-Version: 0.1.0
+Version: 0.1.1
 Architecture: all
 Maintainer: Administrateur SILLON <admin@sillon.local>
-Depends: sillon-server, pgbackrest, nfs-common
+Depends: sillon-server, pgbackrest, nfs-common, python3, debconf (>= 0.5) | debconf-2.0
 Section: admin
 Priority: optional
 Description: SILLON - Client de sauvegarde NFS (pgBackRest).

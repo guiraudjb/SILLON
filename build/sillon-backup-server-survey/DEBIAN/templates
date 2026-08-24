@@ -1,0 +1,16 @@
+Template: sillon-backup-server-survey/admin_email
+Type: string
+Default: equipe.support@example.gouv.fr
+Description: Adresse(s) e-mail des administrateurs a alerter :
+ Indiquez l'adresse, ou les adresses separees par des virgules (sans
+ espace), qui recevront le bilan quotidien et les alertes de sauvegarde
+ (sauvegarde manquante, en retard ou en erreur).
+
+Template: sillon-backup-server-survey/smtp_relay
+Type: string
+Description: Serveur de messagerie sortant (relais SMTP), optionnel :
+ Indiquez l'adresse IP ou le nom DNS du relais SMTP interne a utiliser
+ pour l'envoi des e-mails d'alerte.
+ .
+ Laissez vide pour un envoi direct (distribution DNS classique) depuis
+ cette machine.

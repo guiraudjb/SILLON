@@ -9,4 +9,10 @@ if [ "$1" = "remove" ] || [ "$1" = "purge" ]; then
     # services eventuels du serveur (meme choix que TRACE).
 fi
 
+if [ "$1" = "purge" ] && [ -e /usr/share/debconf/confmodule ]; then
+    # shellcheck disable=SC1091
+    . /usr/share/debconf/confmodule
+    db_purge
+fi
+
 exit 0

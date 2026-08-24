@@ -1,18 +1,42 @@
 #!/bin/bash
 set -e
 
+# Doit etre la toute premiere action du script, avant le moindre echo : tant
+# que confmodule n'a pas redirige la sortie standard (exec 1>&2 en interne),
+# fd1 EST le tube protocolaire lu par le frontend debconf quand ce postinst
+# est invoque comme processus confmodule - tout texte ecrit sur stdout avant
+# cette ligne est alors interprete comme une commande du protocole debconf
+# et le fait echouer avec "syntaxerror" (code de sortie 20). Constate en
+# conditions reelles sur la VM de test : un "apt install" avec ce echo place
+# avant l'appel a confmodule faisait systematiquement echouer ce postinst.
+# shellcheck disable=SC1091
+. /usr/share/debconf/confmodule
+
 echo "=== Installation de SILLON (sillon-backup-server) ==="
 
 CONF_ENV="/etc/sillon-backup/server.env"
 SHARE_DIR="/var/nfs/backupSILLON"
 PGBACKREST_CONF="/etc/pgbackrest.conf"
 
-if [ ! -f "$CONF_ENV" ]; then
-    echo "ERREUR : $CONF_ENV introuvable (devrait etre livre par le paquet)." >&2
-    exit 1
-fi
-# shellcheck disable=SC1090
-source "$CONF_ENV"
+# Reponse recueillie par DEBIAN/config (menu interactif debconf) - modifiable
+# ensuite via "sudo dpkg-reconfigure sillon-backup-server" sans reinstaller.
+db_get sillon-backup-server/client_ip
+CLIENT_IP="$RET"
+
+mkdir -p "$(dirname "$CONF_ENV")"
+cat << EOF > "$CONF_ENV"
+# Configuration du serveur de sauvegarde SILLON (sillon-backup-server).
+#
+# CLIENT_IP : adresse IP du serveur SILLON (le seul autorise a deposer
+# des sauvegardes sur ce partage NFS).
+#
+# Genere par le menu interactif d'installation - pour modifier :
+#   sudo dpkg-reconfigure sillon-backup-server
+CLIENT_IP="${CLIENT_IP}"
+EOF
+chmod 644 "$CONF_ENV"
+
+db_stop
 
 mkdir -p "$SHARE_DIR"
 chown nobody:nogroup "$SHARE_DIR"

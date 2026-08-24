@@ -1,0 +1,10 @@
+Template: sillon-backup-server/client_ip
+Type: string
+Description: Adresse IP du serveur SILLON a sauvegarder :
+ Indiquez l'adresse IP du serveur SILLON (paquet sillon-backup-client)
+ qui sera seul autorise a deposer ses sauvegardes pgBackRest sur le
+ partage NFS de cette machine.
+ .
+ Laissez vide pour configurer ce parametre plus tard : le partage NFS
+ restera alors suspendu (non exporte) tant qu'aucune adresse n'est
+ renseignee.

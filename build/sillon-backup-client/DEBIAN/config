@@ -1,0 +1,23 @@
+#!/bin/sh
+set -e
+
+# shellcheck disable=SC1091
+. /usr/share/debconf/confmodule
+
+# Reprend l'adresse deja presente (installation anterieure a ce menu, ou
+# reconfiguration) comme valeur par defaut, plutot que de laisser
+# dpkg-reconfigure/une mise a jour ecraser silencieusement un site deja
+# configure. NFS_SHARE est de la forme "IP:/chemin" - on n'en reprend que
+# la partie adresse, le chemin distant etant fixe.
+CONF_ENV="/etc/sillon-backup/client.env"
+if [ -f "$CONF_ENV" ]; then
+    VALEUR_ACTUELLE=$(sed -n 's/^NFS_SHARE="\{0,1\}\([^:"]*\):[^"]*"\{0,1\}[[:space:]]*$/\1/p' "$CONF_ENV" | head -n1)
+    if [ -n "$VALEUR_ACTUELLE" ]; then
+        db_set sillon-backup-client/server_ip "$VALEUR_ACTUELLE"
+    fi
+fi
+
+db_input medium sillon-backup-client/server_ip || true
+db_go
+
+exit 0

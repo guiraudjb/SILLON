@@ -1,16 +1,48 @@
 #!/bin/bash
 set -e
 
+# Doit etre la toute premiere action du script, avant le moindre echo : tant
+# que confmodule n'a pas redirige la sortie standard (exec 1>&2 en interne),
+# fd1 EST le tube protocolaire lu par le frontend debconf quand ce postinst
+# est invoque comme processus confmodule - tout texte ecrit sur stdout avant
+# cette ligne est alors interprete comme une commande du protocole debconf
+# et le fait echouer avec "syntaxerror" (code de sortie 20). Constate en
+# conditions reelles sur la VM de test : un "apt install" avec ce echo place
+# avant l'appel a confmodule faisait systematiquement echouer ce postinst.
+# shellcheck disable=SC1091
+. /usr/share/debconf/confmodule
+
 echo "=== Installation de SILLON (sillon-backup-server-survey) ==="
 
 CONF_ENV="/etc/sillon-backup/survey.env"
 
-if [ ! -f "$CONF_ENV" ]; then
-    echo "ERREUR : $CONF_ENV introuvable (devrait etre livre par le paquet)." >&2
-    exit 1
-fi
-# shellcheck disable=SC1090
-source "$CONF_ENV"
+# Reponses recueillies par DEBIAN/config (menus interactifs debconf) -
+# modifiables ensuite via "sudo dpkg-reconfigure sillon-backup-server-survey"
+# sans reinstaller.
+db_get sillon-backup-server-survey/admin_email
+ADMIN_EMAIL="$RET"
+db_get sillon-backup-server-survey/smtp_relay
+SMTP_RELAY="$RET"
+
+mkdir -p "$(dirname "$CONF_ENV")"
+cat << EOF > "$CONF_ENV"
+# Configuration de la sonde de surveillance des sauvegardes SILLON.
+#
+# ADMIN_EMAIL : destinataire(s) du bilan quotidien et des alertes.
+# Plusieurs adresses : separees par des virgules, sans espace.
+# Pris en compte immediatement (relu par la sonde a chaque execution).
+ADMIN_EMAIL="${ADMIN_EMAIL}"
+#
+# SMTP_RELAY : proxy mail interne (IP ou nom DNS). Laisser vide pour un
+# envoi direct par cette machine.
+#
+# Genere par le menu interactif d'installation - pour modifier :
+#   sudo dpkg-reconfigure sillon-backup-server-survey
+SMTP_RELAY="${SMTP_RELAY}"
+EOF
+chmod 644 "$CONF_ENV"
+
+db_stop
 
 if [ -n "$SMTP_RELAY" ]; then
     echo "Configuration du relais SMTP Postfix vers : $SMTP_RELAY"

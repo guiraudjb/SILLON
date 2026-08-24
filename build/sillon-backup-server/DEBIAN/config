@@ -1,0 +1,22 @@
+#!/bin/sh
+set -e
+
+# shellcheck disable=SC1091
+. /usr/share/debconf/confmodule
+
+# Reprend une valeur deja presente (mise a jour depuis une installation
+# anterieure a l'introduction de ce menu, ou reconfiguration) comme valeur
+# par defaut du menu, plutot que de laisser dpkg-reconfigure/une mise a
+# jour ecraser silencieusement un site deja configure par une valeur vide.
+CONF_ENV="/etc/sillon-backup/server.env"
+if [ -f "$CONF_ENV" ]; then
+    VALEUR_ACTUELLE=$(sed -n 's/^CLIENT_IP="\{0,1\}\([^"]*\)"\{0,1\}[[:space:]]*$/\1/p' "$CONF_ENV" | head -n1)
+    if [ -n "$VALEUR_ACTUELLE" ]; then
+        db_set sillon-backup-server/client_ip "$VALEUR_ACTUELLE"
+    fi
+fi
+
+db_input medium sillon-backup-server/client_ip || true
+db_go
+
+exit 0

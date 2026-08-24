@@ -300,30 +300,41 @@ La base de SILLON n'est pas une base unique comme la plupart des applications : 
 
 **Politique appliquée** : une sauvegarde **complète le 1er de chaque mois**, une **incrémentale les autres jours** (2 h du matin), **rétention de 3 mois** (une sauvegarde complète et toutes les incrémentales qui en dépendent expirent ensemble 90 jours après sa prise).
 
-**Installation** — sur le serveur SILLON :
+**Installation** — un menu interactif (debconf) demande l'unique paramètre requis par chaque paquet ; `dpkg -i` seul (hors `apt`) n'affiche pas toujours ce menu correctement si les dépendances manquent, préférer `apt install ./paquet.deb` :
+
+Sur le serveur SILLON :
 
 ```bash
-sudo dpkg -i sillon-backup-client_0.1.0_all.deb
-```
-
-Éditer `/etc/sillon-backup/client.env` (adresse du partage NFS distant) puis relancer l'installation pour appliquer :
-
-```bash
-sudo apt-get install --reinstall sillon-backup-client
+sudo apt install ./sillon-backup-client_0.1.1_all.deb
+# → demande l'adresse IP (ou le nom DNS) du serveur de sauvegarde
 ```
 
 Sur la machine de sauvegarde (distincte, recommandé) :
 
 ```bash
-sudo dpkg -i sillon-backup-server_0.1.0_all.deb
-# éditer /etc/sillon-backup/server.env (adresse IP du serveur SILLON)
-sudo apt-get install --reinstall sillon-backup-server
+sudo apt install ./sillon-backup-server_0.1.1_all.deb
+# → demande l'adresse IP du serveur SILLON à autoriser à déposer ses sauvegardes
 
-sudo dpkg -i sillon-backup-server-survey_0.1.0_all.deb
-# éditer /etc/sillon-backup/survey.env (destinataires, relais SMTP interne)
+sudo apt install ./sillon-backup-server-survey_0.1.1_all.deb
+# → demande les adresses e-mail des administrateurs, puis le relais SMTP (optionnel)
 ```
 
-`ADMIN_EMAIL` (destinataires des alertes) est relu à chaque exécution de la sonde, sans réinstallation nécessaire. `SMTP_RELAY` (relais interne), comme `NFS_SHARE`/`CLIENT_IP` ci-dessus, n'est appliqué qu'à l'installation — toute modification exige `apt-get install --reinstall`.
+Pour changer un paramètre après coup, sans réinstaller le paquet :
+
+```bash
+sudo dpkg-reconfigure sillon-backup-client         # adresse du serveur de sauvegarde
+sudo dpkg-reconfigure sillon-backup-server         # adresse IP autorisée à déposer
+sudo dpkg-reconfigure sillon-backup-server-survey  # destinataires + relais SMTP
+```
+
+`ADMIN_EMAIL` (destinataires des alertes) est de toute façon relu à chaque exécution de la sonde : modifier directement `/etc/sillon-backup/survey.env` fonctionne aussi, sans passer par `dpkg-reconfigure`. `SMTP_RELAY`, comme `NFS_SHARE`/`CLIENT_IP` ci-dessus, n'est en revanche appliqué qu'à l'installation/reconfiguration.
+
+`sillon-backup-client` installe aussi deux commandes directement dans le `PATH` (`/usr/sbin/sillon-backup` et `/usr/sbin/sillon-restore`, liens symboliques vers les scripts sous `/opt/sillon-backup/`), pour un déclenchement manuel ponctuel sans connaître le chemin exact :
+
+```bash
+sudo sillon-backup    # force une sauvegarde immédiate (hors planification quotidienne)
+sudo sillon-restore   # outil de restauration interactif, voir plus bas
+```
 
 **Vérification** :
 
@@ -331,13 +342,20 @@ sudo dpkg -i sillon-backup-server-survey_0.1.0_all.deb
 sudo -u postgres pgbackrest --stanza=sillon info
 ```
 
-**Restauration à une date choisie** — sur le serveur SILLON, en root :
+**Restauration à une sauvegarde choisie** — sur le serveur SILLON, en root :
 
 ```bash
-sudo /opt/sillon-backup/sillon_restore.sh
+sudo sillon-restore
 ```
 
-L'outil affiche les sauvegardes disponibles, demande une date/heure cible (« AAAA-MM-JJ HH:MM:SS »), puis restaure **automatiquement** la sauvegarde complète et la chaîne d'incrémentales nécessaires jusqu'à cet instant précis (pgBackRest détermine seul la chaîne à rejouer — rien à choisir manuellement au-delà de la date). Toute l'application (catalogue **et** l'ensemble des bases agents) est ramenée à cet état ; les services SILLON sont arrêtés puis relancés automatiquement par l'outil, secret JWT resynchronisé compris.
+L'outil affiche la liste numérotée des sauvegardes disponibles (**de la plus récente à la plus ancienne**, type, date de fin, état — une ligne en erreur est signalée en rouge) et demande simplement le **numéro** de la ligne à restaurer, plutôt qu'une date/heure à formater soi-même. pgBackRest résout alors seul la chaîne complète nécessaire (la sauvegarde complète dont dépend la ligne choisie, puis chaque incrémentale intermédiaire) et restaure exactement ce point — rien d'autre à choisir. Toute l'application (catalogue **et** l'ensemble des bases agents) est ramenée à cet état.
+
+**Aucune limite de durée n'est imposée**, à aucune étape : ni la copie des fichiers (dont la progression fichier par fichier est affichée), ni le rejeu des journaux de transaction ensuite (dont l'avancement — dernier journal rejoué, durée écoulée — est affiché toutes les 5 secondes). Une restauration volumineuse peut légitimement prendre plusieurs heures ; l'outil ne l'interrompt jamais de lui-même, il attend la fin réelle.
+
+Une fois la récupération terminée, les secrets applicatifs sont resynchronisés avant le redémarrage des services SILLON :
+
+- le **secret JWT** est repris depuis la base restaurée vers `/etc/sillon/secrets.env`/`/etc/sillon-api.conf` (PostgREST doit vérifier les jetons avec le même secret que celui utilisé par `login()` dans la base restaurée) ;
+- les **mots de passe des rôles `sillon_service`/`sillon_orchestrateur`** sont réimposés dans l'autre sens, depuis `/etc/sillon/secrets.env` de cette machine vers les rôles PostgreSQL fraîchement restaurés (`ALTER ROLE ... PASSWORD`) — indispensable en particulier lors d'une restauration sur une **installation neuve** (reconstruction après sinistre), où `sillon-server` a généré à l'installation ses propres mots de passe aléatoires, différents de ceux de la sauvegarde d'origine restaurée par-dessus. Sans cette étape, PostgREST et l'orchestrateur échouent silencieusement à s'authentifier auprès de PostgreSQL et l'interface web reste inaccessible même après une restauration par ailleurs réussie.
 
 **Suivi** : la sonde envoie chaque jour à 8 h un bilan par e-mail — statut `[OK]` si une sauvegarde récente et saine existe, `[AVERTISSEMENT]` si la dernière sauvegarde date de plus de 30 h, `[ALERTE CRITIQUE]` si aucune sauvegarde n'existe ou qu'une sauvegarde est en erreur.
 

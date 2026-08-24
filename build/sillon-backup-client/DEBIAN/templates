@@ -1,0 +1,10 @@
+Template: sillon-backup-client/server_ip
+Type: string
+Description: Adresse IP (ou nom DNS) du serveur de sauvegarde SILLON :
+ Indiquez l'adresse du serveur de sauvegarde distant (paquet
+ sillon-backup-server) sur lequel seront deposees, via NFS, les
+ sauvegardes physiques pgBackRest de ce serveur SILLON (sauvegarde
+ complete mensuelle, incrementale quotidienne).
+ .
+ Ce serveur doit deja etre configure pour accepter les depots provenant
+ de l'adresse IP de CETTE machine (voir sillon-backup-server).

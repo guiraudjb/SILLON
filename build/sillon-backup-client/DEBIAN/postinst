@@ -1,6 +1,17 @@
 #!/bin/bash
 set -e
 
+# Doit etre la toute premiere action du script, avant le moindre echo : tant
+# que confmodule n'a pas redirige la sortie standard (exec 1>&2 en interne),
+# fd1 EST le tube protocolaire lu par le frontend debconf quand ce postinst
+# est invoque comme processus confmodule - tout texte ecrit sur stdout avant
+# cette ligne est alors interprete comme une commande du protocole debconf
+# et le fait echouer avec "syntaxerror" (code de sortie 20). Constate en
+# conditions reelles sur la VM de test : un "apt install" avec ce echo place
+# avant l'appel a confmodule faisait systematiquement echouer ce postinst.
+# shellcheck disable=SC1091
+. /usr/share/debconf/confmodule
+
 echo "=== Installation de SILLON (sillon-backup-client) ==="
 
 CONF_ENV="/etc/sillon-backup/client.env"
@@ -8,20 +19,38 @@ MOUNT_POINT="/mnt/savesillon"
 FSTAB="/etc/fstab"
 PGBACKREST_CONF="/etc/pgbackrest.conf"
 STANZA="sillon"
+SHARE_DIR_DISTANT="/var/nfs/backupSILLON"
 
-if [ ! -f "$CONF_ENV" ]; then
-    echo "ERREUR : $CONF_ENV introuvable (devrait etre livre par le paquet)." >&2
+# Reponse recueillie par DEBIAN/config (menu interactif debconf) - modifiable
+# ensuite via "sudo dpkg-reconfigure sillon-backup-client" sans reinstaller.
+# Le chemin distant est fixe (SHARE_DIR de sillon-backup-server) : seule
+# l'adresse du serveur varie d'un site a l'autre.
+db_get sillon-backup-client/server_ip
+SERVER_IP="$RET"
+
+if [ -z "$SERVER_IP" ]; then
+    echo "ERREUR : aucune adresse de serveur de sauvegarde renseignee." >&2
     exit 1
 fi
-# shellcheck disable=SC1090
-source "$CONF_ENV"
+NFS_SHARE="${SERVER_IP}:${SHARE_DIR_DISTANT}"
 
-if [ -z "$NFS_SHARE" ]; then
-    echo "ERREUR : NFS_SHARE non renseigne dans $CONF_ENV." >&2
-    exit 1
-fi
+mkdir -p "$(dirname "$CONF_ENV")"
+cat << EOF > "$CONF_ENV"
+# Configuration du client de sauvegarde SILLON (sillon-backup-client).
+#
+# NFS_SHARE : partage NFS du serveur de sauvegarde (sillon-backup-server).
+# Format attendu : IP_SERVEUR:/chemin/du/partage
+#
+# Genere par le menu interactif d'installation - pour modifier :
+#   sudo dpkg-reconfigure sillon-backup-client
+NFS_SHARE="${NFS_SHARE}"
+EOF
+chmod 644 "$CONF_ENV"
+
+db_stop
 
 echo "Cible NFS : $NFS_SHARE"
+
 
 # =====================================================================
 # 1. POINT DE MONTAGE ET MONTAGE AUTOMATIQUE

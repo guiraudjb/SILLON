@@ -1,0 +1,27 @@
+#!/bin/sh
+set -e
+
+# shellcheck disable=SC1091
+. /usr/share/debconf/confmodule
+
+# Reprend les valeurs deja presentes (installation anterieure a ce menu, ou
+# reconfiguration) comme valeurs par defaut, plutot que de laisser
+# dpkg-reconfigure/une mise a jour ecraser silencieusement un site deja
+# configure.
+CONF_ENV="/etc/sillon-backup/survey.env"
+if [ -f "$CONF_ENV" ]; then
+    EMAIL_ACTUEL=$(sed -n 's/^ADMIN_EMAIL="\{0,1\}\([^"]*\)"\{0,1\}[[:space:]]*$/\1/p' "$CONF_ENV" | head -n1)
+    if [ -n "$EMAIL_ACTUEL" ]; then
+        db_set sillon-backup-server-survey/admin_email "$EMAIL_ACTUEL"
+    fi
+    RELAIS_ACTUEL=$(sed -n 's/^SMTP_RELAY="\{0,1\}\([^"]*\)"\{0,1\}[[:space:]]*$/\1/p' "$CONF_ENV" | head -n1)
+    if [ -n "$RELAIS_ACTUEL" ]; then
+        db_set sillon-backup-server-survey/smtp_relay "$RELAIS_ACTUEL"
+    fi
+fi
+
+db_input medium sillon-backup-server-survey/admin_email || true
+db_input medium sillon-backup-server-survey/smtp_relay || true
+db_go
+
+exit 0

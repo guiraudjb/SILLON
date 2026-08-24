@@ -91,7 +91,7 @@ for paquet in "${PAQUETS[@]}"; do
     # "git clone" mal configuré ou une extraction d'archive peut perdre ce
     # bit - on le réaffirme systématiquement plutôt que de découvrir
     # l'échec seulement au moment de l'installation sur la cible.
-    for script in preinst postinst prerm postrm; do
+    for script in preinst postinst prerm postrm config; do
         if [ -f "$paquet/DEBIAN/$script" ]; then
             chmod 755 "$paquet/DEBIAN/$script"
         fi
