@@ -20,8 +20,13 @@ if [ -f "$CONF_ENV" ]; then
     fi
 fi
 
-db_input medium sillon-backup-server-survey/admin_email || true
-db_input medium sillon-backup-server-survey/smtp_relay || true
+# Priorite "high" : correspond au seuil debconf par defaut sur Debian
+# (debconf/priority=high) - une priorite "medium" laisserait ces
+# questions masquees silencieusement lors d'un "apt install" standard,
+# au lieu d'etre systematiquement posees (constate en verifiant le
+# seuil reel sur une machine Debian, plutot que suppose).
+db_input high sillon-backup-server-survey/admin_email || true
+db_input high sillon-backup-server-survey/smtp_relay || true
 db_go
 
 exit 0

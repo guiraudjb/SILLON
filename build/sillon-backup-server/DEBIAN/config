@@ -16,7 +16,12 @@ if [ -f "$CONF_ENV" ]; then
     fi
 fi
 
-db_input medium sillon-backup-server/client_ip || true
+# Priorite "high" : correspond au seuil debconf par defaut sur Debian
+# (debconf/priority=high) - une priorite "medium" laisserait cette
+# question masquee silencieusement lors d'un "apt install" standard,
+# au lieu d'etre systematiquement posee (constate en verifiant le
+# seuil reel sur une machine Debian, plutot que suppose).
+db_input high sillon-backup-server/client_ip || true
 db_go
 
 exit 0

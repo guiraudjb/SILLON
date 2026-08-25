@@ -1,5 +1,5 @@
 Package: sillon-backup-server
-Version: 0.1.1
+Version: 0.1.2
 Architecture: all
 Maintainer: Administrateur SILLON <admin@sillon.local>
 Depends: nfs-kernel-server, pgbackrest, debconf (>= 0.5) | debconf-2.0

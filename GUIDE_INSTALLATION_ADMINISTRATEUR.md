@@ -305,17 +305,17 @@ La base de SILLON n'est pas une base unique comme la plupart des applications : 
 Sur le serveur SILLON :
 
 ```bash
-sudo apt install ./sillon-backup-client_0.1.1_all.deb
+sudo apt install ./sillon-backup-client_0.1.2_all.deb
 # → demande l'adresse IP (ou le nom DNS) du serveur de sauvegarde
 ```
 
 Sur la machine de sauvegarde (distincte, recommandé) :
 
 ```bash
-sudo apt install ./sillon-backup-server_0.1.1_all.deb
+sudo apt install ./sillon-backup-server_0.1.2_all.deb
 # → demande l'adresse IP du serveur SILLON à autoriser à déposer ses sauvegardes
 
-sudo apt install ./sillon-backup-server-survey_0.1.1_all.deb
+sudo apt install ./sillon-backup-server-survey_0.1.2_all.deb
 # → demande les adresses e-mail des administrateurs, puis le relais SMTP (optionnel)
 ```
 

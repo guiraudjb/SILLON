@@ -4,7 +4,7 @@
 
 | Champ | Valeur |
 |---|---|
-| Date | 22 août 2026 |
+| Date | 25 août 2026 |
 | Périmètre | Les 10 paquets `.deb` de SILLON (`build/build.sh`), leur fermeture de dépendances Debian complète, et les composants vendorisés hors `dpkg` |
 | Méthode | Dépendances directes relevées dans `DEBIAN/control` et le `Dockerfile` de l'image d'exécution ; fermeture transitive et versions résolues **directement depuis la VM de test SILLON réelle** (`192.168.122.114`, Debian 13/Trixie) pour l'univers hôte et l'univers image d'exécution. Exception : l'univers de la machine de sauvegarde (`sillon-backup-server`/`sillon-backup-server-survey`, machine physiquement distincte, non disponible pour audit direct) est résolu par fermeture théorique de dépendances Debian (`apt-cache depends --recurse`) plutôt que par observation réelle — voir §2 et §12 |
 | Format | Ce document (synthèse de lecture) + `sbom/sillon-sbom-cyclonedx.json` (référence machine-lisible, CycloneDX 1.6, 731 composants, validée sans erreur contre le schéma officiel) |
@@ -24,6 +24,7 @@
 | 7 | **Régression détectée avant tout impact sur la cible** : la reconstruction 0.1.1 chargeait sans erreur sur la VM (`podman load` silencieux) mais tout script échouait aussitôt, journal vide — Docker BuildKit enveloppe par défaut l'image dans un index de provenance/attestation que `podman load` ne sait pas déplier. Corrigé en 0.1.2 (`docker build --provenance=false --sbom=false`), `build/build.sh` mis à jour pour ne plus jamais reproduire cette régression, exécution réelle vérifiée sur la VM (job `script_python` abouti) — voir §7, constat 1 |
 | 8 | **20 août 2026** — Ce document, jusqu'ici distribué à part (racine du dépôt, jamais embarqué dans un `.deb`), est désormais aussi publié en PDF depuis `sillon-server` (`build/generer_pdf_nomenclature.py` génère directement dans `Documentation/`), exposé dans la modale « À propos » de l'application juste sous le Guide Administrateur — accessible à tout compte connecté. La copie à la racine du dépôt est conservée pour une remise directe à un auditeur, hors installation de l'application. |
 | 9 | **22 août 2026** — Ajout de `sillon-purge` (déjà en production depuis le 20 août, jusqu'ici omis de cette nomenclature — aucune dépendance Debian nouvelle) et des trois paquets `sillon-backup-client`/`sillon-backup-server`/`sillon-backup-server-survey` (sauvegarde pgBackRest, voir cahier des charges §12.10). Univers hôte complété (+6 paquets : `pgbackrest`, `nfs-common` et leurs dépendances) et vérifié en conditions réelles sur la VM de test après installation réelle (`dpkg-query -W`/journal `dpkg.log`). Nouvel univers « machine de sauvegarde » (131 paquets, `sillon-backup-server`/`sillon-backup-server-survey`) documenté par fermeture théorique de dépendances, faute d'une seconde machine physique disponible pour audit direct — limite assumée, voir §12. Versions de `sillon-server` (0.1.29 → 0.1.34) et `sillon-tutoriel` (0.1.0 → 0.2.0) corrigées au passage (constatées périmées ; pas de reprise complète des 573 paquets Debian déjà résolus le 19 août, hors périmètre de cette mise à jour). |
+| 10 | **25 août 2026** — `sillon-backup-client`/`sillon-backup-server`/`sillon-backup-server-survey` portés de 0.1.0 à **0.1.2** (numéros et empreintes SHA-256 mis à jour ci-dessous ; le 0.1.1 intermédiaire n'avait pas encore été repris dans cette nomenclature) suite à la correction d'un bug bloquant les menus interactifs debconf : les questions IP serveur/client, e-mail admin et relais SMTP étaient posées en priorité `medium`, sous le seuil par défaut de Debian (`high`) — elles étaient donc masquées silencieusement à l'installation au lieu d'être posées systématiquement, corrigé en `high`. Aucune dépendance Debian nouvelle, fermeture de dépendances des deux univers inchangée ; **ces trois paquets n'ont pas été réinstallés sur la VM de test depuis ce correctif** — la phrase ci-dessous (§5) reflète encore leur état au 22 août (`dpkg -l`), pas la version 0.1.2. |
 
 ---
 
@@ -81,11 +82,11 @@ Les 10 paquets SILLON dépendent les uns des autres en chaîne, mais traversent 
 | `sillon-tutoriel` | 0.2.0 | all | python3 | sillon-server, sillon-orchestrateur, sillon-worker, sillon-image-execution | — |
 | `sillon-demo-sirene` | 0.1.4 | all | python3 | sillon-tutoriel | — |
 | `sillon-purge` | 0.1.0 | all | *(aucune — s'appuie sur `sudo`/`postgresql-17` déjà requis par `sillon-server`)* | sillon-server | — |
-| `sillon-backup-client` | 0.1.0 | all | pgbackrest, nfs-common | sillon-server | — |
-| `sillon-backup-server` | 0.1.0 | all | nfs-kernel-server, pgbackrest | *(machine distincte, aucune dépendance à un autre paquet SILLON)* | — |
-| `sillon-backup-server-survey` | 0.1.0 | all | mailutils, postfix | sillon-backup-server | — |
+| `sillon-backup-client` | 0.1.2 | all | pgbackrest, nfs-common | sillon-server | — |
+| `sillon-backup-server` | 0.1.2 | all | nfs-kernel-server, pgbackrest | *(machine distincte, aucune dépendance à un autre paquet SILLON)* | — |
+| `sillon-backup-server-survey` | 0.1.2 | all | mailutils, postfix | sillon-backup-server | — |
 
-Les 7 premiers paquets sont installés sur la VM de test SILLON (`192.168.122.114`) avec exactement ces versions (`dpkg -l`, 22 août 2026) — `sillon-server` a été mis à niveau de 0.1.29 (19 août) vers **0.1.34** et `sillon-tutoriel` de 0.1.0 vers **0.2.0** au fil d'évolutions applicatives distinctes de ce document, versions corrigées ici en cette occasion. `sillon-demo-sirene` n'y est pas installé (paquet optionnel, voir §12). `sillon-backup-client` a également été installé et vérifié en conditions réelles sur cette même VM (montage NFS, sauvegarde complète/incrémentale, restauration à une date choisie — voir cahier des charges §12.10) ; `sillon-backup-server`/`sillon-backup-server-survey` ont été vérifiés sur cette même VM utilisée temporairement comme partage NFS bouclé (faute d'une seconde machine physique), voir §12 pour la limite que cela implique sur la résolution de leur univers Debian propre.
+Les 7 premiers paquets sont installés sur la VM de test SILLON (`192.168.122.114`) avec exactement ces versions (`dpkg -l`, 22 août 2026) — `sillon-server` a été mis à niveau de 0.1.29 (19 août) vers **0.1.34** et `sillon-tutoriel` de 0.1.0 vers **0.2.0** au fil d'évolutions applicatives distinctes de ce document, versions corrigées ici en cette occasion. `sillon-demo-sirene` n'y est pas installé (paquet optionnel, voir §12). `sillon-backup-client` a également été installé et vérifié en conditions réelles sur cette même VM (montage NFS, sauvegarde complète/incrémentale, restauration à une date choisie — voir cahier des charges §12.10) ; `sillon-backup-server`/`sillon-backup-server-survey` ont été vérifiés sur cette même VM utilisée temporairement comme partage NFS bouclé (faute d'une seconde machine physique), voir §12 pour la limite que cela implique sur la résolution de leur univers Debian propre. **Exception** : cette vérification `dpkg -l` du 22 août portait sur la version `0.1.0` des trois paquets `sillon-backup-*` ; leur version **0.1.2** (colonne ci-dessus, correctif de menus debconf du 25 août — voir journal des révisions, entrée 10) n'a pas encore été réinstallée ni revérifiée sur cette VM.
 
 **Empreintes SHA-256 des `.deb` construits** (traçabilité de provenance) :
 
@@ -98,9 +99,9 @@ Les 7 premiers paquets sont installés sur la VM de test SILLON (`192.168.122.11
 | `sillon-tutoriel_0.2.0_all.deb` | `a55cadb49fae2fbb89f85899acb2fe8c1f73ea6ccbaff309928bae4ff8718a0b` |
 | `sillon-demo-sirene_0.1.4_all.deb` | `f0fabc42fa3f9d7949cde4f4f87ed942bbda421f73ff0c8a35059533d01055b4` |
 | `sillon-purge_0.1.0_all.deb` | `40179feafaf27f9e6b5fcfe6edde8ef84071074805def6d47e69ad8c9d1beee0` |
-| `sillon-backup-client_0.1.0_all.deb` | `090c3bfdd410863eb1b9e1bdebca00d8e07e96ea5f83543cd0978f638805ce25` |
-| `sillon-backup-server_0.1.0_all.deb` | `b61f2023b2421ed5f4e14fc9451455b9e11658dc99778c95f20d4bc93eab9448` |
-| `sillon-backup-server-survey_0.1.0_all.deb` | `fec78b71655dacdda35c8359ca9494e03c188866ef9569e41a4976a8569d885b` |
+| `sillon-backup-client_0.1.2_all.deb` | `f4669003294bc47265cf80a954a8882d37dc6079c03f2bd612a6d1db650f0ae4` |
+| `sillon-backup-server_0.1.2_all.deb` | `996b806da36ea438ab6d138276a344e863be6b6db66fc1c5a8c1831559b92ace` |
+| `sillon-backup-server-survey_0.1.2_all.deb` | `27329dc246c0ec13c28f40ce72a78c8e63d18c31ed084d6c2173c50b94530e73` |
 
 ## 6. Composants vendorisés hors `dpkg`
 

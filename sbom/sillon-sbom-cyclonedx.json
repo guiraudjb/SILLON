@@ -2,9 +2,9 @@
   "bomFormat": "CycloneDX",
   "specVersion": "1.6",
   "serialNumber": "urn:uuid:8b56adab-02f4-4542-a041-19de6bc2d07f",
-  "version": 2,
+  "version": 3,
   "metadata": {
-    "timestamp": "2026-08-22T07:00:00Z",
+    "timestamp": "2026-08-25T00:00:00Z",
     "lifecycles": [
       {
         "phase": "build"
@@ -29,7 +29,7 @@
     "properties": [
       {
         "name": "sillon:methodology",
-        "value": "Depends declares releves depuis DEBIAN/control de chaque .deb. Fermeture transitive et versions resolues le 2026-08-19 directement depuis la VM de test SILLON reelle (192.168.122.114, Debian 13/Trixie) : dpkg-query -W pour l'univers hote (195 paquets), extraction du fichier var/lib/dpkg/status de la couche image du Dockerfile (podman save) pour l'univers image d'execution (378 paquets, sillon-image-execution:latest chargee sur cette VM). Mise a jour du 22 aout 2026 : ajout de sillon-purge (aucune nouvelle dependance Debian) et des paquets sillon-backup-client/server/server-survey (pgBackRest) - univers hote complete via dpkg-query -W reel sur la VM de test apres installation reelle ; univers 'machine de sauvegarde' (sillon-backup-server/server-survey, machine distincte non disponible pour verification directe) resolu par fermeture theorique de dependances Debian (apt-cache depends --recurse), non confirme sur une machine physique separee - limite documentee au §2/§7. Versions de sillon-server (0.1.29->0.1.34) et sillon-tutoriel (0.1.0->0.2.0) corrigees a cette occasion (constatees perimees, sans reprise complete des 195+378 paquets deja resolus le 19 aout, hors perimetre de cette mise a jour)."
+        "value": "Depends declares releves depuis DEBIAN/control de chaque .deb. Fermeture transitive et versions resolues le 2026-08-19 directement depuis la VM de test SILLON reelle (192.168.122.114, Debian 13/Trixie) : dpkg-query -W pour l'univers hote (195 paquets), extraction du fichier var/lib/dpkg/status de la couche image du Dockerfile (podman save) pour l'univers image d'execution (378 paquets, sillon-image-execution:latest chargee sur cette VM). Mise a jour du 22 aout 2026 : ajout de sillon-purge (aucune nouvelle dependance Debian) et des paquets sillon-backup-client/server/server-survey (pgBackRest) - univers hote complete via dpkg-query -W reel sur la VM de test apres installation reelle ; univers 'machine de sauvegarde' (sillon-backup-server/server-survey, machine distincte non disponible pour verification directe) resolu par fermeture theorique de dependances Debian (apt-cache depends --recurse), non confirme sur une machine physique separee - limite documentee au §2/§7. Versions de sillon-server (0.1.29->0.1.34) et sillon-tutoriel (0.1.0->0.2.0) corrigees a cette occasion (constatees perimees, sans reprise complete des 195+378 paquets deja resolus le 19 aout, hors perimetre de cette mise a jour). Mise a jour du 25 aout 2026 : sillon-backup-client/server/server-survey portes de 0.1.0 a 0.1.2 (versions .deb reellement construites - le 0.1.1 intermediaire n'a jamais ete publie en nomenclature) suite a la correction d'un bug des menus debconf (priorite 'medium' des questions IP/e-mail/relais SMTP, sous le seuil par defaut 'high' de Debian, qui les masquait silencieusement a l'installation au lieu de les poser systematiquement - corrige en 'high'). Aucune nouvelle dependance Debian introduite ; fermeture de dependances des deux univers inchangee et non reauditee sur VM a cette occasion, seuls les numeros de version et empreintes SHA-256 des trois composants et de leurs .deb ont ete mis a jour."
       },
       {
         "name": "sillon:target-os",
@@ -18287,11 +18287,11 @@
     },
     {
       "type": "application",
-      "bom-ref": "sillon:sillon-backup-client@0.1.0",
+      "bom-ref": "sillon:sillon-backup-client@0.1.2",
       "name": "sillon-backup-client",
-      "version": "0.1.0",
+      "version": "0.1.2",
       "description": "Sauvegarde physique planifiee du cluster PostgreSQL (pgBackRest) vers un partage NFS distant ; montage automatique du partage, outil de restauration a une date choisie.",
-      "purl": "pkg:deb/sillon/sillon-backup-client@0.1.0?arch=all",
+      "purl": "pkg:deb/sillon/sillon-backup-client@0.1.2?arch=all",
       "properties": [
         {
           "name": "sillon:architecture",
@@ -18301,17 +18301,17 @@
       "hashes": [
         {
           "alg": "SHA-256",
-          "content": "090c3bfdd410863eb1b9e1bdebca00d8e07e96ea5f83543cd0978f638805ce25"
+          "content": "f4669003294bc47265cf80a954a8882d37dc6079c03f2bd612a6d1db650f0ae4"
         }
       ]
     },
     {
       "type": "application",
-      "bom-ref": "sillon:sillon-backup-server@0.1.0",
+      "bom-ref": "sillon:sillon-backup-server@0.1.2",
       "name": "sillon-backup-server",
-      "version": "0.1.0",
+      "version": "0.1.2",
       "description": "Serveur de sauvegarde NFS distant : partage restreint par adresse IP recevant les sauvegardes pgBackRest de sillon-backup-client.",
-      "purl": "pkg:deb/sillon/sillon-backup-server@0.1.0?arch=all",
+      "purl": "pkg:deb/sillon/sillon-backup-server@0.1.2?arch=all",
       "properties": [
         {
           "name": "sillon:architecture",
@@ -18321,17 +18321,17 @@
       "hashes": [
         {
           "alg": "SHA-256",
-          "content": "b61f2023b2421ed5f4e14fc9451455b9e11658dc99778c95f20d4bc93eab9448"
+          "content": "996b806da36ea438ab6d138276a344e863be6b6db66fc1c5a8c1831559b92ace"
         }
       ]
     },
     {
       "type": "application",
-      "bom-ref": "sillon:sillon-backup-server-survey@0.1.0",
+      "bom-ref": "sillon:sillon-backup-server-survey@0.1.2",
       "name": "sillon-backup-server-survey",
-      "version": "0.1.0",
+      "version": "0.1.2",
       "description": "Sonde de surveillance quotidienne des sauvegardes (pgbackrest info), alerte par e-mail via le proxy SMTP interne en cas de defaillance.",
-      "purl": "pkg:deb/sillon/sillon-backup-server-survey@0.1.0?arch=all",
+      "purl": "pkg:deb/sillon/sillon-backup-server-survey@0.1.2?arch=all",
       "properties": [
         {
           "name": "sillon:architecture",
@@ -18341,7 +18341,7 @@
       "hashes": [
         {
           "alg": "SHA-256",
-          "content": "fec78b71655dacdda35c8359ca9494e03c188866ef9569e41a4976a8569d885b"
+          "content": "27329dc246c0ec13c28f40ce72a78c8e63d18c31ed084d6c2173c50b94530e73"
         }
       ]
     }
@@ -18357,9 +18357,9 @@
         "sillon:sillon-tutoriel@0.2.0",
         "sillon:sillon-demo-sirene@0.1.4",
         "sillon:sillon-purge@0.1.0",
-        "sillon:sillon-backup-client@0.1.0",
-        "sillon:sillon-backup-server@0.1.0",
-        "sillon:sillon-backup-server-survey@0.1.0"
+        "sillon:sillon-backup-client@0.1.2",
+        "sillon:sillon-backup-server@0.1.2",
+        "sillon:sillon-backup-server-survey@0.1.2"
       ]
     },
     {
@@ -18431,7 +18431,7 @@
       ]
     },
     {
-      "ref": "sillon:sillon-backup-client@0.1.0",
+      "ref": "sillon:sillon-backup-client@0.1.2",
       "dependsOn": [
         "sillon:sillon-server@0.1.34",
         "deb:host:nfs-common@1:2.8.3-1:amd64",
@@ -18443,7 +18443,7 @@
       ]
     },
     {
-      "ref": "sillon:sillon-backup-server@0.1.0",
+      "ref": "sillon:sillon-backup-server@0.1.2",
       "dependsOn": [
         "deb:backup-server:adduser@3.152:all",
         "deb:backup-server:base-passwd@3.6.7:amd64",
@@ -18579,9 +18579,9 @@
       ]
     },
     {
-      "ref": "sillon:sillon-backup-server-survey@0.1.0",
+      "ref": "sillon:sillon-backup-server-survey@0.1.2",
       "dependsOn": [
-        "sillon:sillon-backup-server@0.1.0"
+        "sillon:sillon-backup-server@0.1.2"
       ]
     }
   ],
