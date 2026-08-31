@@ -1,6 +1,21 @@
 #!/bin/bash
 set -e
 
+# Meme contrainte que le postinst : quand dpkg invoque ce script comme
+# processus confmodule (paquet a templates debconf), fd1 EST le tube
+# protocolaire lu par le frontend debconf. Tout "echo" emis sur stdout
+# avant que confmodule n'ait redirige fd1 vers fd2 (exec 1>&2 en interne)
+# est alors interprete comme une commande du protocole et rejete
+# ("Unsupported command ..."), ce qui fait ensuite echouer db_purge
+# (retour 20) et, sous set -e, tout le postrm (dpkg : "erreur ... 128").
+# Constate en conditions reelles sur la VM de test : "apt purge" echouait
+# systematiquement et laissait le paquet coince en etat "config-files".
+# On source donc confmodule en tout premier, avant le moindre echo.
+if [ -e /usr/share/debconf/confmodule ]; then
+    # shellcheck disable=SC1091
+    . /usr/share/debconf/confmodule
+fi
+
 if [ "$1" = "remove" ] || [ "$1" = "purge" ]; then
     echo "Retrait de la sonde de surveillance des sauvegardes SILLON..."
     systemctl reload cron 2>/dev/null || true
@@ -10,9 +25,7 @@ if [ "$1" = "remove" ] || [ "$1" = "purge" ]; then
 fi
 
 if [ "$1" = "purge" ] && [ -e /usr/share/debconf/confmodule ]; then
-    # shellcheck disable=SC1091
-    . /usr/share/debconf/confmodule
-    db_purge
+    db_purge || true
 fi
 
 exit 0
