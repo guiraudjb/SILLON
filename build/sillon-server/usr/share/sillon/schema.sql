@@ -69,7 +69,13 @@ CREATE TABLE public.utilisateurs (
     profil            public.profil_utilisateur NOT NULL DEFAULT 'lecteur',
     role_pg           TEXT UNIQUE NOT NULL,
     actif             BOOLEAN NOT NULL DEFAULT true,
-    date_creation     TIMESTAMPTZ NOT NULL DEFAULT now()
+    date_creation     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    -- Changement de mot de passe exige a la premiere connexion (§8.1) :
+    -- vrai par defaut (premier mot de passe fourni hors bande par
+    -- l'administrateur, §12.3) ; reinitialiser_mdp() le repasse a vrai
+    -- (mot de passe a nouveau impose par l'administrateur, pas choisi par
+    -- l'utilisateur) ; changer_mon_mdp() le repasse a faux.
+    doit_changer_mdp  BOOLEAN NOT NULL DEFAULT true
 );
 
 CREATE TABLE public.bases (
@@ -338,12 +344,49 @@ BEGIN
     IF length(_nouveau_mdp) < 12 THEN
         RAISE EXCEPTION 'Le mot de passe doit comporter au moins 12 caracteres';
     END IF;
-    UPDATE public.utilisateurs SET mot_de_passe_hash = crypt(_nouveau_mdp, gen_salt('bf')) WHERE email = _email;
+    -- Un mot de passe impose par l'administrateur est par nature
+    -- provisoire (§8.1) : reexige un changement a la prochaine connexion,
+    -- au meme titre que le tout premier mot de passe d'un compte.
+    UPDATE public.utilisateurs
+        SET mot_de_passe_hash = crypt(_nouveau_mdp, gen_salt('bf')), doit_changer_mdp = true
+        WHERE email = _email;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 REVOKE EXECUTE ON FUNCTION public.reinitialiser_mdp(text, text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.reinitialiser_mdp(text, text) TO administrateur;
+
+
+-- Changement de mot de passe en libre-service (§8.1) : jusqu'ici absent,
+-- seul un administrateur pouvait changer un mot de passe (reinitialiser_mdp,
+-- ci-dessus). Necessite l'ancien mot de passe (comme toute fonction de
+-- changement de mot de passe standard) : empeche un attaquant ayant vole
+-- une session active (mais pas le mot de passe) de verrouiller le
+-- titulaire legitime hors de son propre compte.
+CREATE OR REPLACE FUNCTION public.changer_mon_mdp(_ancien_mdp TEXT, _nouveau_mdp TEXT) RETURNS void AS $$
+DECLARE
+    _id INTEGER;
+BEGIN
+    _id := public._id_courant();
+    IF _id IS NULL THEN
+        RAISE EXCEPTION 'Non authentifie';
+    END IF;
+
+    IF length(_nouveau_mdp) < 12 THEN
+        RAISE EXCEPTION 'Le mot de passe doit comporter au moins 12 caracteres';
+    END IF;
+
+    UPDATE public.utilisateurs
+        SET mot_de_passe_hash = crypt(_nouveau_mdp, gen_salt('bf')), doit_changer_mdp = false
+        WHERE id = _id AND mot_de_passe_hash = crypt(_ancien_mdp, mot_de_passe_hash);
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Mot de passe actuel incorrect';
+    END IF;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+GRANT EXECUTE ON FUNCTION public.changer_mon_mdp(text, text) TO lecteur, agent, administrateur;
 
 
 -- Desactivation / reactivation : revoque ou restaure l'appartenance du role
@@ -439,6 +482,7 @@ BEGIN
             'profil',  _utilisateur.profil,
             'user_id', _utilisateur.id,
             'email',   _utilisateur.email,
+            'doit_changer_mdp', _utilisateur.doit_changer_mdp,
             'exp',     extract(epoch from now())::integer + 28800
         ),
         (SELECT valeur FROM auth.secrets WHERE cle = 'jwt_secret')
@@ -486,21 +530,27 @@ GRANT EXECUTE ON FUNCTION public._id_courant() TO sillon_service, lecteur, agent
 
 CREATE OR REPLACE FUNCTION public.me() RETURNS json AS $$
 DECLARE
-    _email  TEXT;
-    _profil TEXT;
-    _actif  BOOLEAN;
+    _email            TEXT;
+    _profil           TEXT;
+    _actif            BOOLEAN;
+    _doit_changer_mdp BOOLEAN;
 BEGIN
     _email := current_setting('request.jwt.claims', true)::json ->> 'email';
     IF _email IS NULL THEN RETURN NULL; END IF;
 
-    SELECT profil::text, actif INTO _profil, _actif FROM public.utilisateurs WHERE email = _email;
+    SELECT profil::text, actif, doit_changer_mdp INTO _profil, _actif, _doit_changer_mdp
+        FROM public.utilisateurs WHERE email = _email;
 
     -- Verification independante de la duree de vie du jeton (§8.2) : un
     -- compte desactive ne doit jamais se voir confirme comme authentifie,
     -- meme dans l'hypothese ou son jeton resterait valide.
     IF NOT FOUND OR NOT _actif THEN RETURN NULL; END IF;
 
-    RETURN json_build_object('email', _email, 'profil', _profil);
+    -- doit_changer_mdp lu en direct depuis la table, jamais depuis le
+    -- jeton : changer_mon_mdp() ne reemet pas de nouveau jeton, un jeton
+    -- deja emis resterait sinon fige sur "true" jusqu'a l'expiration des
+    -- 8h meme apres un changement de mot de passe reussi.
+    RETURN json_build_object('email', _email, 'profil', _profil, 'doit_changer_mdp', _doit_changer_mdp);
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 

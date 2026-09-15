@@ -264,9 +264,131 @@ if [ "$DB_EXISTE" = "1" ]; then
             IF length(_nouveau_mdp) < 12 THEN
                 RAISE EXCEPTION 'Le mot de passe doit comporter au moins 12 caracteres';
             END IF;
-            UPDATE public.utilisateurs SET mot_de_passe_hash = crypt(_nouveau_mdp, gen_salt('bf')) WHERE email = _email;
+            UPDATE public.utilisateurs
+                SET mot_de_passe_hash = crypt(_nouveau_mdp, gen_salt('bf')), doit_changer_mdp = true
+                WHERE email = _email;
         END;
         \$\$ LANGUAGE plpgsql SECURITY DEFINER;
+    " >/dev/null
+
+    # Migration : changement de mot de passe exige a la premiere connexion
+    # (§8.1) - jusqu'ici seulement documente au cahier des charges, jamais
+    # implemente. La colonne est ajoutee ici avec DEFAULT true (valeur
+    # attendue pour tout compte cree a partir de maintenant, cf.
+    # creer_utilisateur/reinitialiser_mdp ci-dessus), mais ce DEFAULT
+    # s'applique aussi retroactivement a chaque compte deja existant au
+    # moment de l'ALTER TABLE - jamais souhaitable en migration (un compte
+    # deja utilise depuis des mois ne doit pas se retrouver bloque au
+    # prochain redemarrage du serveur) : la ligne UPDATE qui suit remet
+    # ces comptes preexistants a false, mais seulement la toute premiere
+    # fois que cette migration s'applique (COLONNE_EXISTE verifie avant
+    # l'ALTER TABLE) - sans cette garde, un futur "dpkg -i" de sillon-server
+    # remettrait silencieusement a false le "doit changer son mot de passe"
+    # d'un compte legitimement en attente (reinitialisation recente par un
+    # administrateur, pas encore suivie d'une reconnexion).
+    COLONNE_DOIT_CHANGER_EXISTE=$(sudo -u postgres psql -d "$DB_NAME" -tAc \
+        "SELECT 1 FROM information_schema.columns WHERE table_name = 'utilisateurs' AND column_name = 'doit_changer_mdp'")
+    sudo -u postgres psql -d "$DB_NAME" -v ON_ERROR_STOP=1 -c "
+        ALTER TABLE public.utilisateurs ADD COLUMN IF NOT EXISTS doit_changer_mdp BOOLEAN NOT NULL DEFAULT true;
+    " >/dev/null
+    if [ "$COLONNE_DOIT_CHANGER_EXISTE" != "1" ]; then
+        sudo -u postgres psql -d "$DB_NAME" -c \
+            "UPDATE public.utilisateurs SET doit_changer_mdp = false;" \
+            >/dev/null
+    fi
+
+    # Migration : claim JWT + lecture live de doit_changer_mdp (§8.1) -
+    # login() grave l'etat au moment de la connexion (utile au premier
+    # rendu front, avant le premier appel a me()) ; me() le relit toujours
+    # en direct depuis la table (jamais depuis le jeton) - changer_mon_mdp()
+    # ne reemet pas de nouveau jeton, un jeton deja emis resterait sinon
+    # fige sur "true" jusqu'a expiration (8h) meme apres un changement de
+    # mot de passe reussi. CREATE OR REPLACE suffit pour les deux (arite
+    # inchangee).
+    sudo -u postgres psql -d "$DB_NAME" -v ON_ERROR_STOP=1 -c "
+        CREATE OR REPLACE FUNCTION public.login(email TEXT, password TEXT) RETURNS public.jwt_token AS \$\$
+        DECLARE
+            _utilisateur public.utilisateurs%ROWTYPE;
+            _jeton       TEXT;
+            _resultat    public.jwt_token;
+        BEGIN
+            SELECT * INTO _utilisateur FROM public.utilisateurs u
+                WHERE u.email = login.email AND u.mot_de_passe_hash = crypt(login.password, u.mot_de_passe_hash);
+
+            IF NOT FOUND OR NOT _utilisateur.actif THEN
+                RAISE EXCEPTION 'Identifiants incorrects';
+            END IF;
+
+            _jeton := auth.sign_jwt(
+                json_build_object(
+                    'role',    _utilisateur.role_pg,
+                    'profil',  _utilisateur.profil,
+                    'user_id', _utilisateur.id,
+                    'email',   _utilisateur.email,
+                    'doit_changer_mdp', _utilisateur.doit_changer_mdp,
+                    'exp',     extract(epoch from now())::integer + 28800
+                ),
+                (SELECT valeur FROM auth.secrets WHERE cle = 'jwt_secret')
+            );
+
+            PERFORM set_config('response.headers',
+                '[{\"Set-Cookie\": \"sillon_token=' || _jeton || '; Path=/; HttpOnly; Secure; SameSite=Strict\"}]', true);
+
+            _resultat.token := 'Session demarree';
+            RETURN _resultat;
+        END;
+        \$\$ LANGUAGE plpgsql SECURITY DEFINER;
+
+        CREATE OR REPLACE FUNCTION public.me() RETURNS json AS \$\$
+        DECLARE
+            _email            TEXT;
+            _profil           TEXT;
+            _actif            BOOLEAN;
+            _doit_changer_mdp BOOLEAN;
+        BEGIN
+            _email := current_setting('request.jwt.claims', true)::json ->> 'email';
+            IF _email IS NULL THEN RETURN NULL; END IF;
+
+            SELECT profil::text, actif, doit_changer_mdp INTO _profil, _actif, _doit_changer_mdp
+                FROM public.utilisateurs WHERE email = _email;
+
+            IF NOT FOUND OR NOT _actif THEN RETURN NULL; END IF;
+
+            RETURN json_build_object('email', _email, 'profil', _profil, 'doit_changer_mdp', _doit_changer_mdp);
+        END;
+        \$\$ LANGUAGE plpgsql SECURITY DEFINER;
+    " >/dev/null
+
+    # Migration : changement de mot de passe en libre-service (§8.1) -
+    # nouvelle fonction, jusqu'ici absente (seul un administrateur pouvait
+    # changer un mot de passe, via reinitialiser_mdp). GRANT/REVOKE inclus
+    # dans le meme bloc : une nouvelle fonction n'a par defaut aucun droit
+    # d'execution accorde a personne.
+    sudo -u postgres psql -d "$DB_NAME" -v ON_ERROR_STOP=1 -c "
+        CREATE OR REPLACE FUNCTION public.changer_mon_mdp(_ancien_mdp TEXT, _nouveau_mdp TEXT) RETURNS void AS \$\$
+        DECLARE
+            _id INTEGER;
+        BEGIN
+            _id := public._id_courant();
+            IF _id IS NULL THEN
+                RAISE EXCEPTION 'Non authentifie';
+            END IF;
+
+            IF length(_nouveau_mdp) < 12 THEN
+                RAISE EXCEPTION 'Le mot de passe doit comporter au moins 12 caracteres';
+            END IF;
+
+            UPDATE public.utilisateurs
+                SET mot_de_passe_hash = crypt(_nouveau_mdp, gen_salt('bf')), doit_changer_mdp = false
+                WHERE id = _id AND mot_de_passe_hash = crypt(_ancien_mdp, mot_de_passe_hash);
+
+            IF NOT FOUND THEN
+                RAISE EXCEPTION 'Mot de passe actuel incorrect';
+            END IF;
+        END;
+        \$\$ LANGUAGE plpgsql SECURITY DEFINER;
+
+        GRANT EXECUTE ON FUNCTION public.changer_mon_mdp(text, text) TO lecteur, agent, administrateur;
     " >/dev/null
 
     # Migration : journalisation de la déconnexion (§8.2, §8.12) - logout()

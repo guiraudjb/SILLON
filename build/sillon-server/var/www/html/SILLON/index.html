@@ -83,6 +83,36 @@
     </div>
 </main>
 
+<!-- Changement de mot de passe exige a la premiere connexion (§8.1) : ecran
+     bloquant distinct, jamais un simple bouton parmi d'autres - aucun onglet
+     de l'application n'est accessible tant qu'il est affiche (Etat.utilisateur
+     reste null, Auth.afficherApplication() n'est jamais appele, cf. app.js). -->
+<main id="ecran-changement-mdp" class="fr-container fr-my-10w" hidden>
+    <div class="fr-grid-row fr-grid-row--center">
+        <div class="fr-col-12 fr-col-md-5">
+            <form id="formulaire-changement-mdp" class="fr-p-4w" style="border:1px solid var(--border-default-grey);" onsubmit="Auth.soumettreChangementMdp(event)">
+                <h2 class="fr-h4">Changement de mot de passe requis</h2>
+                <p class="fr-text--sm">Votre mot de passe a été défini par un administrateur et doit être changé avant de continuer.</p>
+                <div id="alerte-changement-mdp" class="fr-alert fr-alert--error fr-mb-2w" hidden></div>
+                <div class="fr-input-group">
+                    <label class="fr-label" for="changement-mdp-ancien">Mot de passe actuel</label>
+                    <input class="fr-input" type="password" id="changement-mdp-ancien" required autocomplete="current-password">
+                </div>
+                <div class="fr-input-group">
+                    <label class="fr-label" for="changement-mdp-nouveau">Nouveau mot de passe</label>
+                    <input class="fr-input" type="password" id="changement-mdp-nouveau" required minlength="12" autocomplete="new-password">
+                    <p class="fr-hint-text">12 caractères minimum.</p>
+                </div>
+                <div class="fr-input-group">
+                    <label class="fr-label" for="changement-mdp-confirmation">Confirmer le nouveau mot de passe</label>
+                    <input class="fr-input" type="password" id="changement-mdp-confirmation" required minlength="12" autocomplete="new-password">
+                </div>
+                <button class="fr-btn fr-mt-2w" type="submit">Changer le mot de passe</button>
+            </form>
+        </div>
+    </div>
+</main>
+
 <main id="application" class="fr-container fr-my-4w" hidden>
     <!-- Titre de page RGAA (§9.1) : un seul niveau 1, mis à jour à chaque
          changement d'onglet (basculerOnglet(), app.js) - masqué visuellement

@@ -315,6 +315,13 @@ class ErreurAuthentification(Exception):
     pass
 
 
+class MotDePasseAChanger(Exception):
+    """Compte authentifie mais dont le mot de passe doit etre change avant
+    tout autre usage (§8.1) - distinct d'une erreur d'authentification,
+    traite a part par authentifier() (403, pas 401)."""
+    pass
+
+
 def verifier_jeton():
     """Extrait et vérifie le jeton JWT posé par Nginx dans l'en-tête
     Authorization à partir du cookie HttpOnly (§4.3, §8.2)."""
@@ -337,6 +344,26 @@ def verifier_jeton():
     except psycopg2.Error as exc:
         raise ErreurAuthentification("Compte désactivé ou rôle invalide") from exc
 
+    # Lu en direct depuis la table, jamais depuis le jeton (§8.1) :
+    # changer_mon_mdp() ne reemet pas de nouveau jeton, un jeton deja emis
+    # resterait sinon fige sur "true" jusqu'a expiration (8h) meme apres un
+    # changement de mot de passe reussi. Seul point d'entree reellement
+    # bloque par ce controle : les routes de l'orchestrateur (import, SQL
+    # libre, scripts, bases) - changer_mon_mdp() lui-meme passe par l'API
+    # de requetage (PostgREST), jamais par l'orchestrateur. Requete via
+    # l'identite propre de l'orchestrateur (connexion_catalogue() sans
+    # claims), pas via le role personnel de l'appelant : lecteur/agent
+    # n'ont explicitement aucun SELECT sur public.utilisateurs (§8.9,
+    # schema.sql "REVOKE ALL ON public.utilisateurs FROM PUBLIC, lecteur,
+    # agent") - constate en pratique (echec silencieux repris a tort comme
+    # "compte desactive" avant cette correction).
+    with connexion_catalogue() as conn, conn.cursor() as cur:
+        cur.execute("SELECT doit_changer_mdp FROM public.utilisateurs WHERE id = %s", (claims["user_id"],))
+        (doit_changer,) = cur.fetchone()
+
+    if doit_changer:
+        raise MotDePasseAChanger()
+
     return claims
 
 
@@ -344,6 +371,8 @@ def verifier_jeton():
 def authentifier():
     try:
         g.claims = verifier_jeton()
+    except MotDePasseAChanger:
+        return jsonify(erreur="Changement de mot de passe requis avant toute autre action", code="mdp_a_changer"), 403
     except ErreurAuthentification as exc:
         return jsonify(erreur=str(exc)), 401
 

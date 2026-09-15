@@ -200,6 +200,7 @@ function afficherToast(titre, message, type = "info") {
 const Auth = {
     afficherEcranConnexion(messageErreur) {
         document.getElementById("ecran-connexion").hidden = false;
+        document.getElementById("ecran-changement-mdp").hidden = true;
         document.getElementById("application").hidden = true;
         document.getElementById("zone-utilisateur").hidden = true;
         const alerte = document.getElementById("alerte-connexion");
@@ -208,6 +209,48 @@ const Auth = {
             alerte.hidden = false;
         } else {
             alerte.hidden = true;
+        }
+    },
+
+    // Ecran bloquant (§8.1) : aucun onglet de l'application n'est atteignable
+    // tant qu'il est affiche - afficherApplication() n'est jamais appele
+    // pour cette session (voir chargerSession() ci-dessous).
+    afficherEcranChangementMdp() {
+        document.getElementById("ecran-connexion").hidden = true;
+        document.getElementById("ecran-changement-mdp").hidden = false;
+        document.getElementById("application").hidden = true;
+        document.getElementById("zone-utilisateur").hidden = true;
+        document.getElementById("formulaire-changement-mdp").reset();
+        document.getElementById("alerte-changement-mdp").hidden = true;
+    },
+
+    async soumettreChangementMdp(evenement) {
+        evenement.preventDefault();
+        const ancien = document.getElementById("changement-mdp-ancien").value;
+        const nouveau = document.getElementById("changement-mdp-nouveau").value;
+        const confirmation = document.getElementById("changement-mdp-confirmation").value;
+        const alerte = document.getElementById("alerte-changement-mdp");
+        if (nouveau !== confirmation) {
+            alerte.textContent = "Les deux saisies du nouveau mot de passe ne correspondent pas.";
+            alerte.hidden = false;
+            return;
+        }
+        try {
+            const reponse = await fetch("/api/rpc/changer_mon_mdp", {
+                method: "POST",
+                credentials: "include",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ _ancien_mdp: ancien, _nouveau_mdp: nouveau }),
+            });
+            if (!reponse.ok) {
+                const corps = await reponse.json().catch(() => ({}));
+                throw new Error(corps.message || "Échec du changement de mot de passe");
+            }
+            afficherToast("Mot de passe changé", "Vous pouvez maintenant utiliser SILLON.", "success");
+            await Auth.chargerSession();
+        } catch (erreur) {
+            alerte.textContent = erreur.message;
+            alerte.hidden = false;
         }
     },
 
@@ -263,6 +306,15 @@ const Auth = {
             Auth.afficherEcranConnexion();
             return false;
         }
+        // Changement de mot de passe exige (§8.1) : bloque avant tout accès
+        // à l'application, quel que soit le point d'entrée (connexion
+        // initiale, ou rechargement de page en cours de session) - relu
+        // depuis la base à chaque appel de /api/rpc/me, jamais depuis un
+        // jeton potentiellement périmé sur ce point précis.
+        if (corps.doit_changer_mdp) {
+            Auth.afficherEcranChangementMdp();
+            return false;
+        }
         Etat.utilisateur = corps;
         Auth.afficherApplication();
         return true;
@@ -270,6 +322,7 @@ const Auth = {
 
     afficherApplication() {
         document.getElementById("ecran-connexion").hidden = true;
+        document.getElementById("ecran-changement-mdp").hidden = true;
         document.getElementById("application").hidden = false;
         document.getElementById("zone-utilisateur").hidden = false;
         // Titre de page RGAA (§9.1) : "Bases" est déjà l'onglet sélectionné

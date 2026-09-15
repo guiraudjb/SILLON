@@ -40,6 +40,16 @@ else
         "SELECT public.creer_utilisateur('$DEMO_EMAIL', '$DEMO_PASSWORD', '$DEMO_NOM', 'agent');" \
         >/dev/null
 
+    # Exempte du changement de mot de passe force a la premiere connexion
+    # (§8.1, sillon-server) : ce mot de passe est deja genere aleatoirement
+    # (ci-dessus) et reserve a un acces manuel exceptionnel de
+    # l'administrateur - forcer un changement n'apporterait rien et
+    # bloquerait peupler_demo.py (outils/, §7.2 du guide d'installation),
+    # qui se connecte avec ce compte pour deposer les exemples du tutoriel.
+    sudo -u postgres psql -d "$DB_NAME" -c \
+        "UPDATE public.utilisateurs SET doit_changer_mdp = false WHERE email = '$DEMO_EMAIL';" \
+        >/dev/null
+
     # Écrit dans un fichier root-only plutôt qu'affiché sur la sortie
     # standard (§8.11, même motif que ADMIN_CREDS_FILE de sillon-server) :
     # les utilisateurs suivent le tutoriel avec leur propre compte
