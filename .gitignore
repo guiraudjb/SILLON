@@ -3,6 +3,7 @@ __pycache__/
 *.pyc
 .venv/
 venv/
+build/.venv-pdf/
 
 # Paquets Debian construits ailleurs que dans build/ (exclus) ; ceux de
 # build/ sont versionnés via Git LFS (cf. .gitattributes)
