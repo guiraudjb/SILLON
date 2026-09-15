@@ -252,6 +252,13 @@ DECLARE
     _demo_id        INTEGER;
     _demo_base_id   INTEGER;
 BEGIN
+    -- Politique de mot de passe (§8.1) : la longueur minimale n'etait
+    -- verifiee que cote client (app.js), donc contournable par un appel
+    -- direct a /api/rpc/creer_utilisateur - reappliquee ici pour de bon.
+    IF length(_password) < 12 THEN
+        RAISE EXCEPTION 'Le mot de passe doit comporter au moins 12 caracteres';
+    END IF;
+
     _role_pg := auth.nom_role_personnel(_email);
 
     SELECT valeur INTO _work_mem_mo FROM public.parametres WHERE cle = 'work_mem_defaut_mo';
@@ -326,6 +333,11 @@ GRANT EXECUTE ON FUNCTION public.creer_utilisateur(text, text, text, public.prof
 
 CREATE OR REPLACE FUNCTION public.reinitialiser_mdp(_email TEXT, _nouveau_mdp TEXT) RETURNS void AS $$
 BEGIN
+    -- Meme politique de longueur minimale que creer_utilisateur (§8.1),
+    -- jusqu'ici verifiee cote client uniquement.
+    IF length(_nouveau_mdp) < 12 THEN
+        RAISE EXCEPTION 'Le mot de passe doit comporter au moins 12 caracteres';
+    END IF;
     UPDATE public.utilisateurs SET mot_de_passe_hash = crypt(_nouveau_mdp, gen_salt('bf')) WHERE email = _email;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
@@ -444,7 +456,16 @@ GRANT EXECUTE ON FUNCTION public.login(text, text) TO sillon_service;
 
 
 CREATE OR REPLACE FUNCTION public.logout() RETURNS void AS $$
+DECLARE
+    _email TEXT;
 BEGIN
+    -- Journalisation de la deconnexion (§8.2, §8.12) : logout() ne touche
+    -- aucune des tables couvertes par journaliser_action() (utilisateurs/
+    -- bases/partages), donc l'evenement etait jusqu'ici totalement absent
+    -- du journal d'audit malgre l'exigence explicite du cahier des charges.
+    _email := current_setting('request.jwt.claims', true)::json ->> 'email';
+    PERFORM public.consigner_audit('DECONNEXION', COALESCE(_email, 'inconnu'), NULL);
+
     PERFORM set_config('response.headers',
         '[{"Set-Cookie": "sillon_token=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0"}]', true);
 END;

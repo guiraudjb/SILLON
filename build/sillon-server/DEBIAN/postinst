@@ -198,6 +198,10 @@ if [ "$DB_EXISTE" = "1" ]; then
             _demo_id        INTEGER;
             _demo_base_id   INTEGER;
         BEGIN
+            IF length(_password) < 12 THEN
+                RAISE EXCEPTION 'Le mot de passe doit comporter au moins 12 caracteres';
+            END IF;
+
             _role_pg := auth.nom_role_personnel(_email);
 
             SELECT valeur INTO _work_mem_mo FROM public.parametres WHERE cle = 'work_mem_defaut_mo';
@@ -248,6 +252,40 @@ if [ "$DB_EXISTE" = "1" ]; then
             ('retention_audit_mois', '12'),
             ('retention_staging_heures', '48')
         ON CONFLICT (cle) DO NOTHING;
+    " >/dev/null
+
+    # Migration : politique de longueur minimale du mot de passe (12
+    # caractères, §8.1) - jusqu'ici vérifiée côté client (app.js) seulement,
+    # donc contournable par un appel direct à /api/rpc/reinitialiser_mdp.
+    # CREATE OR REPLACE suffit (arité inchangée).
+    sudo -u postgres psql -d "$DB_NAME" -v ON_ERROR_STOP=1 -c "
+        CREATE OR REPLACE FUNCTION public.reinitialiser_mdp(_email TEXT, _nouveau_mdp TEXT) RETURNS void AS \$\$
+        BEGIN
+            IF length(_nouveau_mdp) < 12 THEN
+                RAISE EXCEPTION 'Le mot de passe doit comporter au moins 12 caracteres';
+            END IF;
+            UPDATE public.utilisateurs SET mot_de_passe_hash = crypt(_nouveau_mdp, gen_salt('bf')) WHERE email = _email;
+        END;
+        \$\$ LANGUAGE plpgsql SECURITY DEFINER;
+    " >/dev/null
+
+    # Migration : journalisation de la déconnexion (§8.2, §8.12) - logout()
+    # ne touche aucune des tables couvertes par journaliser_action(), donc
+    # l'événement était jusqu'ici absent du journal d'audit malgré
+    # l'exigence explicite du cahier des charges. CREATE OR REPLACE suffit
+    # (arité inchangée).
+    sudo -u postgres psql -d "$DB_NAME" -v ON_ERROR_STOP=1 -c "
+        CREATE OR REPLACE FUNCTION public.logout() RETURNS void AS \$\$
+        DECLARE
+            _email TEXT;
+        BEGIN
+            _email := current_setting('request.jwt.claims', true)::json ->> 'email';
+            PERFORM public.consigner_audit('DECONNEXION', COALESCE(_email, 'inconnu'), NULL);
+
+            PERFORM set_config('response.headers',
+                '[{\"Set-Cookie\": \"sillon_token=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0\"}]', true);
+        END;
+        \$\$ LANGUAGE plpgsql SECURITY DEFINER;
     " >/dev/null
 
     # Les secrets existants sont conservés tels quels (§12.3) : les
@@ -490,6 +528,41 @@ EOF
 
 systemctl restart fail2ban
 systemctl enable fail2ban
+
+# =====================================================================
+# 5 BIS. MISE A JOUR DE SECURITE AUTOMATISEE DU SOCLE SYSTEME (§12.1)
+# =====================================================================
+# Paquets de securite uniquement, jamais de montee de version majeure non
+# maitrisee - le cahier des charges §12.1 decrit ce comportement depuis
+# l'origine du projet, jamais implemente jusqu'ici (constat d'audit du
+# 15/09/2026 : PostgreSQL et Nginx en retard de plusieurs correctifs de
+# securite critiques, l'un d'eux activement exploite dans la nature, sur
+# une cible jamais mise a jour depuis son installation). Ecrit sans
+# condition (fresh install et mise a jour) : idempotent, sans effet de
+# bord a rejouer.
+echo "Configuration de la mise a jour de securite automatisee..."
+cat << EOF > /etc/apt/apt.conf.d/51sillon-security-upgrades
+// Genere par sillon-server (§12.1 du cahier des charges SILLON) : mise a
+// jour de securite automatisee du socle systeme, paquets de securite
+// uniquement - jamais de montee de version majeure non maitrisee.
+APT::Periodic::Update-Package-Lists "1";
+APT::Periodic::Unattended-Upgrade "1";
+
+Unattended-Upgrade::Origins-Pattern {
+    "origin=Debian,codename=\${distro_codename},label=Debian-Security";
+    "origin=Debian,codename=\${distro_codename}-security,label=Debian-Security";
+};
+Unattended-Upgrade::Remove-Unused-Dependencies "false";
+
+// Redemarrage planifie en dehors des heures d'usage si un correctif
+// l'exige (§12.1) - le noyau ou une bibliotheque systeme deja chargee
+// (glibc, openssl) ne beneficie de son correctif qu'apres redemarrage.
+Unattended-Upgrade::Automatic-Reboot "true";
+Unattended-Upgrade::Automatic-Reboot-WithUsers "true";
+Unattended-Upgrade::Automatic-Reboot-Time "03:30";
+EOF
+
+systemctl enable --now apt-daily.timer apt-daily-upgrade.timer
 
 # =====================================================================
 # 6. REPERTOIRE DE DEPOT TEMPORAIRE DES IMPORTS CSV (§5.1)

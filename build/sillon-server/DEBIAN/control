@@ -1,9 +1,9 @@
 Package: sillon-server
-Version: 0.1.34
+Version: 0.1.36
 Architecture: amd64
 Maintainer: Administrateur SILLON <admin@sillon.local>
 Pre-Depends: dpkg (>= 1.17.14)
-Depends: postgresql-17, nginx, openssl, sudo, fail2ban
+Depends: postgresql-17, nginx, openssl, sudo, fail2ban, unattended-upgrades
 Section: web
 Priority: optional
 Description: SILLON - Systeme d'Interrogation Local et Libre d'Outils Numeriques.
