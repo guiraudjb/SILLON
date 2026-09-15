@@ -4,7 +4,7 @@
   "serialNumber": "urn:uuid:8b56adab-02f4-4542-a041-19de6bc2d07f",
   "version": 3,
   "metadata": {
-    "timestamp": "2026-08-25T00:00:00Z",
+    "timestamp": "2026-09-15T00:00:00Z",
     "lifecycles": [
       {
         "phase": "build"
@@ -29,7 +29,7 @@
     "properties": [
       {
         "name": "sillon:methodology",
-        "value": "Depends declares releves depuis DEBIAN/control de chaque .deb. Fermeture transitive et versions resolues le 2026-08-19 directement depuis la VM de test SILLON reelle (192.168.122.114, Debian 13/Trixie) : dpkg-query -W pour l'univers hote (195 paquets), extraction du fichier var/lib/dpkg/status de la couche image du Dockerfile (podman save) pour l'univers image d'execution (378 paquets, sillon-image-execution:latest chargee sur cette VM). Mise a jour du 22 aout 2026 : ajout de sillon-purge (aucune nouvelle dependance Debian) et des paquets sillon-backup-client/server/server-survey (pgBackRest) - univers hote complete via dpkg-query -W reel sur la VM de test apres installation reelle ; univers 'machine de sauvegarde' (sillon-backup-server/server-survey, machine distincte non disponible pour verification directe) resolu par fermeture theorique de dependances Debian (apt-cache depends --recurse), non confirme sur une machine physique separee - limite documentee au §2/§7. Versions de sillon-server (0.1.29->0.1.34) et sillon-tutoriel (0.1.0->0.2.0) corrigees a cette occasion (constatees perimees, sans reprise complete des 195+378 paquets deja resolus le 19 aout, hors perimetre de cette mise a jour). Mise a jour du 25 aout 2026 : sillon-backup-client/server/server-survey portes de 0.1.0 a 0.1.2 (versions .deb reellement construites - le 0.1.1 intermediaire n'a jamais ete publie en nomenclature) suite a la correction d'un bug des menus debconf (priorite 'medium' des questions IP/e-mail/relais SMTP, sous le seuil par defaut 'high' de Debian, qui les masquait silencieusement a l'installation au lieu de les poser systematiquement - corrige en 'high'). Aucune nouvelle dependance Debian introduite ; fermeture de dependances des deux univers inchangee et non reauditee sur VM a cette occasion, seuls les numeros de version et empreintes SHA-256 des trois composants et de leurs .deb ont ete mis a jour."
+        "value": "Depends declares releves depuis DEBIAN/control de chaque .deb. Fermeture transitive et versions resolues le 2026-08-19 directement depuis la VM de test SILLON reelle (192.168.122.114, Debian 13/Trixie) : dpkg-query -W pour l'univers hote (195 paquets), extraction du fichier var/lib/dpkg/status de la couche image du Dockerfile (podman save) pour l'univers image d'execution (378 paquets, sillon-image-execution:latest chargee sur cette VM). Mise a jour du 22 aout 2026 : ajout de sillon-purge (aucune nouvelle dependance Debian) et des paquets sillon-backup-client/server/server-survey (pgBackRest) - univers hote complete via dpkg-query -W reel sur la VM de test apres installation reelle ; univers 'machine de sauvegarde' (sillon-backup-server/server-survey, machine distincte non disponible pour verification directe) resolu par fermeture theorique de dependances Debian (apt-cache depends --recurse), non confirme sur une machine physique separee - limite documentee au §2/§7. Versions de sillon-server (0.1.29->0.1.34) et sillon-tutoriel (0.1.0->0.2.0) corrigees a cette occasion (constatees perimees, sans reprise complete des 195+378 paquets deja resolus le 19 aout, hors perimetre de cette mise a jour). Mise a jour du 25 aout 2026 : sillon-backup-client/server/server-survey portes de 0.1.0 a 0.1.2 (versions .deb reellement construites - le 0.1.1 intermediaire n'a jamais ete publie en nomenclature) suite a la correction d'un bug des menus debconf (priorite 'medium' des questions IP/e-mail/relais SMTP, sous le seuil par defaut 'high' de Debian, qui les masquait silencieusement a l'installation au lieu de les poser systematiquement - corrige en 'high'). Aucune nouvelle dependance Debian introduite ; fermeture de dependances des deux univers inchangee et non reauditee sur VM a cette occasion, seuls les numeros de version et empreintes SHA-256 des trois composants et de leurs .deb ont ete mis a jour. Mise a jour du 15 septembre 2026 : premier audit CVE effectif de l'univers hote (jusque-la purement theorique), mene sur une VM de test distincte (192.168.122.80) - postgresql-17 (17.10) et nginx/nginx-common (1.26.3-3+deb13u5) trouves en retard sur des correctifs de securite critiques deja publies cote Debian, VM mise a niveau immediatement (nginx confirme a 1.26.3-3+deb13u8 ; postgresql-17 deja resolu a 17.11-0+deb13u1 dans cette nomenclature, coherent avec l'etat corrige). sillon-server porte de 0.1.34 a 0.1.36 (nouvelle empreinte SHA-256) : ajout de la dependance unattended-upgrades (2.12) et de sa fermeture transitive (python3-dbus, python3-distro-info, python3-gi, gir1.2-glib-2.0, libgirepository-1.0-1, gir1.2-girepository-2.0 - 7 nouveaux composants), installee reellement sur la VM de test et validee par un essai a blanc (unattended-upgrade --dry-run --debug). Voir NOMENCLATURE_LOGICIELLE_SILLON.md §7 constat 11 pour le detail complet."
       },
       {
         "name": "sillon:target-os",
@@ -44,11 +44,11 @@
   "components": [
     {
       "type": "application",
-      "bom-ref": "sillon:sillon-server@0.1.34",
+      "bom-ref": "sillon:sillon-server@0.1.36",
       "name": "sillon-server",
-      "version": "0.1.34",
-      "description": "Socle applicatif SILLON : PostgreSQL, Nginx, API de requetage, catalogue applicatif, anti-bruteforce.",
-      "purl": "pkg:deb/sillon/sillon-server@0.1.34?arch=amd64",
+      "version": "0.1.36",
+      "description": "Socle applicatif SILLON : PostgreSQL, Nginx, API de requetage, catalogue applicatif, anti-bruteforce, mise a jour de securite automatisee.",
+      "purl": "pkg:deb/sillon/sillon-server@0.1.36?arch=amd64",
       "properties": [
         {
           "name": "sillon:architecture",
@@ -58,7 +58,7 @@
       "hashes": [
         {
           "alg": "SHA-256",
-          "content": "155c6bf8877f9726d1188df7c07e745dc387335ff99b25b50150d1c193a03cbf"
+          "content": "f662d47c8d4540ab0cb509b6f149554d6e8d1ad3f2870cae797b10091e16e912"
         }
       ]
     },
@@ -4383,10 +4383,10 @@
     },
     {
       "type": "library",
-      "bom-ref": "deb:host:nginx@1.26.3-3+deb13u7:amd64",
+      "bom-ref": "deb:host:nginx@1.26.3-3+deb13u8:amd64",
       "name": "nginx",
-      "version": "1.26.3-3+deb13u7",
-      "purl": "pkg:deb/debian/nginx@1.26.3-3+deb13u7?arch=amd64&distro=debian-13",
+      "version": "1.26.3-3+deb13u8",
+      "purl": "pkg:deb/debian/nginx@1.26.3-3+deb13u8?arch=amd64&distro=debian-13",
       "properties": [
         {
           "name": "sillon:debian-suite",
@@ -4406,10 +4406,10 @@
     },
     {
       "type": "library",
-      "bom-ref": "deb:host:nginx-common@1.26.3-3+deb13u7:all",
+      "bom-ref": "deb:host:nginx-common@1.26.3-3+deb13u8:all",
       "name": "nginx-common",
-      "version": "1.26.3-3+deb13u7",
-      "purl": "pkg:deb/debian/nginx-common@1.26.3-3+deb13u7?arch=all&distro=debian-13",
+      "version": "1.26.3-3+deb13u8",
+      "purl": "pkg:deb/debian/nginx-common@1.26.3-3+deb13u8?arch=all&distro=debian-13",
       "properties": [
         {
           "name": "sillon:debian-suite",
@@ -4428,6 +4428,154 @@
         {
           "type": "website",
           "url": "https://nginx.org"
+        }
+      ]
+    },
+    {
+      "type": "application",
+      "bom-ref": "deb:host:unattended-upgrades@2.12:all",
+      "name": "unattended-upgrades",
+      "version": "2.12",
+      "description": "Mise a jour de securite automatisee du socle systeme (§12.1 du cahier des charges) - nouvelle dependance de sillon-server 0.1.36, ajoutee le 15/09/2026 (constat 11).",
+      "purl": "pkg:deb/debian/unattended-upgrades@2.12?arch=all&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "host"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "unattended-upgrades"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:host:python3-dbus@1.4.0-1:amd64",
+      "name": "python3-dbus",
+      "version": "1.4.0-1",
+      "purl": "pkg:deb/debian/python3-dbus@1.4.0-1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "host"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "dbus-python"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:host:python3-distro-info@1.13:all",
+      "name": "python3-distro-info",
+      "version": "1.13",
+      "purl": "pkg:deb/debian/python3-distro-info@1.13?arch=all&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "host"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "distro-info"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:host:python3-gi@3.50.0-4+b1:amd64",
+      "name": "python3-gi",
+      "version": "3.50.0-4+b1",
+      "purl": "pkg:deb/debian/python3-gi@3.50.0-4+b1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "host"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "pygobject"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:host:gir1.2-glib-2.0@2.84.4-3~deb13u5:amd64",
+      "name": "gir1.2-glib-2.0",
+      "version": "2.84.4-3~deb13u5",
+      "purl": "pkg:deb/debian/gir1.2-glib-2.0@2.84.4-3~deb13u5?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "host"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "glib2.0"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:host:libgirepository-1.0-1@1.84.0-1:amd64",
+      "name": "libgirepository-1.0-1",
+      "version": "1.84.0-1",
+      "purl": "pkg:deb/debian/libgirepository-1.0-1@1.84.0-1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "host"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "gobject-introspection"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:host:gir1.2-girepository-2.0@1.84.0-1:amd64",
+      "name": "gir1.2-girepository-2.0",
+      "version": "1.84.0-1",
+      "purl": "pkg:deb/debian/gir1.2-girepository-2.0@1.84.0-1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "host"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "gobject-introspection"
         }
       ]
     },
@@ -18350,7 +18498,7 @@
     {
       "ref": "sillon-application",
       "dependsOn": [
-        "sillon:sillon-server@0.1.34",
+        "sillon:sillon-server@0.1.36",
         "sillon:sillon-orchestrateur@0.1.13",
         "sillon:sillon-worker@0.1.3",
         "sillon:sillon-image-execution@0.1.2",
@@ -18363,13 +18511,14 @@
       ]
     },
     {
-      "ref": "sillon:sillon-server@0.1.34",
+      "ref": "sillon:sillon-server@0.1.36",
       "dependsOn": [
         "deb:host:postgresql-17@17.11-0+deb13u1:amd64",
-        "deb:host:nginx@1.26.3-3+deb13u7:amd64",
+        "deb:host:nginx@1.26.3-3+deb13u8:amd64",
         "deb:host:openssl@3.5.6-1~deb13u2:amd64",
         "deb:host:sudo@1.9.16p2-3+deb13u2:amd64",
         "deb:host:fail2ban@1.1.0-8:all",
+        "deb:host:unattended-upgrades@2.12:all",
         "postgrest-14.8",
         "js-papaparse-5.6.0",
         "js-chartjs-plugin-datalabels-2.2.0",
@@ -18383,9 +18532,30 @@
       ]
     },
     {
+      "ref": "deb:host:unattended-upgrades@2.12:all",
+      "dependsOn": [
+        "deb:host:python3-dbus@1.4.0-1:amd64",
+        "deb:host:python3-distro-info@1.13:all",
+        "deb:host:python3-gi@3.50.0-4+b1:amd64"
+      ]
+    },
+    {
+      "ref": "deb:host:python3-gi@3.50.0-4+b1:amd64",
+      "dependsOn": [
+        "deb:host:gir1.2-glib-2.0@2.84.4-3~deb13u5:amd64",
+        "deb:host:libgirepository-1.0-1@1.84.0-1:amd64"
+      ]
+    },
+    {
+      "ref": "deb:host:gir1.2-girepository-2.0@1.84.0-1:amd64",
+      "dependsOn": [
+        "deb:host:libgirepository-1.0-1@1.84.0-1:amd64"
+      ]
+    },
+    {
       "ref": "sillon:sillon-orchestrateur@0.1.13",
       "dependsOn": [
-        "sillon:sillon-server@0.1.34",
+        "sillon:sillon-server@0.1.36",
         "deb:host:python3-flask@3.1.1-1:all",
         "deb:host:python3-psycopg2@2.9.10-1+b1:amd64",
         "deb:host:python3-jwt@2.10.1-2+deb13u1:all",
@@ -18410,7 +18580,7 @@
     {
       "ref": "sillon:sillon-tutoriel@0.2.0",
       "dependsOn": [
-        "sillon:sillon-server@0.1.34",
+        "sillon:sillon-server@0.1.36",
         "sillon:sillon-orchestrateur@0.1.13",
         "sillon:sillon-worker@0.1.3",
         "sillon:sillon-image-execution@0.1.2",
@@ -18427,13 +18597,13 @@
     {
       "ref": "sillon:sillon-purge@0.1.0",
       "dependsOn": [
-        "sillon:sillon-server@0.1.34"
+        "sillon:sillon-server@0.1.36"
       ]
     },
     {
       "ref": "sillon:sillon-backup-client@0.1.2",
       "dependsOn": [
-        "sillon:sillon-server@0.1.34",
+        "sillon:sillon-server@0.1.36",
         "deb:host:nfs-common@1:2.8.3-1:amd64",
         "deb:host:pgbackrest@2.55.1-1:amd64",
         "deb:host:keyutils@1.6.3-6:amd64",

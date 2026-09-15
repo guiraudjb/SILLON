@@ -7,7 +7,7 @@
 | Date | 25 août 2026 (dernière révision : 15 septembre 2026, voir journal ci-dessous, entrée 11) |
 | Périmètre | Les 10 paquets `.deb` de SILLON (`build/build.sh`), leur fermeture de dépendances Debian complète, et les composants vendorisés hors `dpkg` |
 | Méthode | Dépendances directes relevées dans `DEBIAN/control` et le `Dockerfile` de l'image d'exécution ; fermeture transitive et versions résolues **directement depuis la VM de test SILLON réelle** (`192.168.122.114`, Debian 13/Trixie) pour l'univers hôte et l'univers image d'exécution. Exception : l'univers de la machine de sauvegarde (`sillon-backup-server`/`sillon-backup-server-survey`, machine physiquement distincte, non disponible pour audit direct) est résolu par fermeture théorique de dépendances Debian (`apt-cache depends --recurse`) plutôt que par observation réelle — voir §2 et §12 |
-| Format | Ce document (synthèse de lecture) + `sbom/sillon-sbom-cyclonedx.json` (référence machine-lisible, CycloneDX 1.6, 731 composants, validée sans erreur contre le schéma officiel) |
+| Format | Ce document (synthèse de lecture) + `sbom/sillon-sbom-cyclonedx.json` (référence machine-lisible, CycloneDX 1.6, 738 composants, validée sans erreur contre le schéma officiel) |
 | Statut | Nomenclature établie pour appuyer les obligations de gestion de la chaîne d'approvisionnement logicielle et de gestion des vulnérabilités du règlement **NIS2** — voir « Limites » (§12) |
 | Dernière mise à jour de sécurité appliquée | **15 septembre 2026** — `postgresql-17` et `nginx` (univers hôte) mis à niveau sur la VM de test vers leurs versions Debian corrigées, `sillon-server` (0.1.35 → **0.1.36**) doté d'une mise à jour de sécurité automatisée (`unattended-upgrades`) pour que ce type de dérive ne se reproduise plus sans intervention manuelle — voir §7 constat 11, §8. Précédente mise à jour de sécurité, 19 août 2026 : PapaParse et DSFR corrigés dans `sillon-server` (0.1.28 → 0.1.29) ; `debian:13-slim` épinglé par digest dans `sillon-image-execution` (0.1.0 → 0.1.2) — voir §6.1, §7 |
 
@@ -64,7 +64,7 @@ Une première résolution, antérieure (paquets applicatifs originels, 19 août 
 | Licences front identifiées | 10/10, toutes permissives (MIT, BSD-3-Clause, ISC) |
 | CVE connue affectant un composant vendorisé | 0 — **CVE-2020-36649** (PapaParse) détectée puis **corrigée le 19/08/2026**, voir §6.1 et §7 |
 | Composants vendorisés en retard sur un correctif de sécurité amont | 0/10 (PapaParse et DSFR corrigés le 19/08/2026 — `sillon-server` 0.1.29, depuis mis à niveau vers 0.1.36) |
-| Composants totaux (fichier CycloneDX) | 731 |
+| Composants totaux (fichier CycloneDX) | 738 (+7 le 15/09/2026 : `unattended-upgrades` et sa fermeture transitive, constat 11) |
 | Dernière vérification CVE effective (vendorisé + univers hôte) | **15/09/2026** — voir constat 11, §7 : 2 composants de l'univers hôte (`postgresql-17`, `nginx`) trouvés en retard sur des correctifs critiques et corrigés le jour même |
 
 ## 4. Architecture et chaîne de dépendances
