@@ -246,7 +246,7 @@ ORDER BY population DESC;
 
 ## Partie 2 — Python avancé
 
-L'onglet **Scripts** permet de déposer un fichier `.py` ou `.R`, exécuté dans un environnement isolé avec un accès direct à votre base (variable d'environnement `SILLON_DSN`) et un répertoire de sortie pour vos résultats (`SILLON_RESULTATS`). Librairies Python disponibles : `pandas`, `numpy`, `matplotlib`, `psycopg2`, `openpyxl` — consultez la liste à jour dans l'onglet avant de coder. Pas de librairie géospatiale (geopandas, shapely) ni de graphiques interactifs (plotly, bokeh) : tout export est une image statique ou un fichier.
+L'onglet **Scripts** permet de déposer un fichier `.py` ou `.R`, exécuté dans un environnement isolé avec un accès direct à votre base (variable d'environnement `SILLON_DSN`) et un répertoire de sortie pour vos résultats (`SILLON_RESULTATS`). Librairies Python disponibles : `pandas`, `numpy`, `matplotlib`, `psycopg2`, `openpyxl`, `geopandas` (avec `shapely`/`pyproj`/`pyogrio`) — consultez la liste à jour dans l'onglet avant de coder. Pas de graphiques interactifs (plotly, bokeh) : tout export est une image statique ou un fichier.
 
 Squelette commun à tous les scripts de cette partie :
 
@@ -362,9 +362,9 @@ with PdfPages(os.path.join(resultats, "rapport.pdf")) as pdf:
     plt.close(figure2)
 ```
 
-### 2.4 Cartographie
+### 2.4 Cartographie (sans librairie géospatiale)
 
-Pas de `geopandas`/`shapely` dans l'image d'exécution : la table `contours_departements` aplatit volontairement chaque polygone en points ordonnés (`dep_code`, `groupe`, `ordre`, `longitude`, `latitude`) plutôt qu'un format géospatial — `matplotlib.patches.Polygon` sait tracer un polygone à partir d'une simple liste de coordonnées, sans dépendance supplémentaire.
+La table `contours_departements` aplatit chaque polygone en points ordonnés (`dep_code`, `groupe`, `ordre`, `longitude`, `latitude`) plutôt qu'un format géospatial (aucune extension PostGIS côté base, §7.7) — `matplotlib.patches.Polygon` sait tracer un polygone à partir d'une simple liste de coordonnées, sans dépendance supplémentaire. Cette approche reste valide même depuis que `geopandas` est disponible (§2.5 ci-dessous) : elle suffit pour un simple tracé, sans opération géométrique réelle (aire, fusion de contours, jointure spatiale).
 
 Le script d'exemple **`exemple_2.4_cartographie.py`** (déjà déposé et exécuté, résultat dans l'onglet **Suivi** ; téléchargeable dans `python/exemples/`) trace une carte choroplèthe de la population par département :
 
@@ -395,9 +395,54 @@ figure.savefig(os.path.join(resultats, "carte.png"), bbox_inches="tight")
 
 ![Carte choroplèthe de la population par département, résultat réel de exemple_2.4_cartographie.py](images/exemple_2.4_cartographie.png)
 
+### 2.5 Cartographie SIG (`geopandas`)
+
+`geopandas` (avec `shapely`, `pyproj`, `pyogrio`/GDAL) apporte de vraies géométries plutôt que des listes de points dessinées à la main : reprojection dans un système de coordonnées différent, calcul d'aire réel, fusion de polygones, jointure spatiale — des opérations géométriques, pas seulement un tracé.
+
+```python
+import geopandas as gpd
+from shapely.geometry import Polygon, MultiPolygon
+
+# ... reconstitution des polygones départementaux à partir de
+# contours_departements, comme en 2.4, mais en objets shapely.Polygon
+# plutôt qu'en listes de points ...
+departements = gpd.GeoDataFrame({"dep_code": [...], "geometry": [...]}, crs="EPSG:4326")
+
+# Reprojection en Lambert-93 (EPSG:2154, projection officielle de la
+# France métropolitaine) : un CRS géographique (degrés, EPSG:4326) ne
+# donne pas d'aire en mètres carrés exploitable telle quelle.
+departements["aire_km2"] = departements.to_crs("EPSG:2154").geometry.area / 1_000_000
+
+# dissolve() fusionne les polygones départementaux en polygones
+# régionaux - une vraie agrégation géométrique, impossible avec
+# l'approche matplotlib.patches.Polygon de la section 2.4.
+regions = departements.dissolve(by="reg_code", aggfunc={"population": "sum"})
+regions.plot(column="population", cmap="Blues", legend=True)
+```
+
+**Piège réel rencontré en écrivant cet exemple** : Lambert-93 n'est valide qu'en France métropolitaine — calculer une aire après reprojection dans ce CRS pour un département d'outre-mer donne un résultat complètement faux (chacun est à des milliers de kilomètres de la zone de validité de la projection). Chaque DOM nécessiterait sa propre projection locale (UTM 20N Antilles, UTM 22N Guyane, UTM 40S/38S Réunion/Mayotte). Le script d'exemple se limite donc à la métropole pour le calcul d'aire — un `geopandas` mal utilisé produit un résultat qui a l'air correct (une carte s'affiche, un nombre sort) mais qui est silencieusement faux, contrairement à une erreur qui empêcherait l'exécution.
+
+Le script d'exemple **`exemple_2.5_geopandas.py`** (déjà déposé et exécuté, résultat dans l'onglet **Suivi** ; téléchargeable dans `python/exemples/`) produit la carte régionale ci-dessous, ainsi qu'un `aires_departements.csv` (aire calculée par géométrie, à comparer à la superficie déclarée en 2.5 des exercices ci-dessous) :
+
+![Population par région, limites régionales fusionnées par dissolve() à partir des polygones départementaux, résultat réel de exemple_2.5_geopandas.py](images/exemple_2.5_geopandas.png)
+
+### 2.6 Script de synthèse : Île-de-France
+
+Un dernier script combine **toutes** les bibliothèques Python de l'image d'exécution sur un seul filtre régional (`communes_france` restreint à l'Île-de-France, `reg_code = '11'`) : `numpy` (statistiques, matrice de corrélation), `pandas` (agrégation par département), `matplotlib` (tableau de bord 4 graphiques), `geopandas` (carte réelle par département, jointure spatiale), `matplotlib.backends.backend_pdf.PdfPages` (rapport PDF 2 pages) et `openpyxl` (classeur Excel avec un onglet par département).
+
+Le script d'exemple **`exemple_2.6_synthese_ile_de_france.py`** (déjà déposé et exécuté, résultat dans l'onglet **Suivi** ; téléchargeable dans `python/exemples/`) produit un tableau de bord matplotlib :
+
+![Panorama Île-de-France (population par département, distribution de la densité, altitude vs densité, corrélations), résultat réel de exemple_2.6_synthese_ile_de_france.py](images/exemple_2.6_panorama.png)
+
+... et une carte `geopandas` de la densité par département, avec en rouge les communes dont le point central tombe géométriquement hors de son département déclaré (même technique que l'exercice 2.6) :
+
+![Densité par département en Île-de-France avec communes en désaccord géométrique signalées, résultat réel de exemple_2.6_synthese_ile_de_france.py](images/exemple_2.6_carte.png)
+
+Le classeur `synthese_ile_de_france.xlsx` (un onglet de synthèse avec graphique natif, plus un onglet par département listant ses communes) et le rapport `synthese_ile_de_france.pdf` (panorama + carte, 2 pages) sont produits dans le même job.
+
 ### Exercices
 
-Corrigés téléchargeables dans `python/exercices/` (`exercice_2.1.py` à `exercice_2.4.py`).
+Corrigés téléchargeables dans `python/exercices/` (`exercice_2.1.py` à `exercice_2.6.py`).
 
 **2.1.** Reproduisez la carte de `exemple_2.4_cartographie.py`, mais coloriée par **densité moyenne** du département plutôt que par population totale.
 
@@ -425,6 +470,28 @@ Résultat réel (`correlation_altitude_densite.csv`, extrait) :
 | Bourgogne-Franche-Comté | -0,06 |
 
 Corrélations négatives partout : dans chaque région, les communes les plus hautes en altitude tendent à être les moins denses — hypothèse confirmée, à des degrés très variables selon la région.
+
+**2.5.** Comparez, pour chaque département métropolitain, l'**aire calculée par geopandas** (géométrie réelle, reprojetée en Lambert-93 comme en 2.5) à la **superficie déclarée** (somme des `superficie_km2` des communes du département) : calculez l'écart relatif en %, triez du plus grand écart absolu au plus petit, exportez un CSV. *Départements d'outre-mer exclus* : `communes_france` ne porte aucune `superficie_km2` pour eux dans ce jeu de données, et Lambert-93 n'y est de toute façon pas valide (voir piège de la section 2.5).
+
+Résultat réel (`ecarts_aires_departements.csv`, 5 plus grands écarts) :
+
+| Département | Aire calculée (km²) | Aire déclarée (km²) | Écart |
+|---|---|---|---|
+| Hauts-de-Seine | 171,8 | 178,0 | -3,48 % |
+| Gironde | 10 087,2 | 10 366,0 | -2,69 % |
+| Drôme | 6 690,0 | 6 552,0 | +2,11 % |
+| Charente-Maritime | 6 904,1 | 7 047,0 | -2,03 % |
+| Val-de-Marne | 245,2 | 241,0 | +1,74 % |
+
+Écarts de l'ordre de 2 à 3,5 % seulement, dans les deux sens : la géométrie IGN ADMIN EXPRESS (généralisée pour l'affichage) et la somme des superficies communales déclarées par l'INSEE ne sont jamais deux mesures parfaitement identiques d'une même frontière — un écart de cet ordre est attendu, pas une anomalie à corriger.
+
+**2.6.** *Avancé* : jointure spatiale (`geopandas.sjoin`, prédicat `within`). Pour chaque commune, le point (`longitude_centre`, `latitude_centre`) tombe-t-il géométriquement dans le polygone du département qu'elle déclare (`dep_code`) ? Recensez les désaccords et les communes sans correspondance géométrique, exportez un CSV.
+
+Résultat réel :
+
+> 34 868 communes, **211 désaccords** commune/département, **163 communes sans correspondance géométrique** (point de centre en mer/frontière — communes littorales et communes nouvelles au centroïde recalculé, essentiellement).
+
+0,6 % de désaccords : les centroïdes déclarés et les contours départementaux généralisés (IGN ADMIN EXPRESS) proviennent de traitements différents — une jointure spatiale les confronte l'un à l'autre et révèle ces écarts, invisibles avec l'approche par points de la section 2.4 (elle ne fait que dessiner les polygones, jamais de test d'appartenance géométrique).
 
 ---
 

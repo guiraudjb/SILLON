@@ -34,6 +34,18 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install --no-instal
         python3-matplotlib \
         python3-psycopg2 \
         python3-openpyxl \
+        # Cartographie/SIG (§7.7, ajout du 16/09/2026) : entraine GDAL et
+        # toute sa pile de pilotes de formats (~154 paquets Debian
+        # supplementaires - HDF5, NetCDF, MariaDB, ODBC, Poppler/PDF, NSS,
+        # SpatiaLite, libcurl...), constate a la simulation d'installation
+        # (apt-get install -s) avant construction reelle - quasi-doublement
+        # de la surface de l'image par rapport au jeu de depart. libcurl est
+        # notamment presente pour les pilotes GDAL reseau (/vsicurl/, WFS,
+        # WMS) : comme pour r-cran-tidyverse plus bas, l'isolation reseau
+        # effective ne repose pas sur l'absence de ces bibliotheques mais
+        # exclusivement sur les options d'execution imposees par worker.py
+        # (--network interne) - voir NOMENCLATURE_LOGICIELLE_SILLON.md §7.
+        python3-geopandas \
         r-base-core \
         r-cran-tidyverse \
         r-cran-dbi \

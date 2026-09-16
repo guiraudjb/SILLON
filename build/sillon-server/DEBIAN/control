@@ -1,5 +1,5 @@
 Package: sillon-server
-Version: 0.1.38
+Version: 0.1.39
 Architecture: amd64
 Maintainer: Administrateur SILLON <admin@sillon.local>
 Pre-Depends: dpkg (>= 1.17.14)

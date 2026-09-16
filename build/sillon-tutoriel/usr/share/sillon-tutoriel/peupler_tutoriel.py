@@ -54,6 +54,8 @@ SCRIPTS_EXEMPLE = [
     ("python/exemples", "exemple_2.1_panorama_graphiques.py"),
     ("r/exemples", "exemple_3.1_panorama_graphiques.R"),
     ("python/exemples", "exemple_2.4_cartographie.py"),
+    ("python/exemples", "exemple_2.5_geopandas.py"),
+    ("python/exemples", "exemple_2.6_synthese_ile_de_france.py"),
     ("r/exemples", "exemple_3.4_cartographie.R"),
 ]
 
@@ -62,11 +64,16 @@ TABLES = [
     ("regions_france.csv", "regions_france"),
     # Contours départementaux réels (source IGN ADMIN EXPRESS, Licence
     # Ouverte 2.0), aplatis en points ordonnés (dep_code, groupe, ordre,
-    # longitude, latitude) : pas de format géospatial (GeoJSON...) en base,
-    # ni Python ni R n'ont de librairie dédiée dans l'image d'exécution
-    # (§7.7) - un simple CSV de points reste lisible en SQL basique et
-    # suffit à reconstituer chaque polygone (cf. corriges/python/exemples/
-    # exemple_2.4_cartographie.py et son équivalent R).
+    # longitude, latitude) : pas de format géospatial (GeoJSON, colonne
+    # "geometry"...) en base, PostGIS n'étant pas installé (§7.7) - un
+    # simple CSV de points reste lisible en SQL basique, suffit à
+    # reconstituer chaque polygone à la main (cf. corriges/python/exemples/
+    # exemple_2.4_cartographie.py et son équivalent R, aucun des deux
+    # n'ayant de librairie géospatiale à l'origine) et reste la seule
+    # option pour R, toujours sans librairie dédiée. Python dispose depuis
+    # geopandas (exemple_2.5_geopandas.py) d'une reconstitution plus riche
+    # à partir de ce même CSV de points - sans que le schéma de la table
+    # elle-même n'ait eu besoin de changer.
     ("contours_departements.csv", "contours_departements"),
 ]
 

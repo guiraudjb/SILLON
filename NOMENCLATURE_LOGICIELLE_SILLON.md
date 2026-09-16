@@ -4,12 +4,12 @@
 
 | Champ | Valeur |
 |---|---|
-| Date | 25 août 2026 (dernière révision : 15 septembre 2026, voir journal ci-dessous, entrée 11) |
+| Date | 25 août 2026 (dernière révision : 16 septembre 2026, voir journal ci-dessous, entrée 14) |
 | Périmètre | Les 10 paquets `.deb` de SILLON (`build/build.sh`), leur fermeture de dépendances Debian complète, et les composants vendorisés hors `dpkg` |
 | Méthode | Dépendances directes relevées dans `DEBIAN/control` et le `Dockerfile` de l'image d'exécution ; fermeture transitive et versions résolues **directement depuis la VM de test SILLON réelle** (`192.168.122.114`, Debian 13/Trixie) pour l'univers hôte et l'univers image d'exécution. Exception : l'univers de la machine de sauvegarde (`sillon-backup-server`/`sillon-backup-server-survey`, machine physiquement distincte, non disponible pour audit direct) est résolu par fermeture théorique de dépendances Debian (`apt-cache depends --recurse`) plutôt que par observation réelle — voir §2 et §12 |
 | Format | Ce document (synthèse de lecture) + `sbom/sillon-sbom-cyclonedx.json` (référence machine-lisible, CycloneDX 1.6, 738 composants, validée sans erreur contre le schéma officiel) |
 | Statut | Nomenclature établie pour appuyer les obligations de gestion de la chaîne d'approvisionnement logicielle et de gestion des vulnérabilités du règlement **NIS2** — voir « Limites » (§12) |
-| Dernière mise à jour de sécurité appliquée | **15 septembre 2026** — `postgresql-17` et `nginx` (univers hôte) mis à niveau sur la VM de test vers leurs versions Debian corrigées, `sillon-server` (0.1.35 → **0.1.36**) doté d'une mise à jour de sécurité automatisée (`unattended-upgrades`) pour que ce type de dérive ne se reproduise plus sans intervention manuelle — voir §7 constat 11, §8. Précédente mise à jour de sécurité, 19 août 2026 : PapaParse et DSFR corrigés dans `sillon-server` (0.1.28 → 0.1.29) ; `debian:13-slim` épinglé par digest dans `sillon-image-execution` (0.1.0 → 0.1.2) — voir §6.1, §7 |
+| Dernière mise à jour de sécurité appliquée | **15 septembre 2026** — `postgresql-17` et `nginx` (univers hôte) mis à niveau sur la VM de test vers leurs versions Debian corrigées, `sillon-server` (0.1.35 → **0.1.36**) doté d'une mise à jour de sécurité automatisée (`unattended-upgrades`) pour que ce type de dérive ne se reproduise plus sans intervention manuelle — voir §7 constat 11, §8. Précédente mise à jour de sécurité, 19 août 2026 : PapaParse et DSFR corrigés dans `sillon-server` (0.1.28 → 0.1.29) ; `debian:13-slim` épinglé par digest dans `sillon-image-execution` (0.1.0 → 0.1.2) — voir §6.1, §7. **Vérification de sécurité du 16 septembre 2026 (sans action requise)** : audit CVE des 5 bibliothèques Python vendorisées dans `sillon-image-execution` (exposées aux scripts utilisateurs) — aucune CVE active exploitable trouvée dans le modèle de menace de SILLON, voir §7 constat 12. **Même jour, évolution fonctionnelle (pas un correctif de sécurité)** : vendoring de `python3-geopandas` dans `sillon-image-execution` (0.1.2 → 0.1.3, +80 paquets Debian, dont GDAL), construit en local puis **installé et vérifié en conditions réelles sur la VM de test `192.168.122.80`** — voir §7 constat 13 |
 
 **Journal des révisions** (même journée, 19 août 2026) :
 
@@ -26,6 +26,9 @@
 | 9 | **22 août 2026** — Ajout de `sillon-purge` (déjà en production depuis le 20 août, jusqu'ici omis de cette nomenclature — aucune dépendance Debian nouvelle) et des trois paquets `sillon-backup-client`/`sillon-backup-server`/`sillon-backup-server-survey` (sauvegarde pgBackRest, voir cahier des charges §12.10). Univers hôte complété (+6 paquets : `pgbackrest`, `nfs-common` et leurs dépendances) et vérifié en conditions réelles sur la VM de test après installation réelle (`dpkg-query -W`/journal `dpkg.log`). Nouvel univers « machine de sauvegarde » (131 paquets, `sillon-backup-server`/`sillon-backup-server-survey`) documenté par fermeture théorique de dépendances, faute d'une seconde machine physique disponible pour audit direct — limite assumée, voir §12. Versions de `sillon-server` (0.1.29 → 0.1.34) et `sillon-tutoriel` (0.1.0 → 0.2.0) corrigées au passage (constatées périmées ; pas de reprise complète des 573 paquets Debian déjà résolus le 19 août, hors périmètre de cette mise à jour). |
 | 10 | **25 août 2026** — `sillon-backup-client`/`sillon-backup-server`/`sillon-backup-server-survey` portés de 0.1.0 à **0.1.2** (numéros et empreintes SHA-256 mis à jour ci-dessous ; le 0.1.1 intermédiaire n'avait pas encore été repris dans cette nomenclature) suite à la correction d'un bug bloquant les menus interactifs debconf : les questions IP serveur/client, e-mail admin et relais SMTP étaient posées en priorité `medium`, sous le seuil par défaut de Debian (`high`) — elles étaient donc masquées silencieusement à l'installation au lieu d'être posées systématiquement, corrigé en `high`. Aucune dépendance Debian nouvelle, fermeture de dépendances des deux univers inchangée ; **ces trois paquets n'ont pas été réinstallés sur la VM de test depuis ce correctif** — la phrase ci-dessous (§5) reflète encore leur état au 22 août (`dpkg -l`), pas la version 0.1.2. |
 | 11 | **15 septembre 2026** — Premier audit CVE effectif de l'univers hôte (§8), jusque-là purement théorique : `postgresql-17` 17.10 et `nginx` 1.26.3-3+deb13u5, alors déployés sur la VM de test, trouvés en retard sur plusieurs correctifs de sécurité critiques déjà publiés côté Debian (voir §7, constat 11, pour le détail complet). VM mise à niveau immédiatement (`apt upgrade`), versions actives confirmées après coup. `sillon-server` 0.1.35 → **0.1.36** : nouvelle dépendance `unattended-upgrades` + section postinst dédiée, déployée en mise à jour réelle sur la VM de test et validée par un essai à blanc (`unattended-upgrade --dry-run --debug`). Les 10 composants vendorisés (§6.1) revérifiés à cette occasion (OSV.dev, advisories GitHub) : aucun changement depuis le 19 août. |
+| 12 | **16 septembre 2026** — Premier audit CVE effectif d'un sous-ensemble de l'univers image d'exécution (§10, Annexe B) : les 5 bibliothèques Python vendorisées via paquets Debian dans `sillon-image-execution` et directement exposées aux scripts déposés par les utilisateurs (`python3-pandas`, `python3-numpy`, `python3-matplotlib`, `python3-psycopg2`, `python3-openpyxl`) interrogées individuellement sur le Debian Security Tracker, sur les versions exactement vendorisées (Debian 13/trixie). Aucune CVE active exploitable trouvée — voir §7, constat 12, pour le détail. Aucune action de correction requise ; aucun paquet reconstruit. |
+| 13 | **16 septembre 2026** — Vendoring de `python3-geopandas` dans `sillon-image-execution` (0.1.2 → **0.1.3**), à la demande d'une évolution fonctionnelle du tutoriel (cartographie SIG en script). +80 paquets Debian réellement ajoutés (378 → **458**, dont GDAL et sa pile de pilotes de formats), taille de l'image 384 Mo → **1 289 Mo** — voir §7, constat 13, pour le détail complet (dont l'audit CVE de cet ajout : CVE RCE non corrigées dans `gdal`/`netcdf`, désamorcées par le modèle de menace de SILLON). `sillon-tutoriel` 0.2.1 → **0.2.2** : nouvel exemple (`exemple_2.5_geopandas.py`) et deux nouveaux exercices corrigés (`exercice_2.5.py`, `exercice_2.6.py` — comparaison d'aires et jointure spatiale), dépendance minimale `sillon-image-execution (>= 0.1.3)` ajoutée. `sillon-server` 0.1.38 → **0.1.39** : `librairies-scripts.json` mis à jour. Les trois paquets ont été construits et vérifiés en local (script réel exécuté dans le conteneur reconstruit, conditions exactes du sandbox), puis **installés et revérifiés en conditions réelles sur la VM de test `192.168.122.80`** (podman, `sillon-worker` et `sillon-image-execution` mis en place pour la première fois sur cette VM) : les 5 scripts d'exemple du tutoriel, dont le nouveau `exemple_2.5_geopandas.py`, exécutés réellement contre la base PostgreSQL du compte `demo@sillon.local`, tous terminés avec succès. Reste à faire : resynchronisation de `sbom/sillon-sbom-cyclonedx.json` — voir §5, §12. |
+| 14 | **16 septembre 2026** — `sillon-tutoriel` 0.2.2 → **0.2.3** : nouveau script d'exemple `exemple_2.6_synthese_ile_de_france.py`, combinant les six bibliothèques Python de l'image d'exécution (`psycopg2`, `pandas`, `numpy`, `matplotlib`, `geopandas`, `openpyxl`) sur `communes_france` filtré à l'Île-de-France (1 266 communes, 8 départements) — tableau de bord matplotlib (barres, histogramme, nuage de points, corrélations), carte `geopandas` par département (aire réelle, jointure spatiale), rapport PDF 2 pages (`PdfPages`) et classeur Excel multi-onglets natif. Aucune nouvelle dépendance Debian (bibliothèques déjà vendorisées, constats 12-13). Construit, testé localement (résultats identiques obtenus deux fois), puis **installé et vérifié en conditions réelles sur `192.168.122.80`** (mise à niveau depuis 0.2.2, job n°18 `termine`, fichiers produits confirmés identiques à la vérification locale). |
 
 ---
 
@@ -42,7 +45,7 @@ Le règlement NIS2 impose aux entités concernées de documenter la composition 
 **Fermeture transitive et versions** — résolues le 19 août 2026 (paquets applicatifs originels) puis complétées le 22 août 2026 (`sillon-purge`, `sillon-backup-*`) directement sur la VM de test SILLON réelle (`192.168.122.114`, Debian 13/Trixie), en conditions réelles plutôt que par simulation, pour deux des trois univers :
 
 - **Univers hôte** (201 paquets) : `dpkg-query -W` exécuté sur la VM elle-même, filtré sur l'ensemble des paquets réellement tirés par les dépendances directes de `sillon-server`, `sillon-orchestrateur`, `sillon-worker`, `sillon-tutoriel`, `sillon-backup-client` (les 6 paquets ajoutés le 22 août — `pgbackrest`, `nfs-common` et leurs dépendances — installés réellement sur cette VM, confirmés via `dpkg-query -W` et le journal `/var/log/dpkg.log`).
-- **Univers de l'image d'exécution** (378 paquets) : l'image `sillon-image-execution:latest` réellement chargée sur cette VM (`podman load`, jamais reconstruite sur cible) a été inspectée directement — extraction du fichier `var/lib/dpkg/status` de la couche `apt-get install` de l'image (`/usr/lib/sillon/image-execution.tar`), sans exécuter le conteneur.
+- **Univers de l'image d'exécution** (458 paquets depuis l'ajout de `python3-geopandas` le 16/09/2026, voir §7 constat 13 — 378 auparavant) : l'image `sillon-image-execution:latest` a été inspectée directement — `dpkg-query -W` exécuté dans un conteneur réel de cette image (équivalent à l'extraction du fichier `var/lib/dpkg/status` de la couche `apt-get install`, méthode utilisée le 19 août), sans accès à la VM de test pour cette révision (voir constat 13 pour le détail).
 - **Univers de la machine de sauvegarde** (131 paquets, ajouté le 22 août 2026) : `sillon-backup-server` et `sillon-backup-server-survey` s'installent par conception sur une machine physiquement distincte du serveur SILLON (voir cahier des charges §12.10), non disponible pour un audit direct pendant cette session. Résolu par fermeture théorique de dépendances Debian (`apt-cache depends --recurse --no-recommends`, exécuté contre les dépôts Debian 13 réels), méthode moins forte que l'observation directe et donc **non confirmée sur une machine physique séparée** — voir limite correspondante en §12.
 
 Une première résolution, antérieure (paquets applicatifs originels, 19 août 2026), s'appuyait sur des conteneurs Debian 13 éphémères interrogeant les dépôts Debian génériques (la VM étant alors injoignable) : 11 versions différaient de l'état réel de la VM (dérive de correctifs de sécurité Debian publiés entre-temps, dans les deux sens — voir §7, constat 7).
@@ -57,15 +60,17 @@ Une première résolution, antérieure (paquets applicatifs originels, 19 août 
 |---|---|
 | Paquets `.deb` SILLON | 10 |
 | Paquets Debian résolus — univers hôte | 201 (dont 6 ajoutés le 22/08/2026 pour `sillon-backup-client` : `pgbackrest`, `nfs-common`…) |
-| Paquets Debian résolus — univers image d'exécution | 378 (314 paquets source uniques) |
+| Paquets Debian résolus — univers image d'exécution | 458 (371 paquets source uniques) — +80 le 16/09/2026 pour `python3-geopandas` (constat 13), 378 auparavant |
 | Paquets Debian résolus — univers machine de sauvegarde | 131 (ajouté le 22/08/2026, résolution théorique — voir §2 et §12) |
 | Composants vendorisés hors `dpkg` | 10 (1 binaire, 9 bibliothèques JS) |
-| Images conteneur figées | 1 (`image-execution.tar`, 384 Mo) |
+| Images conteneur figées | 1 (`image-execution.tar`, 1 289 Mo — 384 Mo avant l'ajout de `python3-geopandas`, constat 13) |
 | Licences front identifiées | 10/10, toutes permissives (MIT, BSD-3-Clause, ISC) |
 | CVE connue affectant un composant vendorisé | 0 — **CVE-2020-36649** (PapaParse) détectée puis **corrigée le 19/08/2026**, voir §6.1 et §7 |
 | Composants vendorisés en retard sur un correctif de sécurité amont | 0/10 (PapaParse et DSFR corrigés le 19/08/2026 — `sillon-server` 0.1.29, depuis mis à niveau vers 0.1.36) |
 | Composants totaux (fichier CycloneDX) | 738 (+7 le 15/09/2026 : `unattended-upgrades` et sa fermeture transitive, constat 11) |
 | Dernière vérification CVE effective (vendorisé + univers hôte) | **15/09/2026** — voir constat 11, §7 : 2 composants de l'univers hôte (`postgresql-17`, `nginx`) trouvés en retard sur des correctifs critiques et corrigés le jour même |
+| Dernière vérification CVE effective (bibliothèques Python, univers image d'exécution) | **16/09/2026** — voir constat 12, §7 : 5/378 paquets de l'univers image d'exécution vérifiés individuellement (les bibliothèques Python exposées aux scripts utilisateurs), aucune CVE active exploitable |
+| Dernière vérification CVE effective (dépendances de `python3-geopandas`, univers image d'exécution) | **16/09/2026** — voir constat 13, §7 : CVE ouvertes trouvées sur `gdal` (8, dont une exécution de code à distance par fichier NetCDF forgé, CVE-2026-49014) et `netcdf` (6, dont plusieurs RCE par fichier HDF5/NetCDF forgé) — aucune atteignable dans le modèle de menace de SILLON (script déjà en exécution de code arbitraire dans son propre conteneur) |
 
 ## 4. Architecture et chaîne de dépendances
 
@@ -77,28 +82,32 @@ Les 10 paquets SILLON dépendent les uns des autres en chaîne, mais traversent 
 
 | Paquet | Version | Arch. | Dépend de (Debian) | Dépend de (SILLON) | Vendorisé |
 |---|---|---|---|---|---|
-| `sillon-server` | 0.1.36 | amd64 | postgresql-17, nginx, openssl, sudo, fail2ban, **unattended-upgrades** (ajouté le 15/09/2026, constat 11) | — | PostgREST 14.8, 9 libs JS, DSFR 1.15.2 |
+| `sillon-server` | **0.1.39** | amd64 | postgresql-17, nginx, openssl, sudo, fail2ban, unattended-upgrades | — | PostgREST 14.8, 9 libs JS, DSFR 1.15.2 |
 | `sillon-orchestrateur` | 0.1.13 | all | python3-flask, python3-psycopg2, python3-jwt, gunicorn, python3-ijson | sillon-server | — |
 | `sillon-worker` | 0.1.3 | all | podman | sillon-orchestrateur | — |
-| `sillon-image-execution` | 0.1.2 | amd64 | *(univers séparé, §4)* | sillon-worker | image podman figée (384 Mo), base épinglée par digest |
-| `sillon-tutoriel` | 0.2.0 | all | python3 | sillon-server, sillon-orchestrateur, sillon-worker, sillon-image-execution | — |
+| `sillon-image-execution` | **0.1.3** | amd64 | *(univers séparé, §4)* | sillon-worker | image podman figée (**1 289 Mo**, 384 Mo avant l'ajout de `python3-geopandas`), base épinglée par digest |
+| `sillon-tutoriel` | **0.2.3** | all | python3 | sillon-server, sillon-orchestrateur, sillon-worker, sillon-image-execution (>= 0.1.3) | — |
 | `sillon-demo-sirene` | 0.1.4 | all | python3 | sillon-tutoriel | — |
 | `sillon-purge` | 0.1.0 | all | *(aucune — s'appuie sur `sudo`/`postgresql-17` déjà requis par `sillon-server`)* | sillon-server | — |
 | `sillon-backup-client` | 0.1.2 | all | pgbackrest, nfs-common | sillon-server | — |
 | `sillon-backup-server` | 0.1.2 | all | nfs-kernel-server, pgbackrest | *(machine distincte, aucune dépendance à un autre paquet SILLON)* | — |
 | `sillon-backup-server-survey` | 0.1.2 | all | mailutils, postfix | sillon-backup-server | — |
 
-Les 7 premiers paquets sont installés sur la VM de test SILLON (`192.168.122.114`) avec exactement ces versions (`dpkg -l`, 22 août 2026) — `sillon-server` a été mis à niveau de 0.1.29 (19 août) vers 0.1.34 puis, à l'occasion de l'audit CVE du 15 septembre (constat 11, §7), vers **0.1.36**, et `sillon-tutoriel` de 0.1.0 vers **0.2.0** au fil d'évolutions applicatives distinctes de ce document, versions corrigées ici en cette occasion. `sillon-demo-sirene` n'y est pas installé (paquet optionnel, voir §12). `sillon-backup-client` a également été installé et vérifié en conditions réelles sur cette même VM (montage NFS, sauvegarde complète/incrémentale, restauration à une date choisie — voir cahier des charges §12.10) ; `sillon-backup-server`/`sillon-backup-server-survey` ont été vérifiés sur cette même VM utilisée temporairement comme partage NFS bouclé (faute d'une seconde machine physique), voir §12 pour la limite que cela implique sur la résolution de leur univers Debian propre. **Exception** : cette vérification `dpkg -l` du 22 août portait sur la version `0.1.0` des trois paquets `sillon-backup-*` ; leur version **0.1.2** (colonne ci-dessus, correctif de menus debconf du 25 août — voir journal des révisions, entrée 10) n'a pas encore été réinstallée ni revérifiée sur cette VM.
+Les 7 premiers paquets sont installés sur la VM de test SILLON (`192.168.122.114`) avec exactement ces versions (`dpkg -l`, 22 août 2026) — `sillon-server` a été mis à niveau de 0.1.29 (19 août) vers 0.1.34 puis, à l'occasion de l'audit CVE du 15 septembre (constat 11, §7), vers 0.1.36. `sillon-demo-sirene` n'y est pas installé (paquet optionnel, voir §12). `sillon-backup-client` a également été installé et vérifié en conditions réelles sur cette même VM (montage NFS, sauvegarde complète/incrémentale, restauration à une date choisie — voir cahier des charges §12.10) ; `sillon-backup-server`/`sillon-backup-server-survey` ont été vérifiés sur cette même VM utilisée temporairement comme partage NFS bouclé (faute d'une seconde machine physique), voir §12 pour la limite que cela implique sur la résolution de leur univers Debian propre. **Exception** : cette vérification `dpkg -l` du 22 août portait sur la version `0.1.0` des trois paquets `sillon-backup-*` ; leur version **0.1.2** (colonne ci-dessus, correctif de menus debconf du 25 août — voir journal des révisions, entrée 10) n'a pas encore été réinstallée ni revérifiée sur cette VM.
+
+**16 septembre 2026 (constat 13)** : `sillon-image-execution` 0.1.3 (`python3-geopandas`), `sillon-server` 0.1.39 (`librairies-scripts.json` mis à jour) et `sillon-tutoriel` 0.2.2 (nouveaux exemple/exercices geopandas) ont été construits en local (`docker build`/`dpkg-deb`, machine de développement — `podman` indisponible, mêmes options de substitution que `build/build.sh`, voir constat 1), puis **installés et vérifiés en conditions réelles sur `192.168.122.80`** — une VM de test distincte de celle utilisée pour la résolution des annexes A/B/C de ce document (`192.168.122.114`, §2) : podman (absent, installé au passage), `sillon-worker` et `sillon-image-execution` (jamais installés sur cette VM avant ce jour) y ont donc été mis en place pour la première fois. `sillon-tutoriel` fixe une dépendance minimale explicite sur `sillon-image-execution (>= 0.1.3)` pour empêcher une installation incohérente (exemples geopandas déposés sans que la bibliothèque soit présente dans l'image). Les 5 scripts d'exemple du tutoriel (dont le nouveau `exemple_2.5_geopandas.py`) ont été exécutés réellement par ce worker fraîchement installé, contre la base PostgreSQL réelle du compte `demo@sillon.local` : tous terminés avec succès (`carte_regions_geopandas.png`, `aires_departements.csv` obtenus, contenu identique à la vérification locale préalable). Cette VM (`192.168.122.80`) n'ayant jamais servi de base aux annexes A/B/C, ces vérifications n'y remplacent ni ne complètent la résolution de paquets Debian de ce document — seul le bon fonctionnement applicatif de bout en bout y a été confirmé.
+
+**Même jour, complément (journal, entrée 14)** : `sillon-tutoriel` 0.2.2 → **0.2.3**, nouveau script d'exemple `exemple_2.6_synthese_ile_de_france.py` (aucune nouvelle dépendance Debian). Même cycle de vérification : local puis **mise à niveau réelle sur `192.168.122.80`** (job n°18, `termine`, résultats identiques à la vérification locale).
 
 **Empreintes SHA-256 des `.deb` construits** (traçabilité de provenance) :
 
 | Paquet | SHA-256 |
 |---|---|
-| `sillon-server_0.1.36_amd64.deb` | `f662d47c8d4540ab0cb509b6f149554d6e8d1ad3f2870cae797b10091e16e912` |
+| `sillon-server_0.1.39_amd64.deb` | `46ca624547ba46d87e14b42542f05c53db977cdfd22bd180ea9105596ecfa866` |
 | `sillon-orchestrateur_0.1.13_all.deb` | `d408ecaa5481a026759a2602e8267e2a8be4465e7c0df2768ca283870f1b07da` |
 | `sillon-worker_0.1.3_all.deb` | `a8543ce76490628c2d4ccfdf42472ae88afa6f68230c7c3759bd6ac9e8a1cc34` |
-| `sillon-image-execution_0.1.2_amd64.deb` | `2609a036c884f9ede1692c11ce77a060c3fec23064bb58c04babeb4193dfa4a3` |
-| `sillon-tutoriel_0.2.0_all.deb` | `a55cadb49fae2fbb89f85899acb2fe8c1f73ea6ccbaff309928bae4ff8718a0b` |
+| `sillon-image-execution_0.1.3_amd64.deb` | `f8faa5f78110265acd674b7cceb2352f9b06623e345c5dd0b4ef87454f2f7794` |
+| `sillon-tutoriel_0.2.3_all.deb` | `64e2ec40c9faeef2de0f92df3ef2b501224385671131c175611fc5e364d24cda` |
 | `sillon-demo-sirene_0.1.4_all.deb` | `f0fabc42fa3f9d7949cde4f4f87ed942bbda421f73ff0c8a35059533d01055b4` |
 | `sillon-purge_0.1.0_all.deb` | `40179feafaf27f9e6b5fcfe6edde8ef84071074805def6d47e69ad8c9d1beee0` |
 | `sillon-backup-client_0.1.2_all.deb` | `f4669003294bc47265cf80a954a8882d37dc6079c03f2bd612a6d1db650f0ae4` |
@@ -157,12 +166,18 @@ Chacun des 10 composants a été confronté à sa dernière version amont (regis
 | 9 | DSFR 1.14.3 (vendorisé) n'intégrait pas le correctif de sécurité publié en 1.15.0 (17/07/2026 — sanitisation du chargement de pictogrammes SVG en ligne, contournement d'injection sur IE11) | **Corrigé et déployé (19/08/2026)** | `sillon-server` (front) | Mis à jour vers DSFR 1.15.2, `sillon-server` reconstruit en 0.1.29, **installé sur la VM de test et vérifié** : rendu conforme, aucune régression visuelle (§12) |
 | 10 | L'univers Debian de la machine de sauvegarde (`sillon-backup-server`/`sillon-backup-server-survey`, 131 paquets) est résolu par fermeture théorique de dépendances (`apt-cache depends --recurse`), faute d'une seconde machine physique distincte du serveur SILLON disponible pour un audit direct — contrairement aux univers hôte et image d'exécution, tous deux vérifiés par observation réelle | À noter | `sillon-backup-server`, `sillon-backup-server-survey` | Reprendre cette résolution par `dpkg-query -W` réel dès qu'une machine de sauvegarde physique distincte sera disponible pour audit |
 | 11 | Premier audit CVE **effectif** de l'univers hôte depuis la rédaction initiale de cette nomenclature (le §2 avait explicitement classé ce scan hors périmètre, en s'appuyant sur le suivi théorique du §8) : mené le 15/09/2026 sur la VM de test, il a trouvé `postgresql-17` (17.10, alors déployé) et `nginx` (1.26.3-3+deb13u5, alors déployé) en retard sur plusieurs correctifs de sécurité critiques déjà publiés côté Debian. PostgreSQL : une vingtaine de CVE 2026 corrigées en `17.11-0+deb13u1`, plusieurs CVSS 8,1–8,8 déclenchables par du **SQL ordinaire** (`to_char()`, fonctions `regexp`, `EXTRACT()`, cycle de vie des curseurs) — donc atteignables depuis l'onglet Travaux (SQL libre) par n'importe quel agent authentifié, sans avoir besoin de dépasser les droits de son propre rôle PostgreSQL ; ce sont des bugs du moteur lui-même, hors de portée du modèle de sécurité RBAC-par-rôle décrit au cahier des charges §8.8. Les extensions `pg_trgm` et `pgcrypto` (toutes deux utilisées par SILLON — indexation trigramme §7.4, hachage des mots de passe) figurent parmi les composants concernés. Nginx, seul composant exposé publiquement par conception (§8.5) : plusieurs CVE critiques 2026 (CVSS jusqu'à 9,2), dont au moins une **activement exploitée dans la nature** au moment de l'audit, corrigées en `1.26.3-3+deb13u8`. Cause racine identifiée : aucune mise à jour de sécurité automatisée n'était configurée sur aucun paquet SILLON, malgré l'annonce du cahier des charges §12.1. *(Vérification annexe sans suite : `python3-jwt`/PyJWT porte une CVE HIGH connue — GHSA-752w-5fwx-jx9f, en-tête `crit` non validé — mais non exploitable dans SILLON, `login()`/`verifier_jeton()` n'utilisant jamais ce mécanisme.)* | **Corrigé et déployé (15/09/2026)** | Univers hôte (`postgresql-17`, `nginx`), `sillon-server` | VM de test mise à niveau immédiatement (`apt upgrade`), versions actives confirmées après coup (`SELECT version()`, `nginx -v`), services et application vérifiés fonctionnels. `sillon-server` 0.1.35 → **0.1.36** : nouvelle dépendance `unattended-upgrades` + section postinst dédiée (origines Debian-Security uniquement, redémarrage planifié à 03:30 si nécessaire), déployée en mise à jour réelle et validée par un essai à blanc (`unattended-upgrade --dry-run --debug`) — pour que ce type de dérive cesse de dépendre d'une intervention manuelle |
+| 12 | Premier audit CVE **effectif** d'un sous-ensemble de l'univers image d'exécution (§10, Annexe B), jusque-là non couvert (limite documentée en §12) : les 5 bibliothèques Python vendorisées via paquets Debian dans `sillon-image-execution` et directement exposées à l'exécution de scripts déposés par les utilisateurs (`python3-pandas`, `python3-numpy`, `python3-matplotlib`, `python3-psycopg2`, `python3-openpyxl`) interrogées individuellement sur le [Debian Security Tracker](https://security-tracker.debian.org/tracker/), sur les versions exactement vendorisées dans l'image (Debian 13/trixie, épinglée par digest — constat 1). `python3-matplotlib` (3.10.1+dfsg1-4) et `python3-openpyxl` (3.1.5+dfsg-2) portent chacune une CVE historique déjà **corrigée** dans la version vendorisée (CVE-2013-1424, dépassement de tampon ; CVE-2017-5992, injection d'entité externe XML). `python3-numpy` (1:2.2.4+ds-1) et `python3-pandas` (2.2.3+dfsg-9) portent des CVE **non corrigées** côté Debian (respectivement CVE-2021-33430/34141/41495/41496, et CVE-2020-13091) mais toutes classées par l'éditeur amont sans impact réel ou nécessitant déjà un accès équivalent à celui de l'attaque elle-même (déni de service par épuisement mémoire, incohérence de comparaison qualifiée de « totalement inoffensive » par NumPy, désérialisation dangereuse de `pandas.read_pickle()` documentée comme non sûre par construction) — aucune n'est atteignable dans le modèle de menace de SILLON, où un script utilisateur dispose de toute façon d'une exécution de code arbitraire dans le conteneur isolé (`worker.py`, §7.7). `python3-psycopg2` (2.9.10-1+b1) : aucune CVE répertoriée. | **Vérifié (16/09/2026), aucune action requise** | `sillon-image-execution` | Aucun correctif nécessaire ; aucune reconstruction de paquet. Limite résiduelle : seules 5 des 378 bibliothèques de cet univers ont été passées en revue individuellement (voir §12) — les 373 paquets restants (dont R/tidyverse) n'ont pas encore fait l'objet du même contrôle |
+| 13 | **16 septembre 2026** — Vendoring de `python3-geopandas` (cartographie SIG en script, §5.4/§7.7) dans `sillon-image-execution` (0.1.2 → **0.1.3**), à la demande explicite d'une évolution fonctionnelle du tutoriel. Simulation d'installation (`apt-get install -s`) avant construction : **+154 paquets candidats**, dont GDAL et toute sa pile de pilotes de formats (HDF5, NetCDF, MariaDB, ODBC, Poppler/PDF, NSS, SpatiaLite, libcurl) — après dédoublonnage avec les paquets déjà présents, **+80 paquets réellement ajoutés** à l'image (378 → **458**, Annexe B ; taille de l'image 384 Mo → **1 289 Mo**), et 13 paquets déjà présents mis à niveau par dérive normale des dépôts Debian entre le 15 et le 16/09/2026 (openssl, python3.13, glib2.0…), sans lien avec geopandas. Vérification CVE de cet ajout sur le Debian Security Tracker, **80/80 nouveaux paquets couverts** (chacun de leurs paquets source respectifs interrogé individuellement) — `geopandas`/`shapely`/`pyproj`/`pyogrio` eux-mêmes n'ont **aucune CVE historique** ; parmi les autres, l'essentiel n'a **aucun problème ouvert** au tracker (`geos`, `proj`, `unixodbc`, `libkml`, `spatialite`, `xerces-c`, `ngtcp2`, tous les codecs image AV1/HEIF sauf `libheif` lui-même, etc.) : `gdal` porte **8 CVE non corrigées** côté Debian (dont **CVE-2026-49014**, exécution de code à distance par dépassement de tampon dans le pilote netCDF sur fichier forgé, et 5 CVE HDF-EOS/HDF4 similaires) et `netcdf` **6 CVE non corrigées** (dont plusieurs RCE par nom d'attribut/dimension forgé dans un fichier HDF5/NetCDF) — toutes désamorcées par le même raisonnement que le constat 12 : un script utilisateur dispose déjà d'une exécution de code arbitraire dans son propre conteneur isolé, donc une RCE déclenchée par un fichier qu'il choisit lui-même de faire lire par son propre script ne lui donne rien qu'il n'ait déjà. `mariadb` porte 14 CVE non corrigées, mais elles visent toutes le **serveur** MySQL/MariaDB (`mysqld`) — seul le paquet **client** (`libmariadb3`) est vendorisé ici, composant non présent, donc non concerné. `curl`/`poppler`/`nss`/`gnupg2`/`zlib`/`libheif`/`uriparser` : CVE mineures ou déjà présentes avant cet ajout (curl, via `r-cran-tidyverse`/`httr`, constat 3), sans lien avec geopandas. | **Vendorisé, déployé et vérifié en conditions réelles (16/09/2026)** | `sillon-image-execution`, `sillon-worker`, `sillon-tutoriel`, `sillon-server` (`librairies-scripts.json`) | Image reconstruite (`docker build`, `podman` indisponible sur la machine de développement — mêmes options de substitution que `build/build.sh`, voir constat 1) puis vérifiée d'abord en local dans les conditions exactes du sandbox (`--read-only --tmpfs /tmp --user 1000:1000`) : reconstitution de géométries, reprojection Lambert-93, `dissolve()`, jointure spatiale (`sjoin`) et export PNG/CSV tous fonctionnels sur le jeu de données réel du tutoriel. **Installée et revérifiée sur la VM de test `192.168.122.80`** (podman, `sillon-worker` et `sillon-image-execution` mis en place pour la première fois sur cette VM) : les 5 scripts d'exemple du tutoriel, dont `exemple_2.5_geopandas.py`, exécutés réellement par ce worker contre la base PostgreSQL du compte `demo@sillon.local`, tous terminés avec succès (résultats identiques à la vérification locale). Les 80 nouveaux paquets ont chacun été couverts par la vérification CVE (via leur paquet source). Reste à faire : resynchronisation du SBOM CycloneDX (voir §12) et report de ces versions dans les annexes A/B/C, résolues sur une VM différente (`192.168.122.114`, §2) |
 
 ## 8. Veille des vulnérabilités
 
-**Paquets Debian** — Les 710 paquets Debian de cette nomenclature (§9, §10, §11) sont, par construction, tous suivis par le [Debian Security Tracker](https://security-tracker.debian.org/tracker/) via leur paquet source (colonne « Paquet source Debian » des tableaux ci-dessous). Rapprocher périodiquement `sbom/sillon-sbom-cyclonedx.json` de ce suivi — ou d'un scanner tel que `grype`/`trivy` exécuté directement contre la VM cible — constitue la mécanique de veille recommandée pour couvrir l'obligation de gestion des vulnérabilités du règlement NIS2.
+**Paquets Debian** — Les 790 paquets Debian de cette nomenclature (§9, §10, §11 — 710 avant l'ajout de `python3-geopandas` le 16/09/2026, constat 13) sont, par construction, tous suivis par le [Debian Security Tracker](https://security-tracker.debian.org/tracker/) via leur paquet source (colonne « Paquet source Debian » des tableaux ci-dessous). Rapprocher périodiquement `sbom/sillon-sbom-cyclonedx.json` de ce suivi — ou d'un scanner tel que `grype`/`trivy` exécuté directement contre la VM cible — constitue la mécanique de veille recommandée pour couvrir l'obligation de gestion des vulnérabilités du règlement NIS2.
 
 **Premier exercice réel de cette veille (15/09/2026)** — jusque-là purement théorique (le suivi ci-dessus décrivait un mécanisme recommandé, jamais mis en œuvre). Interrogation directe du Debian Security Tracker et de sources amont (PostgreSQL, nginx.org) pour `postgresql-17` et `nginx` : deux composants trouvés en retard sur des correctifs critiques déjà publiés côté Debian (constat 11, §7), corrigés le jour même par mise à niveau de la cible et, plus durablement, par l'ajout d'une mise à jour de sécurité automatisée (`unattended-upgrades`) à `sillon-server` — la véritable mécanique de veille en continu pour l'univers hôte n'est donc plus seulement recommandée mais partiellement automatisée depuis cette version. Reste non automatisé : le rapprochement périodique avec `sbom/sillon-sbom-cyclonedx.json` lui-même, et la revérification manuelle des 10 composants vendorisés (§6.1) à chaque nouvelle version de `sillon-server`.
+
+**Extension de cette veille à un premier sous-ensemble de l'univers image d'exécution (16/09/2026)** — les 5 bibliothèques Python vendorisées via paquets Debian dans `sillon-image-execution` et exposées à l'exécution de scripts utilisateurs interrogées individuellement sur le Debian Security Tracker (constat 12, §7) : aucune CVE active exploitable dans le modèle de menace de SILLON. Périmètre volontairement restreint aux bibliothèques auxquelles un script utilisateur a un accès direct (`import pandas`, etc.) plutôt qu'aux 378 paquets de cet univers pris dans leur ensemble — les paquets système de l'image (R/tidyverse compris) restent hors de ce premier passage, voir §12.
+
+**Même jour, vendoring de `python3-geopandas` et audit de ses dépendances (constat 13, §7)** — les 80 nouveaux paquets Debian, couverts à 100 % via leurs paquets source respectifs interrogés individuellement sur le Debian Security Tracker : CVE non corrigées trouvées sur `gdal` (8, dont une RCE par fichier NetCDF forgé) et `netcdf` (6, RCE similaires), toutes désamorcées par le modèle de menace de SILLON (script déjà en exécution de code arbitraire dans son propre conteneur) ; `mariadb` (14) vise un composant serveur non vendorisé ici (seul le client `libmariadb3` l'est). Tous les autres paquets source de cet ajout (`geos`, `proj`, `geopandas`, `shapely`, `pyproj`, `pyogrio`, `unixodbc`, `libkml`, `spatialite`, `xerces-c`, `ngtcp2`, codecs image AV1/HEIF, `armadillo`, `arpack`, etc.) n'ont aucun problème ouvert au tracker.
 
 **Composants vendorisés hors `dpkg`** — ne bénéficient d'aucun suivi automatique de type `apt upgrade` et ont été vérifiés manuellement le 19 août 2026 (résultat détaillé en §6.1) : dernière version amont relevée via l'API GitHub et le registre npm, vulnérabilités connues interrogées via [OSV.dev](https://osv.dev/) sur la version exacte vendorisée de chaque composant JS, changelog/notes de version parcourus pour PostgREST et DSFR à la recherche de correctifs de sécurité non couverts par une CVE publiée. Un composant s'est révélé concerné par une CVE active (PapaParse, constat §7.8) et un autre par un correctif de sécurité non couvert par une CVE (DSFR, constat §7.9) ; les deux ont été corrigés le jour même (§6.1). Cette vérification n'est pas automatisée : à rejouer manuellement à chaque nouvelle version de `sillon-server`, ou via un outil dédié (`npm audit`, `osv-scanner`) intégré au build si cette charge devient récurrente.
 
@@ -374,10 +389,11 @@ Chacun des 10 composants a été confronté à sa dernière version amont (regis
 | `util-linux` | 2.41.5-0+deb13u1 | `util-linux` | amd64 |
 | `zlib1g` | 1:1.3.dfsg+really1.3.1-1+b1 | `zlib` | amd64 |
 
-## 10. Annexe B — Paquets Debian résolus, univers image d'exécution (378)
+## 10. Annexe B — Paquets Debian résolus, univers image d'exécution (458)
 
 | Paquet | Version | Paquet source Debian | Arch. |
 |---|---|---|---|
+| `adduser` | 3.152 | `adduser` | all |
 | `apt` | 3.0.3 | `apt` | amd64 |
 | `base-files` | 13.8+deb13u6 | `base-files` | amd64 |
 | `base-passwd` | 3.6.7 | `base-passwd` | amd64 |
@@ -391,6 +407,7 @@ Chacun des 10 composants a été confronté à sa dernière version amont (regis
 | `debian-archive-keyring` | 2025.1 | `debian-archive-keyring` | all |
 | `debianutils` | 5.23.2 | `debianutils` | amd64 |
 | `diffutils` | 1:3.10-4 | `diffutils` | amd64 |
+| `dirmngr` | 2.4.7-21+deb13u1+b5 | `gnupg2` | amd64 |
 | `dpkg` | 1.22.22 | `dpkg` | amd64 |
 | `findutils` | 4.10.0-3 | `findutils` | amd64 |
 | `fontconfig` | 2.15.0-2.3 | `fontconfig` | amd64 |
@@ -399,22 +416,39 @@ Chacun des 10 composants a été confronté à sa dernière version amont (regis
 | `fonts-dejavu-mono` | 2.37-8 | `fonts-dejavu` | all |
 | `fonts-font-awesome` | 5.0.10+really4.7.0~dfsg-4.1 | `fonts-font-awesome` | all |
 | `fonts-glyphicons-halflings` | 1.009~3.4.1+dfsg-6 | `twitter-bootstrap3` | all |
+| `fonts-lato` | 2.015-1 | `fonts-lato` | all |
 | `fonts-lyx` | 2.4.3-1 | `lyx` | all |
 | `fonts-mathjax` | 2.7.9+dfsg-1 | `mathjax` | all |
 | `gcc-14-base` | 14.2.0-19 | `gcc-14` | amd64 |
+| `gdal-data` | 3.10.3+dfsg-1 | `gdal` | all |
+| `gdal-plugins` | 3.10.3+dfsg-1 | `gdal` | amd64 |
+| `gnupg` | 2.4.7-21+deb13u1 | `gnupg2` | all |
+| `gnupg-l10n` | 2.4.7-21+deb13u1 | `gnupg2` | all |
+| `gpg` | 2.4.7-21+deb13u1+b5 | `gnupg2` | amd64 |
+| `gpg-agent` | 2.4.7-21+deb13u1+b5 | `gnupg2` | amd64 |
+| `gpgconf` | 2.4.7-21+deb13u1+b5 | `gnupg2` | amd64 |
+| `gpgsm` | 2.4.7-21+deb13u1+b5 | `gnupg2` | amd64 |
 | `grep` | 3.11-4 | `grep` | amd64 |
 | `gzip` | 1.13-1 | `gzip` | amd64 |
 | `hostname` | 3.25 | `hostname` | amd64 |
 | `init-system-helpers` | 1.69~deb13u1 | `init-system-helpers` | all |
 | `javascript-common` | 12+nmu1 | `javascript-common` | all |
+| `libabsl20240722` | 20240722.0-4 | `abseil` | amd64 |
 | `libacl1` | 2.3.2-2+b1 | `acl` | amd64 |
+| `libaec0` | 1.1.3-1+b1 | `libaec` | amd64 |
+| `libaom3` | 3.12.1-1+deb13u1 | `aom` | amd64 |
 | `libapt-pkg7.0` | 3.0.3 | `apt` | amd64 |
+| `libarmadillo14` | 1:14.2.3+dfsg-1+b1 | `armadillo` | amd64 |
+| `libarpack2t64` | 3.9.1-6 | `arpack` | amd64 |
+| `libassuan9` | 3.0.2-2 | `libassuan` | amd64 |
 | `libatomic1` | 14.2.0-19 | `gcc-14` | amd64 |
 | `libattr1` | 1:2.5.2-3 | `attr` | amd64 |
 | `libaudit-common` | 1:4.0.2-2 | `audit` | all |
 | `libaudit1` | 1:4.0.2-2+b2 | `audit` | amd64 |
+| `libavif16` | 1.2.1-1.2 | `libavif` | amd64 |
 | `libblas3` | 3.12.1-6 | `lapack` | amd64 |
 | `libblkid1` | 2.41-5 | `util-linux` | amd64 |
+| `libblosc1` | 1.21.5+ds-1+b2 | `c-blosc` | amd64 |
 | `libbrotli1` | 1.1.0-2+b7 | `brotli` | amd64 |
 | `libbsd0` | 0.12.2-2 | `libbsd` | amd64 |
 | `libbz2-1.0` | 1.0.8-6 | `bzip2` | amd64 |
@@ -423,29 +457,49 @@ Chacun des 10 composants a été confronté à sa dernière version amont (regis
 | `libcairo2` | 1.18.4-1+b1 | `cairo` | amd64 |
 | `libcap-ng0` | 0.8.5-4+b1 | `libcap-ng` | amd64 |
 | `libcap2` | 1:2.75-10+deb13u1+b1 | `libcap2` | amd64 |
-| `libcom-err2` | 1.47.2-3+b11 | `e2fsprogs` | amd64 |
+| `libcfitsio10t64` | 4.6.2-2 | `cfitsio` | amd64 |
+| `libcom-err2` | 1.47.2-3+b12 | `e2fsprogs` | amd64 |
 | `libcrypt1` | 1:4.4.38-1 | `libxcrypt` | amd64 |
-| `libcurl4t64` | 8.14.1-2+deb13u4 | `curl` | amd64 |
+| `libcurl3t64-gnutls` | 8.14.1-2+deb13u5 | `curl` | amd64 |
+| `libcurl4t64` | 8.14.1-2+deb13u5 | `curl` | amd64 |
 | `libdatrie1` | 0.2.13-3+b1 | `libdatrie` | amd64 |
+| `libdav1d7` | 1.5.1-1 | `dav1d` | amd64 |
 | `libdb5.3t64` | 5.3.28+dfsg2-9 | `db5.3` | amd64 |
+| `libde265-0` | 1.0.15-1+deb13u2 | `libde265` | amd64 |
 | `libdebconfclient0` | 0.280 | `cdebconf` | amd64 |
 | `libdeflate0` | 1.23-2 | `libdeflate` | amd64 |
-| `libexpat1` | 2.8.2-1~deb13u1 | `expat` | amd64 |
+| `libexpat1` | 2.8.3-1~deb13u1 | `expat` | amd64 |
 | `libffi8` | 3.4.8-2 | `libffi` | amd64 |
 | `libfontconfig1` | 2.15.0-2.3 | `fontconfig` | amd64 |
 | `libfreetype6` | 2.13.3+dfsg-1+deb13u1 | `freetype` | amd64 |
+| `libfreexl1` | 2.0.0-1+b3 | `freexl` | amd64 |
 | `libfribidi0` | 1.0.16-1 | `fribidi` | amd64 |
+| `libfyba0t64` | 4.1.1-11+b1 | `fyba` | amd64 |
+| `libgav1-1` | 0.19.0-3+b1 | `libgav1` | amd64 |
 | `libgcc-s1` | 14.2.0-19 | `gcc-14` | amd64 |
 | `libgcrypt20` | 1.11.0-7+deb13u1 | `libgcrypt20` | amd64 |
+| `libgdal36` | 3.10.3+dfsg-1 | `gdal` | amd64 |
+| `libgeos-c1t64` | 3.13.1-1 | `geos` | amd64 |
+| `libgeos3.13.1` | 3.13.1-1 | `geos` | amd64 |
+| `libgeotiff5` | 1.7.4-1 | `libgeotiff` | amd64 |
 | `libgfortran5` | 14.2.0-19 | `gcc-14` | amd64 |
-| `libglib2.0-0t64` | 2.84.4-3~deb13u3 | `glib2.0` | amd64 |
+| `libgif7` | 5.2.2-1+deb13u1 | `giflib` | amd64 |
+| `libglib2.0-0t64` | 2.84.4-3~deb13u5 | `glib2.0` | amd64 |
 | `libgmp10` | 2:6.3.0+dfsg-3 | `gmp` | amd64 |
 | `libgnutls30t64` | 3.8.9-3+deb13u4 | `gnutls28` | amd64 |
 | `libgomp1` | 14.2.0-19 | `gcc-14` | amd64 |
 | `libgpg-error0` | 1.51-4 | `libgpg-error` | amd64 |
+| `libgpgme11t64` | 1.24.2-3 | `gpgme1.0` | amd64 |
+| `libgpgmepp6t64` | 1.24.2-3 | `gpgme1.0` | amd64 |
 | `libgraphite2-3` | 1.3.14-2+deb13u1 | `graphite2` | amd64 |
 | `libgssapi-krb5-2` | 1.21.3-5+deb13u1 | `krb5` | amd64 |
 | `libharfbuzz0b` | 10.2.0-1+deb13u1 | `harfbuzz` | amd64 |
+| `libhdf4-0-alt` | 4.3.0-1+b1 | `libhdf4` | amd64 |
+| `libhdf5-310` | 1.14.5+repack-3 | `hdf5` | amd64 |
+| `libhdf5-hl-310` | 1.14.5+repack-3 | `hdf5` | amd64 |
+| `libheif-plugin-dav1d` | 1.19.8-1+deb13u1 | `libheif` | amd64 |
+| `libheif-plugin-libde265` | 1.19.8-1+deb13u1 | `libheif` | amd64 |
+| `libheif1` | 1.19.8-1+deb13u1 | `libheif` | amd64 |
 | `libhogweed6t64` | 3.10.1-1 | `nettle` | amd64 |
 | `libice6` | 2:1.1.1-1 | `libice` | amd64 |
 | `libicu76` | 76.1-4 | `icu` | amd64 |
@@ -469,26 +523,45 @@ Chacun des 10 composants a été confronté à sa dernière version amont (regis
 | `libjs-popper.js` | 1.16.1+ds-6 | `popper.js` | all |
 | `libjs-prettify` | 2015.12.04+dfsg-1.1 | `prettify.js` | all |
 | `libjs-sifter.js` | 0.6.0+dfsg-3 | `libjs-sifter.js` | all |
+| `libjs-sphinxdoc` | 8.1.3-5 | `sphinx` | all |
 | `libjs-twitter-bootstrap-datepicker` | 1.3.1+dfsg1-4.1 | `libjs-twitter-bootstrap-datepicker` | all |
+| `libjs-underscore` | 1.13.4~dfsg+~1.11.4-3 | `underscore` | all |
+| `libjson-c5` | 0.18+ds-1 | `json-c` | amd64 |
 | `libk5crypto3` | 1.21.3-5+deb13u1 | `krb5` | amd64 |
 | `libkeyutils1` | 1.6.3-6 | `keyutils` | amd64 |
+| `libkmlbase1t64` | 1.3.0-12+b2 | `libkml` | amd64 |
+| `libkmldom1t64` | 1.3.0-12+b2 | `libkml` | amd64 |
+| `libkmlengine1t64` | 1.3.0-12+b2 | `libkml` | amd64 |
 | `libkrb5-3` | 1.21.3-5+deb13u1 | `krb5` | amd64 |
 | `libkrb5support0` | 1.21.3-5+deb13u1 | `krb5` | amd64 |
+| `libksba8` | 1.6.7-2+b1 | `libksba` | amd64 |
 | `liblapack3` | 3.12.1-6 | `lapack` | amd64 |
 | `liblastlog2-2` | 2.41-5 | `util-linux` | amd64 |
 | `liblcms2-2` | 2.16-2+deb13u2 | `lcms2` | amd64 |
 | `libldap2` | 2.6.10+dfsg-1 | `openldap` | amd64 |
 | `liblerc4` | 4.0.0+ds-5 | `lerc` | amd64 |
+| `libltdl7` | 2.5.4-4 | `libtool` | amd64 |
 | `liblua5.4-0` | 5.4.7-1+b2 | `lua5.4` | amd64 |
 | `liblz4-1` | 1.10.0-4 | `lz4` | amd64 |
 | `liblzma5` | 5.8.1-1+deb13u1 | `xz-utils` | amd64 |
+| `libmariadb3` | 1:11.8.6-0+deb13u1 | `mariadb` | amd64 |
 | `libmd0` | 1.1.0-2+b1 | `libmd` | amd64 |
+| `libminizip1t64` | 1:1.3.dfsg+really1.3.1-1+b1 | `zlib` | amd64 |
 | `libmount1` | 2.41-5 | `util-linux` | amd64 |
 | `libncursesw6` | 6.5+20250216-2 | `ncurses` | amd64 |
+| `libnetcdf22` | 1:4.9.3-1 | `netcdf` | amd64 |
 | `libnettle8t64` | 3.10.1-1 | `nettle` | amd64 |
 | `libnghttp2-14` | 1.64.0-1.1+deb13u1 | `nghttp2` | amd64 |
 | `libnghttp3-9` | 1.8.0-1 | `nghttp3` | amd64 |
+| `libngtcp2-16` | 1.11.0-1+deb13u1 | `ngtcp2` | amd64 |
+| `libngtcp2-crypto-gnutls8` | 1.11.0-1+deb13u1 | `ngtcp2` | amd64 |
+| `libnpth0t64` | 1.8-3 | `npth` | amd64 |
+| `libnspr4` | 2:4.36-1 | `nspr` | amd64 |
+| `libnss3` | 2:3.110-1+deb13u4 | `nss` | amd64 |
 | `libnuma1` | 2.0.19-1 | `numactl` | amd64 |
+| `libodbc2` | 2.3.12-2+deb13u1 | `unixodbc` | amd64 |
+| `libodbcinst2` | 2.3.12-2+deb13u1 | `unixodbc` | amd64 |
+| `libogdi4.1` | 4.1.1+ds-5 | `ogdi-dfsg` | amd64 |
 | `libopenjp2-7` | 2.5.3-2.1~deb13u2 | `openjpeg2` | amd64 |
 | `libp11-kit0` | 0.25.5-3 | `p11-kit` | amd64 |
 | `libpam-modules` | 1.7.0-5 | `pam` | amd64 |
@@ -503,16 +576,20 @@ Chacun des 10 composants a été confronté à sa dernière version amont (regis
 | `libpcre2-8-0` | 10.46-1~deb13u1 | `pcre2` | amd64 |
 | `libpixman-1-0` | 0.44.0-3 | `pixman` | amd64 |
 | `libpng16-16t64` | 1.6.48-1+deb13u5 | `libpng1.6` | amd64 |
+| `libpoppler147` | 25.03.0-5+deb13u4 | `poppler` | amd64 |
 | `libpq5` | 17.11-0+deb13u1 | `postgresql-17` | amd64 |
 | `libproc2-0` | 2:4.0.4-9 | `procps` | amd64 |
+| `libproj25` | 9.6.0-1 | `proj` | amd64 |
 | `libpsl5t64` | 0.21.2-1.1+b1 | `libpsl` | amd64 |
 | `libpython3-stdlib` | 3.13.5-1 | `python3-defaults` | amd64 |
-| `libpython3.13-minimal` | 3.13.5-2+deb13u4 | `python3.13` | amd64 |
-| `libpython3.13-stdlib` | 3.13.5-2+deb13u4 | `python3.13` | amd64 |
+| `libpython3.13-minimal` | 3.13.5-2+deb13u5 | `python3.13` | amd64 |
+| `libpython3.13-stdlib` | 3.13.5-2+deb13u5 | `python3.13` | amd64 |
 | `libqhull-r8.0` | 2020.2-6+b2 | `qhull` | amd64 |
 | `libraqm0` | 0.10.2-1 | `raqm` | amd64 |
+| `librav1e0.7` | 0.7.1-9+b2 | `rust-rav1e` | amd64 |
 | `libreadline8t64` | 8.2-6 | `readline` | amd64 |
 | `librtmp1` | 2.4+20151223.gitfa8646d.1-2+b5 | `rtmpdump` | amd64 |
+| `librttopo1` | 1.1.0-4 | `librttopo` | amd64 |
 | `libsasl2-2` | 2.1.28+dfsg1-9 | `cyrus-sasl2` | amd64 |
 | `libsasl2-modules-db` | 2.1.28+dfsg1-9 | `cyrus-sasl2` | amd64 |
 | `libseccomp2` | 2.6.0-2 | `libseccomp` | amd64 |
@@ -523,11 +600,15 @@ Chacun des 10 composants a été confronté à sa dernière version amont (regis
 | `libsharpyuv0` | 1.5.0-0.1 | `libwebp` | amd64 |
 | `libsm6` | 2:1.2.6-1 | `libsm` | amd64 |
 | `libsmartcols1` | 2.41-5 | `util-linux` | amd64 |
+| `libsnappy1v5` | 1.2.2-1 | `snappy` | amd64 |
+| `libspatialite8t64` | 5.1.0-3+b2 | `spatialite` | amd64 |
 | `libsqlite3-0` | 3.46.1-7+deb13u1 | `sqlite3` | amd64 |
-| `libssh2-1t64` | 1.11.1-1+deb13u1 | `libssh2` | amd64 |
-| `libssl3t64` | 3.5.6-1~deb13u2 | `openssl` | amd64 |
+| `libssh2-1t64` | 1.11.1-1+deb13u2 | `libssh2` | amd64 |
+| `libssl3t64` | 3.5.7-1~deb13u2 | `openssl` | amd64 |
 | `libstdc++6` | 14.2.0-19 | `gcc-14` | amd64 |
+| `libsvtav1enc2` | 2.3.0+dfsg-1 | `svt-av1` | amd64 |
 | `libsystemd0` | 257.13-1~deb13u1 | `systemd` | amd64 |
+| `libsz2` | 1.1.3-1+b1 | `libaec` | amd64 |
 | `libtasn1-6` | 4.20.0-2+deb13u1 | `libtasn1-6` | amd64 |
 | `libtcl8.6` | 8.6.16+dfsg-1 | `tcl8.6` | amd64 |
 | `libtext-charwidth-perl` | 0.04-11+b4 | `libtext-charwidth-perl` | amd64 |
@@ -541,6 +622,7 @@ Chacun des 10 composants a été confronté à sa dernière version amont (regis
 | `libtk8.6` | 8.6.16-1 | `tk8.6` | amd64 |
 | `libudev1` | 257.13-1~deb13u1 | `systemd` | amd64 |
 | `libunistring5` | 1.3-2 | `libunistring` | amd64 |
+| `liburiparser1` | 0.9.8+dfsg-2 | `uriparser` | amd64 |
 | `libuuid1` | 2.41-5 | `util-linux` | amd64 |
 | `libuv1t64` | 1.50.0-2 | `libuv1` | amd64 |
 | `libwebp7` | 1.5.0-0.1 | `libwebp` | amd64 |
@@ -553,6 +635,7 @@ Chacun des 10 composants a été confronté à sa dernière version amont (regis
 | `libxcb-shm0` | 1.17.0-2+b1 | `libxcb` | amd64 |
 | `libxcb1` | 1.17.0-2+b1 | `libxcb` | amd64 |
 | `libxdmcp6` | 1:1.1.5-1 | `libxdmcp` | amd64 |
+| `libxerces-c3.2t64` | 3.2.4+debian-1.3+b2 | `xerces-c` | amd64 |
 | `libxext6` | 2:1.3.4-1+b3 | `libxext` | amd64 |
 | `libxft2` | 2.3.6-1+b4 | `xft` | amd64 |
 | `libxml2` | 2.12.7+dfsg+really2.9.14-2.1+deb13u3 | `libxml2` | amd64 |
@@ -562,31 +645,37 @@ Chacun des 10 composants a été confronté à sa dernière version amont (regis
 | `libxt6t64` | 1:1.2.1-1.2+b2 | `libxt` | amd64 |
 | `libxxhash0` | 0.8.3-2 | `xxhash` | amd64 |
 | `libyaml-0-2` | 0.2.5-2 | `libyaml` | amd64 |
+| `libyuv0` | 0.0.1904.20250204-1 | `libyuv` | amd64 |
 | `libzopfli1` | 1.0.3-3 | `zopfli` | amd64 |
 | `libzstd1` | 1.5.7+dfsg-1 | `libzstd` | amd64 |
 | `littler` | 0.3.21-1 | `littler` | all |
 | `login` | 1:4.16.0-2+really2.41-5 | `util-linux` | amd64 |
 | `login.defs` | 1:4.17.4-2 | `shadow` | all |
+| `mariadb-common` | 1:11.8.6-0+deb13u1 | `mariadb` | all |
 | `mawk` | 1.3.4.20250131-1 | `mawk` | amd64 |
 | `media-types` | 13.0.0 | `media-types` | all |
 | `mount` | 2.41-5 | `util-linux` | amd64 |
+| `mysql-common` | 5.8+1.1.1 | `mysql-defaults` | all |
 | `ncurses-base` | 6.5+20250216-2 | `ncurses` | all |
 | `ncurses-bin` | 6.5+20250216-2 | `ncurses` | amd64 |
 | `netbase` | 6.5 | `netbase` | all |
 | `node-bootstrap-sass` | 3.4.3-2 | `node-bootstrap-sass` | all |
 | `node-html5shiv` | 3.7.3+dfsg-5 | `node-html5shiv` | all |
 | `node-normalize.css` | 8.0.1-5 | `node-normalize.css` | all |
-| `openssl` | 3.5.6-1~deb13u2 | `openssl` | amd64 |
-| `openssl-provider-legacy` | 3.5.6-1~deb13u2 | `openssl` | amd64 |
+| `openssl` | 3.5.7-1~deb13u2 | `openssl` | amd64 |
+| `openssl-provider-legacy` | 3.5.7-1~deb13u2 | `openssl` | amd64 |
 | `pandoc` | 3.1.11.1+ds-2 | `pandoc` | amd64 |
 | `pandoc-data` | 3.1.11.1-3 | `haskell-pandoc` | all |
 | `passwd` | 1:4.17.4-2 | `shadow` | amd64 |
 | `perl-base` | 5.40.1-6 | `perl` | amd64 |
+| `pinentry-curses` | 1.3.1-2 | `pinentry` | amd64 |
 | `procps` | 2:4.0.4-9 | `procps` | amd64 |
+| `proj-data` | 9.6.0-1 | `proj` | all |
 | `python-matplotlib-data` | 3.10.1+dfsg1-4 | `matplotlib` | all |
 | `python3` | 3.13.5-1 | `python3-defaults` | amd64 |
 | `python3-attr` | 25.3.0-1 | `python-attrs` | all |
 | `python3-brotli` | 1.1.0-2+b7 | `brotli` | amd64 |
+| `python3-certifi` | 2025.1.31+ds-1 | `python-certifi` | all |
 | `python3-contourpy` | 1.3.1-1+b1 | `contourpy` | amd64 |
 | `python3-cycler` | 0.12.1-1 | `python-cycler` | all |
 | `python3-dateutil` | 2.9.0-4 | `python-dateutil` | all |
@@ -594,6 +683,7 @@ Chacun des 10 composants a été confronté à sa dernière version amont (regis
 | `python3-et-xmlfile` | 2.0.0-1 | `python-et-xmlfile` | all |
 | `python3-fonttools` | 4.57.0-1+deb13u1 | `fonttools` | amd64 |
 | `python3-fs` | 2.4.16-7 | `python-fs` | all |
+| `python3-geopandas` | 1.0.1-2 | `python-geopandas` | all |
 | `python3-kiwisolver` | 1.4.7-3+b1 | `kiwisolver` | amd64 |
 | `python3-lxml` | 5.4.0-1 | `lxml` | amd64 |
 | `python3-lz4` | 4.4.0+dfsg-2 | `python-lz4` | amd64 |
@@ -610,17 +700,20 @@ Chacun des 10 composants a été confronté à sa dernière version amont (regis
 | `python3-pil.imagetk` | 11.1.0-5+deb13u4 | `pillow` | amd64 |
 | `python3-platformdirs` | 4.3.7-1 | `platformdirs` | all |
 | `python3-psycopg2` | 2.9.10-1+b1 | `psycopg2` | amd64 |
+| `python3-pyogrio` | 0.10.0+ds-4+b2 | `pyogrio` | amd64 |
 | `python3-pyparsing` | 3.1.2-1 | `pyparsing` | all |
+| `python3-pyproj` | 3.7.1-1+b1 | `python-pyproj` | amd64 |
 | `python3-pytz` | 2025.2-3 | `python-tz` | all |
 | `python3-scipy` | 1.15.3-1 | `scipy` | amd64 |
+| `python3-shapely` | 2.1.0-1 | `python-shapely` | amd64 |
 | `python3-sympy` | 1.13.3-5 | `sympy` | all |
 | `python3-tk` | 3.13.5-1 | `python3-stdlib-extensions` | amd64 |
 | `python3-ufolib2` | 0.17.1+dfsg1-1 | `ufolib2` | all |
 | `python3-unicodedata2` | 15.1.0+ds-1+b4 | `python-unicodedata2` | amd64 |
 | `python3-zopfli` | 0.2.3.post1-1+b1 | `python-zopfli` | amd64 |
-| `python3.13` | 3.13.5-2+deb13u4 | `python3.13` | amd64 |
-| `python3.13-minimal` | 3.13.5-2+deb13u4 | `python3.13` | amd64 |
-| `python3.13-tk` | 3.13.5-2+deb13u4 | `python3.13` | amd64 |
+| `python3.13` | 3.13.5-2+deb13u5 | `python3.13` | amd64 |
+| `python3.13-minimal` | 3.13.5-2+deb13u5 | `python3.13` | amd64 |
+| `python3.13-tk` | 3.13.5-2+deb13u5 | `python3.13` | amd64 |
 | `r-base-core` | 4.5.0-3 | `r-base` | amd64 |
 | `r-cran-askpass` | 1.2.1-1 | `r-cran-askpass` | amd64 |
 | `r-cran-backports` | 1.5.0-2 | `r-cran-backports` | amd64 |
@@ -743,6 +836,7 @@ Chacun des 10 composants a été confronté à sa dernière version amont (regis
 | `readline-common` | 8.2-6 | `readline` | all |
 | `sed` | 4.9-2+deb13u1 | `sed` | amd64 |
 | `sensible-utils` | 0.0.25 | `sensible-utils` | all |
+| `sphinx-rtd-theme-common` | 3.0.2+dfsg-2 | `sphinx-rtd-theme` | all |
 | `sqv` | 1.3.0-3+b2 | `rust-sequoia-sqv` | amd64 |
 | `sysvinit-utils` | 3.14-4 | `sysvinit` | amd64 |
 | `tar` | 1.35+dfsg-3.1 | `tar` | amd64 |
@@ -750,6 +844,7 @@ Chacun des 10 composants a été confronté à sa dernière version amont (regis
 | `tzdata` | 2026b-0+deb13u1 | `tzdata` | all |
 | `ucf` | 3.0052 | `ucf` | all |
 | `unicode-data` | 15.1.0-1 | `unicode-data` | all |
+| `unixodbc-common` | 2.3.12-2+deb13u1 | `unixodbc` | all |
 | `unzip` | 6.0-29+deb13u1 | `unzip` | amd64 |
 | `util-linux` | 2.41-5 | `util-linux` | amd64 |
 | `x11-common` | 1:7.7+24+deb13u1 | `xorg` | all |
@@ -897,10 +992,12 @@ Chacun des 10 composants a été confronté à sa dernière version amont (regis
 
 ## 12. Limites
 
-- **Une seule VM cible auditée pour les univers hôte et image d'exécution** : les annexes A et B reflètent l'état réellement installé sur `192.168.122.114` au 19 août 2026 (univers hôte recomplété le 22 août pour `sillon-backup-client`). Une autre installation de SILLON (autre date, autre séquence de correctifs Debian appliqués) peut légitimement différer sur quelques paquets — voir le constat §7.7, déjà observé entre deux résolutions successives de cette même nomenclature.
+- **Une seule VM cible auditée pour les univers hôte et image d'exécution** : l'annexe A reflète l'état réellement installé sur `192.168.122.114` au 19 août 2026 (univers hôte recomplété le 22 août pour `sillon-backup-client`). L'annexe B (image d'exécution) reflète cette même VM jusqu'au 15/09/2026 inclus, puis, pour les 80 paquets ajoutés le 16/09/2026 avec `python3-geopandas` (constat 13), une image construite et inspectée **en local** (`dpkg-query -W` dans le conteneur reconstruit) faute d'accès à la VM à cette date — non encore réconciliée avec elle par un déploiement réel. Une autre installation de SILLON (autre date, autre séquence de correctifs Debian appliqués) peut légitimement différer sur quelques paquets — voir le constat §7.7, déjà observé entre deux résolutions successives de cette même nomenclature.
 - **Univers de la machine de sauvegarde jamais audité sur une machine physique séparée** (Annexe C, 131 paquets) : `sillon-backup-server`/`sillon-backup-server-survey` sont conçus pour s'installer sur une machine distincte du serveur SILLON (cahier des charges §12.10), non disponible pendant cette session — testés en pratique sur la VM de test SILLON elle-même, utilisée temporairement comme partage NFS bouclé sur elle-même, ce qui valide le comportement fonctionnel des deux paquets mais ne constitue pas un audit de dépendances Debian sur une machine réellement vierge. L'Annexe C reflète donc une fermeture théorique de dépendances (`apt-cache depends --recurse`), pas une observation réelle comme les annexes A et B — à reprendre par `dpkg-query -W` dès qu'une telle machine sera disponible.
 - **`sillon-demo-sirene` non installé sur la VM auditée** : ce paquet optionnel n'était pas présent sur `192.168.122.114` au moment de cette résolution ; ses dépendances Debian (`python3` seul, déjà couvert par l'univers hôte) restent inchangées depuis la première version de cette nomenclature.
-- **Aucun scan de vulnérabilités connues (CVE) réalisé sur les paquets Debian** : seuls les 10 composants vendorisés hors `dpkg` ont fait l'objet d'une vérification individuelle (§6.1) ; les 710 paquets Debian listés en annexe n'ont pas été confrontés un à un au Debian Security Tracker — voir §8 pour la mécanique de veille recommandée sur ce périmètre.
+- **Scan de vulnérabilités connues (CVE) sur les paquets Debian, très partiel** : outre `postgresql-17`/`nginx` (univers hôte, constat 11), les 5 bibliothèques Python de l'univers image d'exécution exposées aux scripts utilisateurs (constat 12) et les 80 paquets ajoutés avec `python3-geopandas` (constat 13) confrontés individuellement au Debian Security Tracker, et les 10 composants vendorisés hors `dpkg` (§6.1) — les ~703 paquets Debian restants listés en annexe (dont R/tidyverse dans l'image d'exécution) n'ont pas été confrontés un à un à ce suivi — voir §8 pour la mécanique de veille recommandée sur ce périmètre.
+- **SBOM CycloneDX (`sbom/sillon-sbom-cyclonedx.json`) non resynchronisé avec l'ajout de `python3-geopandas`** : les 80 paquets ajoutés le 16/09/2026 (constat 13) figurent dans ce document (Annexe B) mais pas encore dans le fichier machine-lisible — le compte « 738 composants » du §3 ne les reflète pas. À resynchroniser avant la prochaine publication du SBOM.
+- **`sillon-image-execution` 0.1.3, `sillon-worker` 0.1.3, `sillon-tutoriel` 0.2.3 et `sillon-server` 0.1.39 installés et vérifiés sur une VM différente de celle des annexes A/B/C** (constats 13-14) : `192.168.122.80`, pas `192.168.122.114` (§2) — podman, `sillon-worker` et `sillon-image-execution` y ont été installés pour la première fois ce jour-là. Le bon fonctionnement applicatif de bout en bout y est confirmé (6 scripts d'exemple du tutoriel exécutés avec succès), mais cette VM ne remplace pas `192.168.122.114` comme référence de résolution des annexes A/B/C de ce document.
 - **Couverture OSV.dev non exhaustive** : la vérification des composants vendorisés (§6.1) s'appuie sur OSV.dev, le registre npm et les changelogs/notes de version amont — une base fiable et largement utilisée, mais qui ne garantit pas l'absence de vulnérabilité non encore publiée ou non répertoriée (0-day, faille signalée mais non encore publiée sous forme d'avis).
 - **Revue de licence non exhaustive** : les licences des paquets Debian (annexes A, B et C) ne sont pas reproduites ici (elles sont chacune consultables via `apt-cache show` ou `/usr/share/doc/<paquet>/copyright` sur une machine Debian) ; seules celles des 10 composants vendorisés hors `dpkg` (§6) ont été relevées individuellement.
 - Cette nomenclature couvre les 10 paquets `.deb` de SILLON. Elle ne couvre pas les outils de build eux-mêmes (`build/build.sh`, scripts `generer_pdf_*.py`, `pandoc`, `libreoffice`, `inkscape`), qui ne sont jamais installés sur la cible de production.
@@ -913,3 +1010,5 @@ Chacun des 10 composants a été confronté à sa dernière version amont (regis
 - Mettre en place un rapprochement périodique (par exemple à chaque publication d'un nouveau `.deb`) entre `sbom/sillon-sbom-cyclonedx.json` et le Debian Security Tracker ou un scanner de vulnérabilités.
 - Ajouter un fichier `LICENSE` à la racine du dépôt si le code SILLON doit circuler en dehors de l'organisation (constat §7.4).
 - Reprendre la résolution de l'Annexe C (univers machine de sauvegarde) par observation réelle (`dpkg-query -W`) dès qu'une machine physiquement distincte du serveur SILLON sera disponible pour `sillon-backup-server`/`sillon-backup-server-survey` (constat §7.10, §12).
+- Étendre le scan CVE des constats §7.12/§7.13 (actuellement limité aux bibliothèques Python de l'image d'exécution) au reste de cet univers (R/tidyverse notamment) et, plus largement, aux 201 paquets de l'univers hôte au-delà de `postgresql-17`/`nginx` déjà couverts (constat §7.11) — pour clore la limite documentée en §12.
+- Resynchroniser `sbom/sillon-sbom-cyclonedx.json` avec les 80 paquets ajoutés par `python3-geopandas` (constat §7.13, déployé et vérifié sur `192.168.122.80` mais pas encore reporté dans le SBOM machine-lisible). Reprendre, sur `192.168.122.114` (la VM de référence des annexes A/B/C, §2) ou une VM équivalente, la résolution par `dpkg-query -W` pour que ces versions soient couvertes par la même méthodologie que le reste de ce document.
