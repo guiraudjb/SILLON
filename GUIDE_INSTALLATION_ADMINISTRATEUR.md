@@ -116,6 +116,42 @@ sudo dpkg -i sillon-demo-sirene_0.1.0_all.deb     # optionnel, nécessite un acc
 
 Les `postinst` détectent une installation existante (présence de la base `sillon_catalog`) et n'effectuent alors que des migrations incrémentales — **aucune recréation destructive**, secrets et certificat TLS institutionnel conservés tels quels.
 
+**Procédure recommandée, dans l'ordre :**
+
+1. **Sauvegarder avant toute mise à jour touchant `sillon-server`** (toute évolution de schéma est appliquée par un `ALTER TABLE`/`UPDATE` non trivialement réversible) : `sillon-backup-client` si déjà installé (§7.5), sinon `sudo -u postgres pg_dumpall > sauvegarde_avant_maj.sql` à défaut.
+2. Transférer les nouveaux `.deb` sur le serveur cible (§3).
+3. Réinstaller **dans le même ordre que l'installation initiale**, jamais un paquet isolé en avance sur les autres — un `sillon-orchestrateur` plus récent que `sillon-server` peut dépendre d'une colonne ou d'une fonction SQL que ce dernier n'a pas encore créée :
+   ```bash
+   sudo dpkg -i sillon-server_<version>_amd64.deb
+   sudo apt-get install -f
+   sudo dpkg -i sillon-orchestrateur_<version>_all.deb
+   sudo dpkg -i sillon-worker_<version>_all.deb
+   sudo dpkg -i sillon-image-execution_<version>_amd64.deb
+   ```
+   (`sillon-tutoriel`/`sillon-demo-sirene` ne concernent jamais un serveur de production — §7.2 — à ignorer ici.)
+4. Reprendre les vérifications post-installation habituelles (§6).
+5. Repasser en revue les nouveautés de comportement de chaque version intermédiaire avant de considérer la mise à jour terminée — voir l'exemple ci-dessous, et plus généralement le fichier `NOMENCLATURE_LOGICIELLE_SILLON.md` (journal des révisions) pour le détail complet de chaque changement.
+
+**Il n'existe pas de procédure de retour arrière (`dpkg -i` d'une version antérieure) une fois une migration de schéma appliquée** : une colonne ajoutée par une version plus récente n'est jamais supprimée automatiquement en cas de retour à un paquet plus ancien, dont le code ne s'attend pas à sa présence — d'où l'importance de la sauvegarde à l'étape 1 pour toute restauration si nécessaire.
+
+#### Exemple concret : mise à jour depuis la première version installée (v1.0.0) vers la version actuelle
+
+Un serveur de production installé avec le premier jalon stable du projet (tag Git `v1.0.0`) porte les versions suivantes :
+
+| Paquet | v1.0.0 | Version actuelle |
+|---|---|---|
+| `sillon-server` | 0.1.34 | 0.1.39 |
+| `sillon-orchestrateur` | 0.1.13 | 0.1.15 |
+| `sillon-worker` | 0.1.3 | 0.1.3 *(inchangé)* |
+| `sillon-image-execution` | 0.1.2 | 0.1.3 |
+
+En suivant la procédure ci-dessus (`sillon-worker` n'ayant pas changé, son `.deb` n'a pas besoin d'être retransféré, mais rien n'empêche de le réinstaller à l'identique), voici ce que cette mise à jour change concrètement pour un administrateur :
+
+- **Nouvelle dépendance `unattended-upgrades` (`sillon-server` ≥ 0.1.36)** — accès aux dépôts Debian nécessaire au moment du `dpkg -i`/`apt-get install -f` (§1.1, via le proxy d'entreprise, comme pour toute autre dépendance). **Depuis cette version, le serveur peut redémarrer automatiquement et sans intervention, à 3h30 du matin, si un correctif de sécurité Debian l'exige** (noyau, glibc, openssl...) — à anticiper avant la mise à jour si un redémarrage nocturne n'est pas neutre pour les usages du serveur. Pour désactiver ce redémarrage automatique tout en conservant les mises à jour de sécurité elles-mêmes, éditer `/etc/apt/apt.conf.d/51sillon-security-upgrades` et passer `Unattended-Upgrade::Automatic-Reboot` à `"false"` (un `postinst` ultérieur ne réécrit jamais ce fichier s'il détecte une modification manuelle — comportement à vérifier au cas par cas selon la version).
+- **Politique de mot de passe renforcée côté serveur (`sillon-server` ≥ 0.1.36)** — toute création de compte ou réinitialisation de mot de passe exige désormais 12 caractères minimum, appliqué côté serveur (auparavant seulement côté client, donc contournable). Aucun impact sur les mots de passe déjà en base.
+- **Changement de mot de passe exigé à la première connexion (`sillon-server` ≥ 0.1.38)** — nouveau comportement pour les comptes **créés après cette mise à jour**. **Les comptes déjà utilisés avant la mise à jour ne sont pas bloqués rétroactivement** : la migration les marque automatiquement comme n'ayant pas besoin de changer leur mot de passe (aucune action requise, aucun agent ne se retrouve bloqué à sa prochaine connexion).
+- **`python3-geopandas` vendorisé dans l'image d'exécution des scripts (`sillon-image-execution` ≥ 0.1.3)** — nouvelle bibliothèque disponible pour les scripts Python déposés par les agents (cartographie SIG : reprojection, calcul d'aire, fusion de contours, jointures spatiales). Entraîne **GDAL et sa pile de pilotes de formats, l'image passant de 384 Mo à environ 1,3 Go** (voir `NOMENCLATURE_LOGICIELLE_SILLON.md`, constat 13, pour le détail et l'audit CVE associé) — aucun accès réseau supplémentaire requis pour cette étape : l'image est intégralement vendorisée dans le `.deb`, chargée localement via `podman load` comme pour toute autre version.
+
 ---
 
 ## 6. Vérifications post-installation
