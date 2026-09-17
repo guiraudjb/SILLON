@@ -4,7 +4,7 @@
   "serialNumber": "urn:uuid:8b56adab-02f4-4542-a041-19de6bc2d07f",
   "version": 3,
   "metadata": {
-    "timestamp": "2026-09-15T00:00:00Z",
+    "timestamp": "2026-09-17T00:00:00Z",
     "lifecycles": [
       {
         "phase": "build"
@@ -29,7 +29,7 @@
     "properties": [
       {
         "name": "sillon:methodology",
-        "value": "Depends declares releves depuis DEBIAN/control de chaque .deb. Fermeture transitive et versions resolues le 2026-08-19 directement depuis la VM de test SILLON reelle (192.168.122.114, Debian 13/Trixie) : dpkg-query -W pour l'univers hote (195 paquets), extraction du fichier var/lib/dpkg/status de la couche image du Dockerfile (podman save) pour l'univers image d'execution (378 paquets, sillon-image-execution:latest chargee sur cette VM). Mise a jour du 22 aout 2026 : ajout de sillon-purge (aucune nouvelle dependance Debian) et des paquets sillon-backup-client/server/server-survey (pgBackRest) - univers hote complete via dpkg-query -W reel sur la VM de test apres installation reelle ; univers 'machine de sauvegarde' (sillon-backup-server/server-survey, machine distincte non disponible pour verification directe) resolu par fermeture theorique de dependances Debian (apt-cache depends --recurse), non confirme sur une machine physique separee - limite documentee au §2/§7. Versions de sillon-server (0.1.29->0.1.34) et sillon-tutoriel (0.1.0->0.2.0) corrigees a cette occasion (constatees perimees, sans reprise complete des 195+378 paquets deja resolus le 19 aout, hors perimetre de cette mise a jour). Mise a jour du 25 aout 2026 : sillon-backup-client/server/server-survey portes de 0.1.0 a 0.1.2 (versions .deb reellement construites - le 0.1.1 intermediaire n'a jamais ete publie en nomenclature) suite a la correction d'un bug des menus debconf (priorite 'medium' des questions IP/e-mail/relais SMTP, sous le seuil par defaut 'high' de Debian, qui les masquait silencieusement a l'installation au lieu de les poser systematiquement - corrige en 'high'). Aucune nouvelle dependance Debian introduite ; fermeture de dependances des deux univers inchangee et non reauditee sur VM a cette occasion, seuls les numeros de version et empreintes SHA-256 des trois composants et de leurs .deb ont ete mis a jour. Mise a jour du 15 septembre 2026 : premier audit CVE effectif de l'univers hote (jusque-la purement theorique), mene sur une VM de test distincte (192.168.122.80) - postgresql-17 (17.10) et nginx/nginx-common (1.26.3-3+deb13u5) trouves en retard sur des correctifs de securite critiques deja publies cote Debian, VM mise a niveau immediatement (nginx confirme a 1.26.3-3+deb13u8 ; postgresql-17 deja resolu a 17.11-0+deb13u1 dans cette nomenclature, coherent avec l'etat corrige). sillon-server porte de 0.1.34 a 0.1.36 (nouvelle empreinte SHA-256) : ajout de la dependance unattended-upgrades (2.12) et de sa fermeture transitive (python3-dbus, python3-distro-info, python3-gi, gir1.2-glib-2.0, libgirepository-1.0-1, gir1.2-girepository-2.0 - 7 nouveaux composants), installee reellement sur la VM de test et validee par un essai a blanc (unattended-upgrade --dry-run --debug). Voir NOMENCLATURE_LOGICIELLE_SILLON.md §7 constat 11 pour le detail complet."
+        "value": "Depends declares releves depuis DEBIAN/control de chaque .deb. Fermeture transitive et versions resolues le 2026-08-19 directement depuis la VM de test SILLON reelle (192.168.122.114, Debian 13/Trixie) : dpkg-query -W pour l'univers hote (195 paquets), extraction du fichier var/lib/dpkg/status de la couche image du Dockerfile (podman save) pour l'univers image d'execution (378 paquets, sillon-image-execution:latest chargee sur cette VM). Mise a jour du 22 aout 2026 : ajout de sillon-purge (aucune nouvelle dependance Debian) et des paquets sillon-backup-client/server/server-survey (pgBackRest) - univers hote complete via dpkg-query -W reel sur la VM de test apres installation reelle ; univers 'machine de sauvegarde' (sillon-backup-server/server-survey, machine distincte non disponible pour verification directe) resolu par fermeture theorique de dependances Debian (apt-cache depends --recurse), non confirme sur une machine physique separee - limite documentee au §2/§7. Versions de sillon-server (0.1.29->0.1.34) et sillon-tutoriel (0.1.0->0.2.0) corrigees a cette occasion (constatees perimees, sans reprise complete des 195+378 paquets deja resolus le 19 aout, hors perimetre de cette mise a jour). Mise a jour du 25 aout 2026 : sillon-backup-client/server/server-survey portes de 0.1.0 a 0.1.2 (versions .deb reellement construites - le 0.1.1 intermediaire n'a jamais ete publie en nomenclature) suite a la correction d'un bug des menus debconf (priorite 'medium' des questions IP/e-mail/relais SMTP, sous le seuil par defaut 'high' de Debian, qui les masquait silencieusement a l'installation au lieu de les poser systematiquement - corrige en 'high'). Aucune nouvelle dependance Debian introduite ; fermeture de dependances des deux univers inchangee et non reauditee sur VM a cette occasion, seuls les numeros de version et empreintes SHA-256 des trois composants et de leurs .deb ont ete mis a jour. Mise a jour du 15 septembre 2026 : premier audit CVE effectif de l'univers hote (jusque-la purement theorique), mene sur une VM de test distincte (192.168.122.80) - postgresql-17 (17.10) et nginx/nginx-common (1.26.3-3+deb13u5) trouves en retard sur des correctifs de securite critiques deja publies cote Debian, VM mise a niveau immediatement (nginx confirme a 1.26.3-3+deb13u8 ; postgresql-17 deja resolu a 17.11-0+deb13u1 dans cette nomenclature, coherent avec l'etat corrige). sillon-server porte de 0.1.34 a 0.1.36 (nouvelle empreinte SHA-256) : ajout de la dependance unattended-upgrades (2.12) et de sa fermeture transitive (python3-dbus, python3-distro-info, python3-gi, gir1.2-glib-2.0, libgirepository-1.0-1, gir1.2-girepository-2.0 - 7 nouveaux composants), installee reellement sur la VM de test et validee par un essai a blanc (unattended-upgrade --dry-run --debug). Voir NOMENCLATURE_LOGICIELLE_SILLON.md §7 constat 11 pour le detail complet. Mise a jour du 16/09/2026 (puis resynchronisation machine-lisible le 17/09/2026) : ajout de python3-geopandas a sillon-image-execution (0.1.2 -> 0.1.3), cartographie SIG en script - +80 paquets Debian resolus directement sur l'image reconstruite (dpkg-query -W dans un conteneur reel, equivalent a la methode du 19 aout ; machine de developpement, podman indisponible, substitution docker build --provenance=false --sbom=false comme dans build/build.sh), et 13 paquets deja presents mis a jour par derive normale des depots Debian entre le 15 et le 16/09/2026 (openssl, python3.13, glib2.0...), sans lien avec geopandas. sillon-server (0.1.36 -> 0.1.39), sillon-orchestrateur (0.1.13 -> 0.1.15) et sillon-tutoriel (0.2.0 -> 0.2.3) resynchronises pour coherence des references croisees de ce fichier (etiquettes de version uniquement - aucune nouvelle dependance Debian constatee pour ces trois paquets depuis leur derniere resolution complete)."
       },
       {
         "name": "sillon:target-os",
@@ -44,11 +44,11 @@
   "components": [
     {
       "type": "application",
-      "bom-ref": "sillon:sillon-server@0.1.36",
+      "bom-ref": "sillon:sillon-server@0.1.39",
       "name": "sillon-server",
-      "version": "0.1.36",
+      "version": "0.1.39",
       "description": "Socle applicatif SILLON : PostgreSQL, Nginx, API de requetage, catalogue applicatif, anti-bruteforce, mise a jour de securite automatisee.",
-      "purl": "pkg:deb/sillon/sillon-server@0.1.36?arch=amd64",
+      "purl": "pkg:deb/sillon/sillon-server@0.1.39?arch=amd64",
       "properties": [
         {
           "name": "sillon:architecture",
@@ -64,11 +64,11 @@
     },
     {
       "type": "application",
-      "bom-ref": "sillon:sillon-orchestrateur@0.1.13",
+      "bom-ref": "sillon:sillon-orchestrateur@0.1.15",
       "name": "sillon-orchestrateur",
-      "version": "0.1.13",
+      "version": "0.1.15",
       "description": "Orchestrateur applicatif : creation/suppression des bases utilisateurs, requetes SQL libres, file d'attente, notifications.",
-      "purl": "pkg:deb/sillon/sillon-orchestrateur@0.1.13?arch=all",
+      "purl": "pkg:deb/sillon/sillon-orchestrateur@0.1.15?arch=all",
       "properties": [
         {
           "name": "sillon:architecture",
@@ -104,11 +104,11 @@
     },
     {
       "type": "application",
-      "bom-ref": "sillon:sillon-image-execution@0.1.2",
+      "bom-ref": "sillon:sillon-image-execution@0.1.3",
       "name": "sillon-image-execution",
-      "version": "0.1.2",
+      "version": "0.1.3",
       "description": "Image conteneur figee (Python/R) utilisee par sillon-worker pour executer les scripts deposes par les utilisateurs.",
-      "purl": "pkg:deb/sillon/sillon-image-execution@0.1.2?arch=amd64",
+      "purl": "pkg:deb/sillon/sillon-image-execution@0.1.3?arch=amd64",
       "properties": [
         {
           "name": "sillon:architecture",
@@ -124,11 +124,11 @@
     },
     {
       "type": "application",
-      "bom-ref": "sillon:sillon-tutoriel@0.2.0",
+      "bom-ref": "sillon:sillon-tutoriel@0.2.3",
       "name": "sillon-tutoriel",
-      "version": "0.2.0",
+      "version": "0.2.3",
       "description": "Tutoriel et jeu de donnees de demonstration (compte demo, donnees communes/regions France). Jamais en production.",
-      "purl": "pkg:deb/sillon/sillon-tutoriel@0.2.0?arch=all",
+      "purl": "pkg:deb/sillon/sillon-tutoriel@0.2.3?arch=all",
       "properties": [
         {
           "name": "sillon:architecture",
@@ -556,8 +556,8 @@
       "bom-ref": "container-image-sillon-image-execution",
       "type": "container",
       "name": "sillon-image-execution",
-      "version": "0.1.2",
-      "description": "Image podman figee (image-execution.tar, 384 Mo), construite a partir de debian:13-slim et vendorisee au build. Chargee localement (podman load) sur la cible, jamais reconstruite (aucun acces registre). Une premiere reconstruction (0.1.1, 19/08/2026) etait chargeable mais non executable sur la cible : docker build (BuildKit) enveloppe par defaut l'image dans un index de provenance/attestation que podman load ne sait pas deplier correctement, produisant une image d'apparence saine mais dont aucun conteneur ne demarrait. Corrige en 0.1.2 par --provenance=false --sbom=false au build ; execution reelle verifiee sur la VM de test (job script_python reussi).",
+      "version": "0.1.3",
+      "description": "Image podman figee (image-execution.tar, ~1 289 Mo depuis l'ajout de python3-geopandas le 16/09/2026 - 384 Mo auparavant), construite a partir de debian:13-slim et vendorisee au build. Chargee localement (podman load) sur la cible, jamais reconstruite (aucun acces registre). Une premiere reconstruction (0.1.1, 19/08/2026) etait chargeable mais non executable sur la cible : docker build (BuildKit) enveloppe par defaut l'image dans un index de provenance/attestation que podman load ne sait pas deplier correctement, produisant une image d'apparence saine mais dont aucun conteneur ne demarrait. Corrige en 0.1.2 par --provenance=false --sbom=false au build ; execution reelle verifiee sur la VM de test (job script_python reussi). 0.1.3 (16/09/2026) ajoute python3-geopandas (cartographie SIG en script) : +80 paquets Debian reellement ajoutes (dont GDAL et sa pile de pilotes de formats), audit CVE individuel des 80 sur le Debian Security Tracker (voir vulnerabilities) - aucune faille atteignable dans le modele de menace de SILLON. Deploye et verifie en conditions reelles sur la VM 192.168.122.80 (5 scripts d'exemple du tutoriel executes avec succes, dont le nouveau exemple_2.5_geopandas.py).",
       "properties": [
         {
           "name": "sillon:base-image",
@@ -6787,10 +6787,10 @@
     },
     {
       "type": "library",
-      "bom-ref": "deb:image-execution:libcom-err2@1.47.2-3+b11:amd64",
+      "bom-ref": "deb:image-execution:libcom-err2@1.47.2-3+b12:amd64",
       "name": "libcom-err2",
-      "version": "1.47.2-3+b11",
-      "purl": "pkg:deb/debian/libcom-err2@1.47.2-3+b11?arch=amd64&distro=debian-13",
+      "version": "1.47.2-3+b12",
+      "purl": "pkg:deb/debian/libcom-err2@1.47.2-3+b12?arch=amd64&distro=debian-13",
       "properties": [
         {
           "name": "sillon:debian-suite",
@@ -6835,10 +6835,10 @@
     },
     {
       "type": "library",
-      "bom-ref": "deb:image-execution:libcurl4t64@8.14.1-2+deb13u4:amd64",
+      "bom-ref": "deb:image-execution:libcurl4t64@8.14.1-2+deb13u5:amd64",
       "name": "libcurl4t64",
-      "version": "8.14.1-2+deb13u4",
-      "purl": "pkg:deb/debian/libcurl4t64@8.14.1-2+deb13u4?arch=amd64&distro=debian-13",
+      "version": "8.14.1-2+deb13u5",
+      "purl": "pkg:deb/debian/libcurl4t64@8.14.1-2+deb13u5?arch=amd64&distro=debian-13",
       "properties": [
         {
           "name": "sillon:debian-suite",
@@ -6964,10 +6964,10 @@
     },
     {
       "type": "library",
-      "bom-ref": "deb:image-execution:libexpat1@2.8.2-1~deb13u1:amd64",
+      "bom-ref": "deb:image-execution:libexpat1@2.8.3-1~deb13u1:amd64",
       "name": "libexpat1",
-      "version": "2.8.2-1~deb13u1",
-      "purl": "pkg:deb/debian/libexpat1@2.8.2-1~deb13u1?arch=amd64&distro=debian-13",
+      "version": "2.8.3-1~deb13u1",
+      "purl": "pkg:deb/debian/libexpat1@2.8.3-1~deb13u1?arch=amd64&distro=debian-13",
       "properties": [
         {
           "name": "sillon:debian-suite",
@@ -7180,10 +7180,10 @@
     },
     {
       "type": "library",
-      "bom-ref": "deb:image-execution:libglib2.0-0t64@2.84.4-3~deb13u3:amd64",
+      "bom-ref": "deb:image-execution:libglib2.0-0t64@2.84.4-3~deb13u5:amd64",
       "name": "libglib2.0-0t64",
-      "version": "2.84.4-3~deb13u3",
-      "purl": "pkg:deb/debian/libglib2.0-0t64@2.84.4-3~deb13u3?arch=amd64&distro=debian-13",
+      "version": "2.84.4-3~deb13u5",
+      "purl": "pkg:deb/debian/libglib2.0-0t64@2.84.4-3~deb13u5?arch=amd64&distro=debian-13",
       "properties": [
         {
           "name": "sillon:debian-suite",
@@ -9037,10 +9037,10 @@
     },
     {
       "type": "library",
-      "bom-ref": "deb:image-execution:libpython3.13-minimal@3.13.5-2+deb13u4:amd64",
+      "bom-ref": "deb:image-execution:libpython3.13-minimal@3.13.5-2+deb13u5:amd64",
       "name": "libpython3.13-minimal",
-      "version": "3.13.5-2+deb13u4",
-      "purl": "pkg:deb/debian/libpython3.13-minimal@3.13.5-2+deb13u4?arch=amd64&distro=debian-13",
+      "version": "3.13.5-2+deb13u5",
+      "purl": "pkg:deb/debian/libpython3.13-minimal@3.13.5-2+deb13u5?arch=amd64&distro=debian-13",
       "properties": [
         {
           "name": "sillon:debian-suite",
@@ -9058,10 +9058,10 @@
     },
     {
       "type": "library",
-      "bom-ref": "deb:image-execution:libpython3.13-stdlib@3.13.5-2+deb13u4:amd64",
+      "bom-ref": "deb:image-execution:libpython3.13-stdlib@3.13.5-2+deb13u5:amd64",
       "name": "libpython3.13-stdlib",
-      "version": "3.13.5-2+deb13u4",
-      "purl": "pkg:deb/debian/libpython3.13-stdlib@3.13.5-2+deb13u4?arch=amd64&distro=debian-13",
+      "version": "3.13.5-2+deb13u5",
+      "purl": "pkg:deb/debian/libpython3.13-stdlib@3.13.5-2+deb13u5?arch=amd64&distro=debian-13",
       "properties": [
         {
           "name": "sillon:debian-suite",
@@ -9484,10 +9484,10 @@
     },
     {
       "type": "library",
-      "bom-ref": "deb:image-execution:libssh2-1t64@1.11.1-1+deb13u1:amd64",
+      "bom-ref": "deb:image-execution:libssh2-1t64@1.11.1-1+deb13u2:amd64",
       "name": "libssh2-1t64",
-      "version": "1.11.1-1+deb13u1",
-      "purl": "pkg:deb/debian/libssh2-1t64@1.11.1-1+deb13u1?arch=amd64&distro=debian-13",
+      "version": "1.11.1-1+deb13u2",
+      "purl": "pkg:deb/debian/libssh2-1t64@1.11.1-1+deb13u2?arch=amd64&distro=debian-13",
       "properties": [
         {
           "name": "sillon:debian-suite",
@@ -9511,10 +9511,10 @@
     },
     {
       "type": "library",
-      "bom-ref": "deb:image-execution:libssl3t64@3.5.6-1~deb13u2:amd64",
+      "bom-ref": "deb:image-execution:libssl3t64@3.5.7-1~deb13u2:amd64",
       "name": "libssl3t64",
-      "version": "3.5.6-1~deb13u2",
-      "purl": "pkg:deb/debian/libssl3t64@3.5.6-1~deb13u2?arch=amd64&distro=debian-13",
+      "version": "3.5.7-1~deb13u2",
+      "purl": "pkg:deb/debian/libssl3t64@3.5.7-1~deb13u2?arch=amd64&distro=debian-13",
       "properties": [
         {
           "name": "sillon:debian-suite",
@@ -10822,10 +10822,10 @@
     },
     {
       "type": "library",
-      "bom-ref": "deb:image-execution:openssl@3.5.6-1~deb13u2:amd64",
+      "bom-ref": "deb:image-execution:openssl@3.5.7-1~deb13u2:amd64",
       "name": "openssl",
-      "version": "3.5.6-1~deb13u2",
-      "purl": "pkg:deb/debian/openssl@3.5.6-1~deb13u2?arch=amd64&distro=debian-13",
+      "version": "3.5.7-1~deb13u2",
+      "purl": "pkg:deb/debian/openssl@3.5.7-1~deb13u2?arch=amd64&distro=debian-13",
       "properties": [
         {
           "name": "sillon:debian-suite",
@@ -10849,10 +10849,10 @@
     },
     {
       "type": "library",
-      "bom-ref": "deb:image-execution:openssl-provider-legacy@3.5.6-1~deb13u2:amd64",
+      "bom-ref": "deb:image-execution:openssl-provider-legacy@3.5.7-1~deb13u2:amd64",
       "name": "openssl-provider-legacy",
-      "version": "3.5.6-1~deb13u2",
-      "purl": "pkg:deb/debian/openssl-provider-legacy@3.5.6-1~deb13u2?arch=amd64&distro=debian-13",
+      "version": "3.5.7-1~deb13u2",
+      "purl": "pkg:deb/debian/openssl-provider-legacy@3.5.7-1~deb13u2?arch=amd64&distro=debian-13",
       "properties": [
         {
           "name": "sillon:debian-suite",
@@ -11950,10 +11950,10 @@
     },
     {
       "type": "library",
-      "bom-ref": "deb:image-execution:python3.13@3.13.5-2+deb13u4:amd64",
+      "bom-ref": "deb:image-execution:python3.13@3.13.5-2+deb13u5:amd64",
       "name": "python3.13",
-      "version": "3.13.5-2+deb13u4",
-      "purl": "pkg:deb/debian/python3.13@3.13.5-2+deb13u4?arch=amd64&distro=debian-13",
+      "version": "3.13.5-2+deb13u5",
+      "purl": "pkg:deb/debian/python3.13@3.13.5-2+deb13u5?arch=amd64&distro=debian-13",
       "properties": [
         {
           "name": "sillon:debian-suite",
@@ -11971,10 +11971,10 @@
     },
     {
       "type": "library",
-      "bom-ref": "deb:image-execution:python3.13-minimal@3.13.5-2+deb13u4:amd64",
+      "bom-ref": "deb:image-execution:python3.13-minimal@3.13.5-2+deb13u5:amd64",
       "name": "python3.13-minimal",
-      "version": "3.13.5-2+deb13u4",
-      "purl": "pkg:deb/debian/python3.13-minimal@3.13.5-2+deb13u4?arch=amd64&distro=debian-13",
+      "version": "3.13.5-2+deb13u5",
+      "purl": "pkg:deb/debian/python3.13-minimal@3.13.5-2+deb13u5?arch=amd64&distro=debian-13",
       "properties": [
         {
           "name": "sillon:debian-suite",
@@ -11992,10 +11992,10 @@
     },
     {
       "type": "library",
-      "bom-ref": "deb:image-execution:python3.13-tk@3.13.5-2+deb13u4:amd64",
+      "bom-ref": "deb:image-execution:python3.13-tk@3.13.5-2+deb13u5:amd64",
       "name": "python3.13-tk",
-      "version": "3.13.5-2+deb13u4",
-      "purl": "pkg:deb/debian/python3.13-tk@3.13.5-2+deb13u4?arch=amd64&distro=debian-13",
+      "version": "3.13.5-2+deb13u5",
+      "purl": "pkg:deb/debian/python3.13-tk@3.13.5-2+deb13u5?arch=amd64&distro=debian-13",
       "properties": [
         {
           "name": "sillon:debian-suite",
@@ -18492,17 +18492,2165 @@
           "content": "27329dc246c0ec13c28f40ce72a78c8e63d18c31ed084d6c2173c50b94530e73"
         }
       ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:adduser@3.152:all",
+      "name": "adduser",
+      "version": "3.152",
+      "purl": "pkg:deb/debian/adduser@3.152?arch=all&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "adduser"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:dirmngr@2.4.7-21+deb13u1+b5:amd64",
+      "name": "dirmngr",
+      "version": "2.4.7-21+deb13u1+b5",
+      "purl": "pkg:deb/debian/dirmngr@2.4.7-21+deb13u1+b5?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "gnupg2"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://www.gnupg.org/"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:fonts-lato@2.015-1:all",
+      "name": "fonts-lato",
+      "version": "2.015-1",
+      "purl": "pkg:deb/debian/fonts-lato@2.015-1?arch=all&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "fonts-lato"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "http://www.latofonts.com"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:gdal-data@3.10.3+dfsg-1:all",
+      "name": "gdal-data",
+      "version": "3.10.3+dfsg-1",
+      "purl": "pkg:deb/debian/gdal-data@3.10.3+dfsg-1?arch=all&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "gdal"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "http://www.gdal.org/"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:gdal-plugins@3.10.3+dfsg-1:amd64",
+      "name": "gdal-plugins",
+      "version": "3.10.3+dfsg-1",
+      "purl": "pkg:deb/debian/gdal-plugins@3.10.3+dfsg-1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "gdal"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "http://www.gdal.org/"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:gnupg@2.4.7-21+deb13u1:all",
+      "name": "gnupg",
+      "version": "2.4.7-21+deb13u1",
+      "purl": "pkg:deb/debian/gnupg@2.4.7-21+deb13u1?arch=all&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "gnupg2"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://www.gnupg.org/"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:gnupg-l10n@2.4.7-21+deb13u1:all",
+      "name": "gnupg-l10n",
+      "version": "2.4.7-21+deb13u1",
+      "purl": "pkg:deb/debian/gnupg-l10n@2.4.7-21+deb13u1?arch=all&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "gnupg2"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://www.gnupg.org/"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:gpg@2.4.7-21+deb13u1+b5:amd64",
+      "name": "gpg",
+      "version": "2.4.7-21+deb13u1+b5",
+      "purl": "pkg:deb/debian/gpg@2.4.7-21+deb13u1+b5?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "gnupg2"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://www.gnupg.org/"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:gpg-agent@2.4.7-21+deb13u1+b5:amd64",
+      "name": "gpg-agent",
+      "version": "2.4.7-21+deb13u1+b5",
+      "purl": "pkg:deb/debian/gpg-agent@2.4.7-21+deb13u1+b5?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "gnupg2"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://www.gnupg.org/"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:gpgconf@2.4.7-21+deb13u1+b5:amd64",
+      "name": "gpgconf",
+      "version": "2.4.7-21+deb13u1+b5",
+      "purl": "pkg:deb/debian/gpgconf@2.4.7-21+deb13u1+b5?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "gnupg2"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://www.gnupg.org/"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:gpgsm@2.4.7-21+deb13u1+b5:amd64",
+      "name": "gpgsm",
+      "version": "2.4.7-21+deb13u1+b5",
+      "purl": "pkg:deb/debian/gpgsm@2.4.7-21+deb13u1+b5?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "gnupg2"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://www.gnupg.org/"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:libabsl20240722@20240722.0-4:amd64",
+      "name": "libabsl20240722",
+      "version": "20240722.0-4",
+      "purl": "pkg:deb/debian/libabsl20240722@20240722.0-4?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "abseil"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://abseil.io/"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:libaec0@1.1.3-1+b1:amd64",
+      "name": "libaec0",
+      "version": "1.1.3-1+b1",
+      "purl": "pkg:deb/debian/libaec0@1.1.3-1+b1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "libaec"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://gitlab.dkrz.de/k202009/libaec"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:libaom3@3.12.1-1+deb13u1:amd64",
+      "name": "libaom3",
+      "version": "3.12.1-1+deb13u1",
+      "purl": "pkg:deb/debian/libaom3@3.12.1-1+deb13u1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "aom"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://aomedia.googlesource.com/aom/"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:libarmadillo14@1:14.2.3+dfsg-1+b1:amd64",
+      "name": "libarmadillo14",
+      "version": "1:14.2.3+dfsg-1+b1",
+      "purl": "pkg:deb/debian/libarmadillo14@1%3A14.2.3+dfsg-1+b1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "armadillo"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://arma.sourceforge.net/"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:libarpack2t64@3.9.1-6:amd64",
+      "name": "libarpack2t64",
+      "version": "3.9.1-6",
+      "purl": "pkg:deb/debian/libarpack2t64@3.9.1-6?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "arpack"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://github.com/opencollab/arpack-ng"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:libassuan9@3.0.2-2:amd64",
+      "name": "libassuan9",
+      "version": "3.0.2-2",
+      "purl": "pkg:deb/debian/libassuan9@3.0.2-2?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "libassuan"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://www.gnupg.org/related_software/libassuan/index.html"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:libavif16@1.2.1-1.2:amd64",
+      "name": "libavif16",
+      "version": "1.2.1-1.2",
+      "purl": "pkg:deb/debian/libavif16@1.2.1-1.2?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "libavif"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://github.com/AOMediaCodec/libavif"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:libblosc1@1.21.5+ds-1+b2:amd64",
+      "name": "libblosc1",
+      "version": "1.21.5+ds-1+b2",
+      "purl": "pkg:deb/debian/libblosc1@1.21.5+ds-1+b2?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "c-blosc"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://blosc.org/"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:libcfitsio10t64@4.6.2-2:amd64",
+      "name": "libcfitsio10t64",
+      "version": "4.6.2-2",
+      "purl": "pkg:deb/debian/libcfitsio10t64@4.6.2-2?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "cfitsio"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://heasarc.gsfc.nasa.gov/fitsio/fitsio.html"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:libcurl3t64-gnutls@8.14.1-2+deb13u5:amd64",
+      "name": "libcurl3t64-gnutls",
+      "version": "8.14.1-2+deb13u5",
+      "purl": "pkg:deb/debian/libcurl3t64-gnutls@8.14.1-2+deb13u5?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "curl"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://curl.se/"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:libdav1d7@1.5.1-1:amd64",
+      "name": "libdav1d7",
+      "version": "1.5.1-1",
+      "purl": "pkg:deb/debian/libdav1d7@1.5.1-1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "dav1d"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://www.videolan.org/projects/dav1d.html"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:libde265-0@1.0.15-1+deb13u2:amd64",
+      "name": "libde265-0",
+      "version": "1.0.15-1+deb13u2",
+      "purl": "pkg:deb/debian/libde265-0@1.0.15-1+deb13u2?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "libde265"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://github.com/strukturag/libde265"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:libfreexl1@2.0.0-1+b3:amd64",
+      "name": "libfreexl1",
+      "version": "2.0.0-1+b3",
+      "purl": "pkg:deb/debian/libfreexl1@2.0.0-1+b3?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "freexl"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://www.gaia-gis.it/fossil/freexl/"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:libfyba0t64@4.1.1-11+b1:amd64",
+      "name": "libfyba0t64",
+      "version": "4.1.1-11+b1",
+      "purl": "pkg:deb/debian/libfyba0t64@4.1.1-11+b1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "fyba"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://github.com/kartverket/fyba"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:libgav1-1@0.19.0-3+b1:amd64",
+      "name": "libgav1-1",
+      "version": "0.19.0-3+b1",
+      "purl": "pkg:deb/debian/libgav1-1@0.19.0-3+b1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "libgav1"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://chromium.googlesource.com/codecs/libgav1/"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:libgdal36@3.10.3+dfsg-1:amd64",
+      "name": "libgdal36",
+      "version": "3.10.3+dfsg-1",
+      "purl": "pkg:deb/debian/libgdal36@3.10.3+dfsg-1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "gdal"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "http://www.gdal.org/"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:libgeos3.13.1@3.13.1-1:amd64",
+      "name": "libgeos3.13.1",
+      "version": "3.13.1-1",
+      "purl": "pkg:deb/debian/libgeos3.13.1@3.13.1-1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "geos"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://trac.osgeo.org/geos/"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:libgeos-c1t64@3.13.1-1:amd64",
+      "name": "libgeos-c1t64",
+      "version": "3.13.1-1",
+      "purl": "pkg:deb/debian/libgeos-c1t64@3.13.1-1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "geos"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://trac.osgeo.org/geos/"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:libgeotiff5@1.7.4-1:amd64",
+      "name": "libgeotiff5",
+      "version": "1.7.4-1",
+      "purl": "pkg:deb/debian/libgeotiff5@1.7.4-1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "libgeotiff"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://geotiff.osgeo.org/"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:libgif7@5.2.2-1+deb13u1:amd64",
+      "name": "libgif7",
+      "version": "5.2.2-1+deb13u1",
+      "purl": "pkg:deb/debian/libgif7@5.2.2-1+deb13u1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "giflib"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://giflib.sourceforge.net/"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:libgpgme11t64@1.24.2-3:amd64",
+      "name": "libgpgme11t64",
+      "version": "1.24.2-3",
+      "purl": "pkg:deb/debian/libgpgme11t64@1.24.2-3?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "gpgme1.0"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://gnupg.org/software/gpgme/"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:libgpgmepp6t64@1.24.2-3:amd64",
+      "name": "libgpgmepp6t64",
+      "version": "1.24.2-3",
+      "purl": "pkg:deb/debian/libgpgmepp6t64@1.24.2-3?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "gpgme1.0"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://gnupg.org/software/gpgme/"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:libhdf4-0-alt@4.3.0-1+b1:amd64",
+      "name": "libhdf4-0-alt",
+      "version": "4.3.0-1+b1",
+      "purl": "pkg:deb/debian/libhdf4-0-alt@4.3.0-1+b1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "libhdf4"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "http://www.hdfgroup.com/"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:libhdf5-310@1.14.5+repack-3:amd64",
+      "name": "libhdf5-310",
+      "version": "1.14.5+repack-3",
+      "purl": "pkg:deb/debian/libhdf5-310@1.14.5+repack-3?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "hdf5"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "http://hdfgroup.org/HDF5/"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:libhdf5-hl-310@1.14.5+repack-3:amd64",
+      "name": "libhdf5-hl-310",
+      "version": "1.14.5+repack-3",
+      "purl": "pkg:deb/debian/libhdf5-hl-310@1.14.5+repack-3?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "hdf5"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "http://hdfgroup.org/HDF5/"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:libheif1@1.19.8-1+deb13u1:amd64",
+      "name": "libheif1",
+      "version": "1.19.8-1+deb13u1",
+      "purl": "pkg:deb/debian/libheif1@1.19.8-1+deb13u1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "libheif"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "http://www.libheif.org"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:libheif-plugin-dav1d@1.19.8-1+deb13u1:amd64",
+      "name": "libheif-plugin-dav1d",
+      "version": "1.19.8-1+deb13u1",
+      "purl": "pkg:deb/debian/libheif-plugin-dav1d@1.19.8-1+deb13u1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "libheif"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "http://www.libheif.org"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:libheif-plugin-libde265@1.19.8-1+deb13u1:amd64",
+      "name": "libheif-plugin-libde265",
+      "version": "1.19.8-1+deb13u1",
+      "purl": "pkg:deb/debian/libheif-plugin-libde265@1.19.8-1+deb13u1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "libheif"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "http://www.libheif.org"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:libjson-c5@0.18+ds-1:amd64",
+      "name": "libjson-c5",
+      "version": "0.18+ds-1",
+      "purl": "pkg:deb/debian/libjson-c5@0.18+ds-1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "json-c"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://github.com/json-c/json-c/wiki"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:libjs-sphinxdoc@8.1.3-5:all",
+      "name": "libjs-sphinxdoc",
+      "version": "8.1.3-5",
+      "purl": "pkg:deb/debian/libjs-sphinxdoc@8.1.3-5?arch=all&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "sphinx"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://www.sphinx-doc.org/"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:libjs-underscore@1.13.4~dfsg+~1.11.4-3:all",
+      "name": "libjs-underscore",
+      "version": "1.13.4~dfsg+~1.11.4-3",
+      "purl": "pkg:deb/debian/libjs-underscore@1.13.4~dfsg+~1.11.4-3?arch=all&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "underscore"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://underscorejs.org/"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:libkmlbase1t64@1.3.0-12+b2:amd64",
+      "name": "libkmlbase1t64",
+      "version": "1.3.0-12+b2",
+      "purl": "pkg:deb/debian/libkmlbase1t64@1.3.0-12+b2?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "libkml"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://github.com/libkml/libkml"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:libkmldom1t64@1.3.0-12+b2:amd64",
+      "name": "libkmldom1t64",
+      "version": "1.3.0-12+b2",
+      "purl": "pkg:deb/debian/libkmldom1t64@1.3.0-12+b2?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "libkml"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://github.com/libkml/libkml"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:libkmlengine1t64@1.3.0-12+b2:amd64",
+      "name": "libkmlengine1t64",
+      "version": "1.3.0-12+b2",
+      "purl": "pkg:deb/debian/libkmlengine1t64@1.3.0-12+b2?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "libkml"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://github.com/libkml/libkml"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:libksba8@1.6.7-2+b1:amd64",
+      "name": "libksba8",
+      "version": "1.6.7-2+b1",
+      "purl": "pkg:deb/debian/libksba8@1.6.7-2+b1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "libksba"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://www.gnupg.org/related_software/libksba/"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:libltdl7@2.5.4-4:amd64",
+      "name": "libltdl7",
+      "version": "2.5.4-4",
+      "purl": "pkg:deb/debian/libltdl7@2.5.4-4?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "libtool"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://www.gnu.org/software/libtool/"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:libmariadb3@1:11.8.6-0+deb13u1:amd64",
+      "name": "libmariadb3",
+      "version": "1:11.8.6-0+deb13u1",
+      "purl": "pkg:deb/debian/libmariadb3@1%3A11.8.6-0+deb13u1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "mariadb"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://mariadb.org/"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:libminizip1t64@1:1.3.dfsg+really1.3.1-1+b1:amd64",
+      "name": "libminizip1t64",
+      "version": "1:1.3.dfsg+really1.3.1-1+b1",
+      "purl": "pkg:deb/debian/libminizip1t64@1%3A1.3.dfsg+really1.3.1-1+b1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "zlib"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "http://zlib.net/"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:libnetcdf22@1:4.9.3-1:amd64",
+      "name": "libnetcdf22",
+      "version": "1:4.9.3-1",
+      "purl": "pkg:deb/debian/libnetcdf22@1%3A4.9.3-1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "netcdf"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "http://www.unidata.ucar.edu/software/netcdf/"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:libngtcp2-16@1.11.0-1+deb13u1:amd64",
+      "name": "libngtcp2-16",
+      "version": "1.11.0-1+deb13u1",
+      "purl": "pkg:deb/debian/libngtcp2-16@1.11.0-1+deb13u1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "ngtcp2"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://github.com/ngtcp2/ngtcp2"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:libngtcp2-crypto-gnutls8@1.11.0-1+deb13u1:amd64",
+      "name": "libngtcp2-crypto-gnutls8",
+      "version": "1.11.0-1+deb13u1",
+      "purl": "pkg:deb/debian/libngtcp2-crypto-gnutls8@1.11.0-1+deb13u1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "ngtcp2"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://github.com/ngtcp2/ngtcp2"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:libnpth0t64@1.8-3:amd64",
+      "name": "libnpth0t64",
+      "version": "1.8-3",
+      "purl": "pkg:deb/debian/libnpth0t64@1.8-3?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "npth"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://www.gnupg.org/"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:libnspr4@2:4.36-1:amd64",
+      "name": "libnspr4",
+      "version": "2:4.36-1",
+      "purl": "pkg:deb/debian/libnspr4@2%3A4.36-1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "nspr"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "http://www.mozilla.org/projects/nspr/"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:libnss3@2:3.110-1+deb13u4:amd64",
+      "name": "libnss3",
+      "version": "2:3.110-1+deb13u4",
+      "purl": "pkg:deb/debian/libnss3@2%3A3.110-1+deb13u4?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "nss"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://developer.mozilla.org/en-US/docs/Mozilla/Projects/NSS"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:libodbc2@2.3.12-2+deb13u1:amd64",
+      "name": "libodbc2",
+      "version": "2.3.12-2+deb13u1",
+      "purl": "pkg:deb/debian/libodbc2@2.3.12-2+deb13u1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "unixodbc"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://www.unixodbc.org"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:libodbcinst2@2.3.12-2+deb13u1:amd64",
+      "name": "libodbcinst2",
+      "version": "2.3.12-2+deb13u1",
+      "purl": "pkg:deb/debian/libodbcinst2@2.3.12-2+deb13u1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "unixodbc"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://www.unixodbc.org"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:libogdi4.1@4.1.1+ds-5:amd64",
+      "name": "libogdi4.1",
+      "version": "4.1.1+ds-5",
+      "purl": "pkg:deb/debian/libogdi4.1@4.1.1+ds-5?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "ogdi-dfsg"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "http://ogdi.sourceforge.net/"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:libpoppler147@25.03.0-5+deb13u4:amd64",
+      "name": "libpoppler147",
+      "version": "25.03.0-5+deb13u4",
+      "purl": "pkg:deb/debian/libpoppler147@25.03.0-5+deb13u4?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "poppler"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://poppler.freedesktop.org/"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:libproj25@9.6.0-1:amd64",
+      "name": "libproj25",
+      "version": "9.6.0-1",
+      "purl": "pkg:deb/debian/libproj25@9.6.0-1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "proj"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://proj.org/"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:librav1e0.7@0.7.1-9+b2:amd64",
+      "name": "librav1e0.7",
+      "version": "0.7.1-9+b2",
+      "purl": "pkg:deb/debian/librav1e0.7@0.7.1-9+b2?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "rust-rav1e"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://github.com/xiph/rav1e/"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:librttopo1@1.1.0-4:amd64",
+      "name": "librttopo1",
+      "version": "1.1.0-4",
+      "purl": "pkg:deb/debian/librttopo1@1.1.0-4?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "librttopo"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://git.osgeo.org/gitea/rttopo/librttopo"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:libsnappy1v5@1.2.2-1:amd64",
+      "name": "libsnappy1v5",
+      "version": "1.2.2-1",
+      "purl": "pkg:deb/debian/libsnappy1v5@1.2.2-1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "snappy"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://google.github.io/snappy/"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:libspatialite8t64@5.1.0-3+b2:amd64",
+      "name": "libspatialite8t64",
+      "version": "5.1.0-3+b2",
+      "purl": "pkg:deb/debian/libspatialite8t64@5.1.0-3+b2?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "spatialite"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://www.gaia-gis.it/fossil/libspatialite"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:libsvtav1enc2@2.3.0+dfsg-1:amd64",
+      "name": "libsvtav1enc2",
+      "version": "2.3.0+dfsg-1",
+      "purl": "pkg:deb/debian/libsvtav1enc2@2.3.0+dfsg-1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "svt-av1"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://gitlab.com/AOMediaCodec/SVT-AV1"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:libsz2@1.1.3-1+b1:amd64",
+      "name": "libsz2",
+      "version": "1.1.3-1+b1",
+      "purl": "pkg:deb/debian/libsz2@1.1.3-1+b1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "libaec"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://gitlab.dkrz.de/k202009/libaec"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:liburiparser1@0.9.8+dfsg-2:amd64",
+      "name": "liburiparser1",
+      "version": "0.9.8+dfsg-2",
+      "purl": "pkg:deb/debian/liburiparser1@0.9.8+dfsg-2?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "uriparser"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://uriparser.github.io/"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:libxerces-c3.2t64@3.2.4+debian-1.3+b2:amd64",
+      "name": "libxerces-c3.2t64",
+      "version": "3.2.4+debian-1.3+b2",
+      "purl": "pkg:deb/debian/libxerces-c3.2t64@3.2.4+debian-1.3+b2?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "xerces-c"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://xerces.apache.org/xerces-c/"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:libyuv0@0.0.1904.20250204-1:amd64",
+      "name": "libyuv0",
+      "version": "0.0.1904.20250204-1",
+      "purl": "pkg:deb/debian/libyuv0@0.0.1904.20250204-1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "libyuv"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://chromium.googlesource.com/libyuv/libyuv/"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:mariadb-common@1:11.8.6-0+deb13u1:all",
+      "name": "mariadb-common",
+      "version": "1:11.8.6-0+deb13u1",
+      "purl": "pkg:deb/debian/mariadb-common@1%3A11.8.6-0+deb13u1?arch=all&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "mariadb"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://mariadb.org/"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:mysql-common@5.8+1.1.1:all",
+      "name": "mysql-common",
+      "version": "5.8+1.1.1",
+      "purl": "pkg:deb/debian/mysql-common@5.8+1.1.1?arch=all&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "mysql-defaults"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:pinentry-curses@1.3.1-2:amd64",
+      "name": "pinentry-curses",
+      "version": "1.3.1-2",
+      "purl": "pkg:deb/debian/pinentry-curses@1.3.1-2?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "pinentry"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://www.gnupg.org/related_software/pinentry/"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:proj-data@9.6.0-1:all",
+      "name": "proj-data",
+      "version": "9.6.0-1",
+      "purl": "pkg:deb/debian/proj-data@9.6.0-1?arch=all&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "proj"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://proj.org/"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:python3-certifi@2025.1.31+ds-1:all",
+      "name": "python3-certifi",
+      "version": "2025.1.31+ds-1",
+      "purl": "pkg:deb/debian/python3-certifi@2025.1.31+ds-1?arch=all&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "python-certifi"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://github.com/certifi/python-certifi"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:python3-geopandas@1.0.1-2:all",
+      "name": "python3-geopandas",
+      "version": "1.0.1-2",
+      "purl": "pkg:deb/debian/python3-geopandas@1.0.1-2?arch=all&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "python-geopandas"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "http://www.geopandas.org"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:python3-pyogrio@0.10.0+ds-4+b2:amd64",
+      "name": "python3-pyogrio",
+      "version": "0.10.0+ds-4+b2",
+      "purl": "pkg:deb/debian/python3-pyogrio@0.10.0+ds-4+b2?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "pyogrio"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://github.com/geopandas/pyogrio"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:python3-pyproj@3.7.1-1+b1:amd64",
+      "name": "python3-pyproj",
+      "version": "3.7.1-1+b1",
+      "purl": "pkg:deb/debian/python3-pyproj@3.7.1-1+b1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "python-pyproj"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://github.com/pyproj4/pyproj"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:python3-shapely@2.1.0-1:amd64",
+      "name": "python3-shapely",
+      "version": "2.1.0-1",
+      "purl": "pkg:deb/debian/python3-shapely@2.1.0-1?arch=amd64&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "python-shapely"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://github.com/shapely/shapely"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:sphinx-rtd-theme-common@3.0.2+dfsg-2:all",
+      "name": "sphinx-rtd-theme-common",
+      "version": "3.0.2+dfsg-2",
+      "purl": "pkg:deb/debian/sphinx-rtd-theme-common@3.0.2+dfsg-2?arch=all&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "sphinx-rtd-theme"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://github.com/readthedocs/sphinx_rtd_theme"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "deb:image-execution:unixodbc-common@2.3.12-2+deb13u1:all",
+      "name": "unixodbc-common",
+      "version": "2.3.12-2+deb13u1",
+      "purl": "pkg:deb/debian/unixodbc-common@2.3.12-2+deb13u1?arch=all&distro=debian-13",
+      "properties": [
+        {
+          "name": "sillon:debian-suite",
+          "value": "debian-13-trixie"
+        },
+        {
+          "name": "sillon:resolved-in",
+          "value": "image-execution"
+        },
+        {
+          "name": "sillon:debian-source-package",
+          "value": "unixodbc"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://www.unixodbc.org"
+        }
+      ]
     }
   ],
   "dependencies": [
     {
       "ref": "sillon-application",
       "dependsOn": [
-        "sillon:sillon-server@0.1.36",
-        "sillon:sillon-orchestrateur@0.1.13",
+        "sillon:sillon-server@0.1.39",
+        "sillon:sillon-orchestrateur@0.1.15",
         "sillon:sillon-worker@0.1.3",
-        "sillon:sillon-image-execution@0.1.2",
-        "sillon:sillon-tutoriel@0.2.0",
+        "sillon:sillon-image-execution@0.1.3",
+        "sillon:sillon-tutoriel@0.2.3",
         "sillon:sillon-demo-sirene@0.1.4",
         "sillon:sillon-purge@0.1.0",
         "sillon:sillon-backup-client@0.1.2",
@@ -18511,7 +20659,7 @@
       ]
     },
     {
-      "ref": "sillon:sillon-server@0.1.36",
+      "ref": "sillon:sillon-server@0.1.39",
       "dependsOn": [
         "deb:host:postgresql-17@17.11-0+deb13u1:amd64",
         "deb:host:nginx@1.26.3-3+deb13u8:amd64",
@@ -18553,9 +20701,9 @@
       ]
     },
     {
-      "ref": "sillon:sillon-orchestrateur@0.1.13",
+      "ref": "sillon:sillon-orchestrateur@0.1.15",
       "dependsOn": [
-        "sillon:sillon-server@0.1.36",
+        "sillon:sillon-server@0.1.39",
         "deb:host:python3-flask@3.1.1-1:all",
         "deb:host:python3-psycopg2@2.9.10-1+b1:amd64",
         "deb:host:python3-jwt@2.10.1-2+deb13u1:all",
@@ -18566,44 +20714,44 @@
     {
       "ref": "sillon:sillon-worker@0.1.3",
       "dependsOn": [
-        "sillon:sillon-orchestrateur@0.1.13",
+        "sillon:sillon-orchestrateur@0.1.15",
         "deb:host:podman@5.4.2+ds1-2+b2:amd64"
       ]
     },
     {
-      "ref": "sillon:sillon-image-execution@0.1.2",
+      "ref": "sillon:sillon-image-execution@0.1.3",
       "dependsOn": [
         "sillon:sillon-worker@0.1.3",
         "container-image-sillon-image-execution"
       ]
     },
     {
-      "ref": "sillon:sillon-tutoriel@0.2.0",
+      "ref": "sillon:sillon-tutoriel@0.2.3",
       "dependsOn": [
-        "sillon:sillon-server@0.1.36",
-        "sillon:sillon-orchestrateur@0.1.13",
+        "sillon:sillon-server@0.1.39",
+        "sillon:sillon-orchestrateur@0.1.15",
         "sillon:sillon-worker@0.1.3",
-        "sillon:sillon-image-execution@0.1.2",
+        "sillon:sillon-image-execution@0.1.3",
         "deb:host:python3@3.13.5-1:amd64"
       ]
     },
     {
       "ref": "sillon:sillon-demo-sirene@0.1.4",
       "dependsOn": [
-        "sillon:sillon-tutoriel@0.2.0",
+        "sillon:sillon-tutoriel@0.2.3",
         "deb:host:python3@3.13.5-1:amd64"
       ]
     },
     {
       "ref": "sillon:sillon-purge@0.1.0",
       "dependsOn": [
-        "sillon:sillon-server@0.1.36"
+        "sillon:sillon-server@0.1.39"
       ]
     },
     {
       "ref": "sillon:sillon-backup-client@0.1.2",
       "dependsOn": [
-        "sillon:sillon-server@0.1.36",
+        "sillon:sillon-server@0.1.39",
         "deb:host:nfs-common@1:2.8.3-1:amd64",
         "deb:host:pgbackrest@2.55.1-1:amd64",
         "deb:host:keyutils@1.6.3-6:amd64",
@@ -18800,6 +20948,594 @@
       "recommendation": "Corrige - PapaParse 5.6.0 vendorise depuis le 19/08/2026 (sillon-server 0.1.29).",
       "detail": "Initialement detectee via OSV.dev le 19 aout 2026 contre la version alors vendorisee (papaparse@5.0.2, ecosysteme npm). Corrigee le meme jour.",
       "updated": "2026-08-19T00:00:00Z"
+    },
+    {
+      "bom-ref": "vuln-CVE-2026-49014",
+      "id": "CVE-2026-49014",
+      "source": {
+        "name": "Debian Security Tracker",
+        "url": "https://security-tracker.debian.org/tracker/"
+      },
+      "references": [
+        {
+          "id": "CVE-2026-49014",
+          "source": {
+            "name": "NVD",
+            "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-49014"
+          }
+        }
+      ],
+      "ratings": [
+        {
+          "source": {
+            "name": "NVD"
+          },
+          "score": 9.8,
+          "severity": "critical",
+          "method": "CVSSv31"
+        }
+      ],
+      "description": "Depassement de tampon sur pile dans le pilote netCDF de GDAL (scanForGeometryContainers, frmts/netcdf/netcdfsg.cpp) : un attribut de geometrie surdimensionne dans un fichier NetCDF forge permet une execution de code arbitraire.",
+      "affects": [
+        {
+          "ref": "deb:image-execution:libgdal36@3.10.3+dfsg-1:amd64"
+        }
+      ],
+      "analysis": {
+        "state": "not_affected",
+        "justification": "protected_by_mitigating_control",
+        "response": [
+          "will_not_fix"
+        ],
+        "detail": "Non corrigee cote Debian trixie au 16/09/2026 (paquet source gdal, verifie sur le Debian Security Tracker). Desamorcee par le modele de menace de SILLON : le seul acteur en mesure de faire lire un fichier NetCDF/HDF4 forge par GDAL est l'auteur du script lui-meme, qui dispose deja d'une execution de code arbitraire dans son propre conteneur isole (--read-only --tmpfs /tmp --user 1000:1000, worker.py, cahier des charges §7.7) - une RCE declenchee par un fichier qu'il choisit lui-meme de faire lire par son propre script ne lui donne rien qu'il n'ait deja. Voir NOMENCLATURE_LOGICIELLE_SILLON.md, §7 constat 13."
+      },
+      "updated": "2026-09-16T00:00:00Z"
+    },
+    {
+      "bom-ref": "vuln-CVE-2026-8213",
+      "id": "CVE-2026-8213",
+      "source": {
+        "name": "Debian Security Tracker",
+        "url": "https://security-tracker.debian.org/tracker/"
+      },
+      "references": [
+        {
+          "id": "CVE-2026-8213",
+          "source": {
+            "name": "NVD",
+            "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-8213"
+          }
+        }
+      ],
+      "ratings": [
+        {
+          "source": {
+            "name": "NVD"
+          },
+          "score": 7.0,
+          "severity": "high",
+          "method": "CVSSv31"
+        }
+      ],
+      "description": "Depassement de tampon sur tas dans le pilote HDF-EOS Grid de GDAL (GDSDfldsrch, frmts/hdf4/hdf-eos/GDapi.c) via un fichier HDF4 forge, exploit publie. Acces local requis.",
+      "affects": [
+        {
+          "ref": "deb:image-execution:libgdal36@3.10.3+dfsg-1:amd64"
+        }
+      ],
+      "analysis": {
+        "state": "not_affected",
+        "justification": "protected_by_mitigating_control",
+        "response": [
+          "will_not_fix"
+        ],
+        "detail": "Non corrigee cote Debian trixie au 16/09/2026 (paquet source gdal, verifie sur le Debian Security Tracker). Desamorcee par le modele de menace de SILLON : le seul acteur en mesure de faire lire un fichier NetCDF/HDF4 forge par GDAL est l'auteur du script lui-meme, qui dispose deja d'une execution de code arbitraire dans son propre conteneur isole (--read-only --tmpfs /tmp --user 1000:1000, worker.py, cahier des charges §7.7) - une RCE declenchee par un fichier qu'il choisit lui-meme de faire lire par son propre script ne lui donne rien qu'il n'ait deja. Voir NOMENCLATURE_LOGICIELLE_SILLON.md, §7 constat 13."
+      },
+      "updated": "2026-09-16T00:00:00Z"
+    },
+    {
+      "bom-ref": "vuln-CVE-2026-8212",
+      "id": "CVE-2026-8212",
+      "source": {
+        "name": "Debian Security Tracker",
+        "url": "https://security-tracker.debian.org/tracker/"
+      },
+      "references": [
+        {
+          "id": "CVE-2026-8212",
+          "source": {
+            "name": "NVD",
+            "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-8212"
+          }
+        }
+      ],
+      "ratings": [
+        {
+          "source": {
+            "name": "NVD"
+          },
+          "score": 7.0,
+          "severity": "high",
+          "method": "CVSSv31"
+        }
+      ],
+      "description": "Depassement de tampon sur tas dans le pilote HDF-EOS Swath de GDAL (SWSDfldsrch, frmts/hdf4/hdf-eos/SWapi.c) via un fichier HDF4 forge, exploit publie. Acces local requis.",
+      "affects": [
+        {
+          "ref": "deb:image-execution:libgdal36@3.10.3+dfsg-1:amd64"
+        }
+      ],
+      "analysis": {
+        "state": "not_affected",
+        "justification": "protected_by_mitigating_control",
+        "response": [
+          "will_not_fix"
+        ],
+        "detail": "Non corrigee cote Debian trixie au 16/09/2026 (paquet source gdal, verifie sur le Debian Security Tracker). Desamorcee par le modele de menace de SILLON : le seul acteur en mesure de faire lire un fichier NetCDF/HDF4 forge par GDAL est l'auteur du script lui-meme, qui dispose deja d'une execution de code arbitraire dans son propre conteneur isole (--read-only --tmpfs /tmp --user 1000:1000, worker.py, cahier des charges §7.7) - une RCE declenchee par un fichier qu'il choisit lui-meme de faire lire par son propre script ne lui donne rien qu'il n'ait deja. Voir NOMENCLATURE_LOGICIELLE_SILLON.md, §7 constat 13."
+      },
+      "updated": "2026-09-16T00:00:00Z"
+    },
+    {
+      "bom-ref": "vuln-CVE-2026-8088",
+      "id": "CVE-2026-8088",
+      "source": {
+        "name": "Debian Security Tracker",
+        "url": "https://security-tracker.debian.org/tracker/"
+      },
+      "references": [
+        {
+          "id": "CVE-2026-8088",
+          "source": {
+            "name": "NVD",
+            "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-8088"
+          }
+        }
+      ],
+      "ratings": [
+        {
+          "source": {
+            "name": "NVD"
+          },
+          "score": 5.5,
+          "severity": "medium",
+          "method": "CVSSv31"
+        }
+      ],
+      "description": "Lecture hors bornes dans le pilote HDF-EOS Grid de GDAL (GDfieldinfo, frmts/hdf4/hdf-eos/GDapi.c) via un fichier HDF4 forge, exploit publie. Acces local requis.",
+      "affects": [
+        {
+          "ref": "deb:image-execution:libgdal36@3.10.3+dfsg-1:amd64"
+        }
+      ],
+      "analysis": {
+        "state": "not_affected",
+        "justification": "protected_by_mitigating_control",
+        "response": [
+          "will_not_fix"
+        ],
+        "detail": "Non corrigee cote Debian trixie au 16/09/2026 (paquet source gdal, verifie sur le Debian Security Tracker). Desamorcee par le modele de menace de SILLON : le seul acteur en mesure de faire lire un fichier NetCDF/HDF4 forge par GDAL est l'auteur du script lui-meme, qui dispose deja d'une execution de code arbitraire dans son propre conteneur isole (--read-only --tmpfs /tmp --user 1000:1000, worker.py, cahier des charges §7.7) - une RCE declenchee par un fichier qu'il choisit lui-meme de faire lire par son propre script ne lui donne rien qu'il n'ait deja. Voir NOMENCLATURE_LOGICIELLE_SILLON.md, §7 constat 13."
+      },
+      "updated": "2026-09-16T00:00:00Z"
+    },
+    {
+      "bom-ref": "vuln-CVE-2026-8087",
+      "id": "CVE-2026-8087",
+      "source": {
+        "name": "Debian Security Tracker",
+        "url": "https://security-tracker.debian.org/tracker/"
+      },
+      "references": [
+        {
+          "id": "CVE-2026-8087",
+          "source": {
+            "name": "NVD",
+            "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-8087"
+          }
+        }
+      ],
+      "ratings": [
+        {
+          "source": {
+            "name": "NVD"
+          },
+          "score": 7.0,
+          "severity": "high",
+          "method": "CVSSv31"
+        }
+      ],
+      "description": "Depassement de tampon sur tas dans le pilote HDF-EOS Grid de GDAL (GDnentries, frmts/hdf4/hdf-eos/GDapi.c) via l'argument DataFieldName force. Acces local requis.",
+      "affects": [
+        {
+          "ref": "deb:image-execution:libgdal36@3.10.3+dfsg-1:amd64"
+        }
+      ],
+      "analysis": {
+        "state": "not_affected",
+        "justification": "protected_by_mitigating_control",
+        "response": [
+          "will_not_fix"
+        ],
+        "detail": "Non corrigee cote Debian trixie au 16/09/2026 (paquet source gdal, verifie sur le Debian Security Tracker). Desamorcee par le modele de menace de SILLON : le seul acteur en mesure de faire lire un fichier NetCDF/HDF4 forge par GDAL est l'auteur du script lui-meme, qui dispose deja d'une execution de code arbitraire dans son propre conteneur isole (--read-only --tmpfs /tmp --user 1000:1000, worker.py, cahier des charges §7.7) - une RCE declenchee par un fichier qu'il choisit lui-meme de faire lire par son propre script ne lui donne rien qu'il n'ait deja. Voir NOMENCLATURE_LOGICIELLE_SILLON.md, §7 constat 13."
+      },
+      "updated": "2026-09-16T00:00:00Z"
+    },
+    {
+      "bom-ref": "vuln-CVE-2026-8086",
+      "id": "CVE-2026-8086",
+      "source": {
+        "name": "Debian Security Tracker",
+        "url": "https://security-tracker.debian.org/tracker/"
+      },
+      "references": [
+        {
+          "id": "CVE-2026-8086",
+          "source": {
+            "name": "NVD",
+            "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-8086"
+          }
+        }
+      ],
+      "ratings": [
+        {
+          "source": {
+            "name": "NVD"
+          },
+          "score": 7.0,
+          "severity": "high",
+          "method": "CVSSv31"
+        }
+      ],
+      "description": "Depassement de tampon sur tas dans le pilote HDF-EOS Swath de GDAL (SWnentries, frmts/hdf4/hdf-eos/SWapi.c) via l'argument DimensionName force. Acces local requis.",
+      "affects": [
+        {
+          "ref": "deb:image-execution:libgdal36@3.10.3+dfsg-1:amd64"
+        }
+      ],
+      "analysis": {
+        "state": "not_affected",
+        "justification": "protected_by_mitigating_control",
+        "response": [
+          "will_not_fix"
+        ],
+        "detail": "Non corrigee cote Debian trixie au 16/09/2026 (paquet source gdal, verifie sur le Debian Security Tracker). Desamorcee par le modele de menace de SILLON : le seul acteur en mesure de faire lire un fichier NetCDF/HDF4 forge par GDAL est l'auteur du script lui-meme, qui dispose deja d'une execution de code arbitraire dans son propre conteneur isole (--read-only --tmpfs /tmp --user 1000:1000, worker.py, cahier des charges §7.7) - une RCE declenchee par un fichier qu'il choisit lui-meme de faire lire par son propre script ne lui donne rien qu'il n'ait deja. Voir NOMENCLATURE_LOGICIELLE_SILLON.md, §7 constat 13."
+      },
+      "updated": "2026-09-16T00:00:00Z"
+    },
+    {
+      "bom-ref": "vuln-CVE-2026-8084",
+      "id": "CVE-2026-8084",
+      "source": {
+        "name": "Debian Security Tracker",
+        "url": "https://security-tracker.debian.org/tracker/"
+      },
+      "references": [
+        {
+          "id": "CVE-2026-8084",
+          "source": {
+            "name": "NVD",
+            "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-8084"
+          }
+        }
+      ],
+      "ratings": [
+        {
+          "source": {
+            "name": "NVD"
+          },
+          "score": 5.5,
+          "severity": "medium",
+          "method": "CVSSv31"
+        }
+      ],
+      "description": "Lecture hors bornes (memmove) dans le pilote HDF-EOS Swath de GDAL (frmts/hdf4/hdf-eos/SWapi.c) via un fichier HDF4 forge, exploit publie. Acces local requis.",
+      "affects": [
+        {
+          "ref": "deb:image-execution:libgdal36@3.10.3+dfsg-1:amd64"
+        }
+      ],
+      "analysis": {
+        "state": "not_affected",
+        "justification": "protected_by_mitigating_control",
+        "response": [
+          "will_not_fix"
+        ],
+        "detail": "Non corrigee cote Debian trixie au 16/09/2026 (paquet source gdal, verifie sur le Debian Security Tracker). Desamorcee par le modele de menace de SILLON : le seul acteur en mesure de faire lire un fichier NetCDF/HDF4 forge par GDAL est l'auteur du script lui-meme, qui dispose deja d'une execution de code arbitraire dans son propre conteneur isole (--read-only --tmpfs /tmp --user 1000:1000, worker.py, cahier des charges §7.7) - une RCE declenchee par un fichier qu'il choisit lui-meme de faire lire par son propre script ne lui donne rien qu'il n'ait deja. Voir NOMENCLATURE_LOGICIELLE_SILLON.md, §7 constat 13."
+      },
+      "updated": "2026-09-16T00:00:00Z"
+    },
+    {
+      "bom-ref": "vuln-CVE-2026-4738",
+      "id": "CVE-2026-4738",
+      "source": {
+        "name": "Debian Security Tracker",
+        "url": "https://security-tracker.debian.org/tracker/"
+      },
+      "references": [
+        {
+          "id": "CVE-2026-4738",
+          "source": {
+            "name": "NVD",
+            "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-4738"
+          }
+        }
+      ],
+      "ratings": [
+        {
+          "source": {
+            "name": "NVD"
+          },
+          "score": 6.5,
+          "severity": "medium",
+          "method": "CVSSv31"
+        }
+      ],
+      "description": "Depassement de la zone memoire allouee dans les modules zlib/infback9 vendorises par GDAL, affecte les versions avant 3.11.0.",
+      "affects": [
+        {
+          "ref": "deb:image-execution:libgdal36@3.10.3+dfsg-1:amd64"
+        }
+      ],
+      "analysis": {
+        "state": "not_affected",
+        "justification": "protected_by_mitigating_control",
+        "response": [
+          "will_not_fix"
+        ],
+        "detail": "Non corrigee cote Debian trixie au 16/09/2026 (paquet source gdal, verifie sur le Debian Security Tracker). Desamorcee par le modele de menace de SILLON : le seul acteur en mesure de faire lire un fichier NetCDF/HDF4 forge par GDAL est l'auteur du script lui-meme, qui dispose deja d'une execution de code arbitraire dans son propre conteneur isole (--read-only --tmpfs /tmp --user 1000:1000, worker.py, cahier des charges §7.7) - une RCE declenchee par un fichier qu'il choisit lui-meme de faire lire par son propre script ne lui donne rien qu'il n'ait deja. Voir NOMENCLATURE_LOGICIELLE_SILLON.md, §7 constat 13."
+      },
+      "updated": "2026-09-16T00:00:00Z"
+    },
+    {
+      "bom-ref": "vuln-CVE-2026-86095",
+      "id": "CVE-2026-86095",
+      "source": {
+        "name": "Debian Security Tracker",
+        "url": "https://security-tracker.debian.org/tracker/"
+      },
+      "references": [
+        {
+          "id": "CVE-2026-86095",
+          "source": {
+            "name": "NVD",
+            "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-86095"
+          }
+        }
+      ],
+      "ratings": [
+        {
+          "source": {
+            "name": "NVD"
+          },
+          "score": 7.5,
+          "severity": "high",
+          "method": "CVSSv31"
+        }
+      ],
+      "description": "Ecriture hors bornes dans NC4_HDF5_inq_attname() (netcdf-c) : un nom d'attribut HDF5 surdimensionne dans un fichier forge deborde un tampon fixe de 256 octets.",
+      "affects": [
+        {
+          "ref": "deb:image-execution:libnetcdf22@1:4.9.3-1:amd64"
+        }
+      ],
+      "analysis": {
+        "state": "not_affected",
+        "justification": "protected_by_mitigating_control",
+        "response": [
+          "will_not_fix"
+        ],
+        "detail": "Non corrigee cote Debian trixie au 16/09/2026 (paquet source netcdf, verifie sur le Debian Security Tracker). Desamorcee par le modele de menace de SILLON : le seul acteur en mesure de faire lire un fichier NetCDF/HDF4 forge par GDAL est l'auteur du script lui-meme, qui dispose deja d'une execution de code arbitraire dans son propre conteneur isole (--read-only --tmpfs /tmp --user 1000:1000, worker.py, cahier des charges §7.7) - une RCE declenchee par un fichier qu'il choisit lui-meme de faire lire par son propre script ne lui donne rien qu'il n'ait deja. Voir NOMENCLATURE_LOGICIELLE_SILLON.md, §7 constat 13."
+      },
+      "updated": "2026-09-16T00:00:00Z"
+    },
+    {
+      "bom-ref": "vuln-CVE-2025-14936",
+      "id": "CVE-2025-14936",
+      "source": {
+        "name": "Debian Security Tracker",
+        "url": "https://security-tracker.debian.org/tracker/"
+      },
+      "references": [
+        {
+          "id": "CVE-2025-14936",
+          "source": {
+            "name": "NVD",
+            "url": "https://nvd.nist.gov/vuln/detail/CVE-2025-14936"
+          }
+        }
+      ],
+      "ratings": [
+        {
+          "source": {
+            "name": "NVD"
+          },
+          "score": 9.8,
+          "severity": "critical",
+          "method": "CVSSv31"
+        }
+      ],
+      "description": "Depassement de tampon sur pile via un nom d'attribut dans netcdf-c, execution de code a distance par ouverture d'un fichier NetCDF forge.",
+      "affects": [
+        {
+          "ref": "deb:image-execution:libnetcdf22@1:4.9.3-1:amd64"
+        }
+      ],
+      "analysis": {
+        "state": "not_affected",
+        "justification": "protected_by_mitigating_control",
+        "response": [
+          "will_not_fix"
+        ],
+        "detail": "Non corrigee cote Debian trixie au 16/09/2026 (paquet source netcdf, verifie sur le Debian Security Tracker). Desamorcee par le modele de menace de SILLON : le seul acteur en mesure de faire lire un fichier NetCDF/HDF4 forge par GDAL est l'auteur du script lui-meme, qui dispose deja d'une execution de code arbitraire dans son propre conteneur isole (--read-only --tmpfs /tmp --user 1000:1000, worker.py, cahier des charges §7.7) - une RCE declenchee par un fichier qu'il choisit lui-meme de faire lire par son propre script ne lui donne rien qu'il n'ait deja. Voir NOMENCLATURE_LOGICIELLE_SILLON.md, §7 constat 13."
+      },
+      "updated": "2026-09-16T00:00:00Z"
+    },
+    {
+      "bom-ref": "vuln-CVE-2025-14935",
+      "id": "CVE-2025-14935",
+      "source": {
+        "name": "Debian Security Tracker",
+        "url": "https://security-tracker.debian.org/tracker/"
+      },
+      "references": [
+        {
+          "id": "CVE-2025-14935",
+          "source": {
+            "name": "NVD",
+            "url": "https://nvd.nist.gov/vuln/detail/CVE-2025-14935"
+          }
+        }
+      ],
+      "ratings": [
+        {
+          "source": {
+            "name": "NVD"
+          },
+          "score": 9.8,
+          "severity": "critical",
+          "method": "CVSSv31"
+        }
+      ],
+      "description": "Depassement de tampon sur tas via un nom de dimension dans netcdf-c, execution de code a distance par ouverture d'un fichier NetCDF forge.",
+      "affects": [
+        {
+          "ref": "deb:image-execution:libnetcdf22@1:4.9.3-1:amd64"
+        }
+      ],
+      "analysis": {
+        "state": "not_affected",
+        "justification": "protected_by_mitigating_control",
+        "response": [
+          "will_not_fix"
+        ],
+        "detail": "Non corrigee cote Debian trixie au 16/09/2026 (paquet source netcdf, verifie sur le Debian Security Tracker). Desamorcee par le modele de menace de SILLON : le seul acteur en mesure de faire lire un fichier NetCDF/HDF4 forge par GDAL est l'auteur du script lui-meme, qui dispose deja d'une execution de code arbitraire dans son propre conteneur isole (--read-only --tmpfs /tmp --user 1000:1000, worker.py, cahier des charges §7.7) - une RCE declenchee par un fichier qu'il choisit lui-meme de faire lire par son propre script ne lui donne rien qu'il n'ait deja. Voir NOMENCLATURE_LOGICIELLE_SILLON.md, §7 constat 13."
+      },
+      "updated": "2026-09-16T00:00:00Z"
+    },
+    {
+      "bom-ref": "vuln-CVE-2025-14934",
+      "id": "CVE-2025-14934",
+      "source": {
+        "name": "Debian Security Tracker",
+        "url": "https://security-tracker.debian.org/tracker/"
+      },
+      "references": [
+        {
+          "id": "CVE-2025-14934",
+          "source": {
+            "name": "NVD",
+            "url": "https://nvd.nist.gov/vuln/detail/CVE-2025-14934"
+          }
+        }
+      ],
+      "ratings": [
+        {
+          "source": {
+            "name": "NVD"
+          },
+          "score": 9.8,
+          "severity": "critical",
+          "method": "CVSSv31"
+        }
+      ],
+      "description": "Depassement de tampon sur pile via un nom de variable dans netcdf-c, execution de code a distance par ouverture d'un fichier NetCDF forge.",
+      "affects": [
+        {
+          "ref": "deb:image-execution:libnetcdf22@1:4.9.3-1:amd64"
+        }
+      ],
+      "analysis": {
+        "state": "not_affected",
+        "justification": "protected_by_mitigating_control",
+        "response": [
+          "will_not_fix"
+        ],
+        "detail": "Non corrigee cote Debian trixie au 16/09/2026 (paquet source netcdf, verifie sur le Debian Security Tracker). Desamorcee par le modele de menace de SILLON : le seul acteur en mesure de faire lire un fichier NetCDF/HDF4 forge par GDAL est l'auteur du script lui-meme, qui dispose deja d'une execution de code arbitraire dans son propre conteneur isole (--read-only --tmpfs /tmp --user 1000:1000, worker.py, cahier des charges §7.7) - une RCE declenchee par un fichier qu'il choisit lui-meme de faire lire par son propre script ne lui donne rien qu'il n'ait deja. Voir NOMENCLATURE_LOGICIELLE_SILLON.md, §7 constat 13."
+      },
+      "updated": "2026-09-16T00:00:00Z"
+    },
+    {
+      "bom-ref": "vuln-CVE-2025-14933",
+      "id": "CVE-2025-14933",
+      "source": {
+        "name": "Debian Security Tracker",
+        "url": "https://security-tracker.debian.org/tracker/"
+      },
+      "references": [
+        {
+          "id": "CVE-2025-14933",
+          "source": {
+            "name": "NVD",
+            "url": "https://nvd.nist.gov/vuln/detail/CVE-2025-14933"
+          }
+        }
+      ],
+      "ratings": [
+        {
+          "source": {
+            "name": "NVD"
+          },
+          "score": 9.8,
+          "severity": "critical",
+          "method": "CVSSv31"
+        }
+      ],
+      "description": "Debordement d'entier sur une variable NC dans netcdf-c, execution de code a distance par ouverture d'un fichier NetCDF forge.",
+      "affects": [
+        {
+          "ref": "deb:image-execution:libnetcdf22@1:4.9.3-1:amd64"
+        }
+      ],
+      "analysis": {
+        "state": "not_affected",
+        "justification": "protected_by_mitigating_control",
+        "response": [
+          "will_not_fix"
+        ],
+        "detail": "Non corrigee cote Debian trixie au 16/09/2026 (paquet source netcdf, verifie sur le Debian Security Tracker). Desamorcee par le modele de menace de SILLON : le seul acteur en mesure de faire lire un fichier NetCDF/HDF4 forge par GDAL est l'auteur du script lui-meme, qui dispose deja d'une execution de code arbitraire dans son propre conteneur isole (--read-only --tmpfs /tmp --user 1000:1000, worker.py, cahier des charges §7.7) - une RCE declenchee par un fichier qu'il choisit lui-meme de faire lire par son propre script ne lui donne rien qu'il n'ait deja. Voir NOMENCLATURE_LOGICIELLE_SILLON.md, §7 constat 13."
+      },
+      "updated": "2026-09-16T00:00:00Z"
+    },
+    {
+      "bom-ref": "vuln-CVE-2025-14932",
+      "id": "CVE-2025-14932",
+      "source": {
+        "name": "Debian Security Tracker",
+        "url": "https://security-tracker.debian.org/tracker/"
+      },
+      "references": [
+        {
+          "id": "CVE-2025-14932",
+          "source": {
+            "name": "NVD",
+            "url": "https://nvd.nist.gov/vuln/detail/CVE-2025-14932"
+          }
+        }
+      ],
+      "ratings": [
+        {
+          "source": {
+            "name": "NVD"
+          },
+          "score": 9.8,
+          "severity": "critical",
+          "method": "CVSSv31"
+        }
+      ],
+      "description": "Depassement de tampon sur pile via une unite de temps dans netcdf-c, execution de code a distance par ouverture d'un fichier NetCDF forge.",
+      "affects": [
+        {
+          "ref": "deb:image-execution:libnetcdf22@1:4.9.3-1:amd64"
+        }
+      ],
+      "analysis": {
+        "state": "not_affected",
+        "justification": "protected_by_mitigating_control",
+        "response": [
+          "will_not_fix"
+        ],
+        "detail": "Non corrigee cote Debian trixie au 16/09/2026 (paquet source netcdf, verifie sur le Debian Security Tracker). Desamorcee par le modele de menace de SILLON : le seul acteur en mesure de faire lire un fichier NetCDF/HDF4 forge par GDAL est l'auteur du script lui-meme, qui dispose deja d'une execution de code arbitraire dans son propre conteneur isole (--read-only --tmpfs /tmp --user 1000:1000, worker.py, cahier des charges §7.7) - une RCE declenchee par un fichier qu'il choisit lui-meme de faire lire par son propre script ne lui donne rien qu'il n'ait deja. Voir NOMENCLATURE_LOGICIELLE_SILLON.md, §7 constat 13."
+      },
+      "updated": "2026-09-16T00:00:00Z"
     }
   ]
 }
