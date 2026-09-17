@@ -440,9 +440,91 @@ Le script d'exemple **`exemple_2.6_synthese_ile_de_france.py`** (déjà déposé
 
 Le classeur `synthese_ile_de_france.xlsx` (un onglet de synthèse avec graphique natif, plus un onglet par département listant ses communes) et le rapport `synthese_ile_de_france.pdf` (panorama + carte, 2 pages) sont produits dans le même job.
 
+### 2.7 Typologie des communes par apprentissage automatique (`scikit-learn`)
+
+`scikit-learn` apporte l'apprentissage automatique. Ici un algorithme **non supervisé**, `KMeans` : il regroupe les communes en profils similaires sans aucune étiquette de départ — à la différence de la régression de la section 2.8, qui apprend à partir d'une valeur cible connue (la population).
+
+```python
+from sklearn.preprocessing import StandardScaler
+from sklearn.cluster import KMeans
+
+# StandardScaler ramene densite/altitude/superficie sur une echelle
+# comparable - sans lui, la densite (jusqu'a ~25 000 hab/km2) ecraserait
+# completement l'altitude et la superficie dans le calcul de distance.
+X = StandardScaler().fit_transform(communes[["densite", "altitude_moyenne", "superficie_km2"]])
+
+modele = KMeans(n_clusters=4, random_state=0, n_init=10)
+communes["cluster"] = modele.fit_predict(X)
+```
+
+Résultat réel sur les 34 734 communes exploitables (134 écartées pour valeur manquante), quatre profils qui se dégagent nettement :
+
+| Profil | Communes | Densité moyenne | Altitude moyenne | Superficie moyenne | Population moyenne |
+|---|---|---|---|---|---|
+| Pôles urbains | 156 | 8 908 hab/km² | 76 m | 7,9 km² | 67 546 hab. |
+| Communes standards | 28 824 | 140 hab/km² | 194 m | 12,1 km² | 1 394 hab. |
+| Grandes communes rurales | 1 770 | 111 hab/km² | 269 m | 65,7 km² | 7 281 hab. |
+| Communes de montagne | 3 984 | 39 hab/km² | 905 m | 20,5 km² | 638 hab. |
+
+Le script d'exemple **`exemple_2.7_typologie_scikit_learn.py`** (déjà déposé et exécuté, résultat dans l'onglet **Suivi** ; téléchargeable dans `python/exemples/`) produit le nuage de points ci-dessous (densité vs altitude, coloré par cluster) et un histogramme des effectifs :
+
+![Typologie des communes par KMeans (k=4), densité vs altitude colorées par cluster, résultat réel de exemple_2.7_typologie_scikit_learn.py](images/exemple_2.7_typologie.png)
+
+**Angle mort de cette projection, pas du clustering lui-même** : le clustering est fait sur *trois* caractéristiques (densité, altitude, superficie), mais ce nuage n'en montre que deux. Les « communes standards » et les « grandes communes rurales » s'y chevauchent visuellement — elles se distinguent surtout par la superficie, un axe absent de ce plan 2D.
+
+### 2.8 Régression et visualisation statistique (`statsmodels`, `seaborn`)
+
+`statsmodels` complète `scikit-learn` plutôt qu'il ne le remplace : là où `scikit-learn` optimise pour la prédiction, `statsmodels` fournit directement les tests statistiques sur chaque coefficient (p-value, intervalle de confiance) — pertinent pour une question d'inférence (« cette variable a-t-elle un effet significatif ? ») plutôt que de seule prédiction. `seaborn` (surcouche de `matplotlib`) simplifie les graphiques statistiques usuels — ici une matrice de corrélation et un nuage avec droite de régression.
+
+```python
+import statsmodels.formula.api as smf
+
+# log(population) plutot que la population brute, tres asymetrique
+# (de quelques habitants a plus de deux millions pour Paris).
+modele = smf.ols("log_population ~ densite + altitude_moyenne + superficie_km2", data=communes).fit()
+print(modele.summary())
+```
+
+Résultat réel (34 728 communes, population > 0) : **R² = 0,342**, les trois variables significatives à p < 0,001 :
+
+| Variable | Coefficient | p-value |
+|---|---|---|
+| Constante | 6,022 | < 0,001 |
+| Densité | +0,0007 | < 0,001 |
+| Altitude moyenne | -0,0013 | < 0,001 |
+| Superficie | +0,0299 | < 0,001 |
+
+R² = 0,34 : ces trois seules variables *physiques* (densité, altitude, superficie) expliquent un peu plus d'un tiers de la variance de la population des communes — le reste tient à des facteurs que ce modèle ne capture pas (histoire, statut administratif, activité économique...).
+
+![Corrélations entre population (log), densité, altitude et superficie, résultat réel de exemple_2.8_regression_statsmodels_seaborn.py](images/exemple_2.8_correlations.png)
+
+![Population (log) en fonction de la densité, avec droite de régression, résultat réel de exemple_2.8_regression_statsmodels_seaborn.py](images/exemple_2.8_regression_densite.png)
+
+**Piège réel rencontré en écrivant ce script** : un premier essai traçait le nuage/droite de `sns.regplot()` en échelle linéaire, puis appliquait `set_xscale("log")` après coup sur l'axe — la droite ajustée en espace linéaire se retrouvait déformée en courbe d'allure exponentielle une fois l'axe réétiré en log, un artefact purement visuel du tracé, sans lien avec la régression `statsmodels` elle-même (qui reste correcte). `sns.regplot(..., logx=True)` corrige cela en ajustant directement sur `log(densité)`, cohérent avec l'échelle affichée.
+
+Le script calcule aussi le résidu moyen par département (écart entre population réelle et population prédite par le modèle, en log) :
+
+| Département le plus **sous-estimé** | Résidu moyen |
+|---|---|
+| Paris | -9,20 |
+| Hauts-de-Seine | -3,75 |
+| Seine-Saint-Denis | -1,76 |
+| Val-de-Marne | -1,40 |
+| Haute-Marne | -1,01 |
+
+| Département le plus **sur-estimé** | Résidu moyen |
+|---|---|
+| Savoie | +1,06 |
+| Isère | +1,08 |
+| Bouches-du-Rhône | +1,27 |
+| Rhône | +1,33 |
+| Haute-Savoie | +1,67 |
+
+Paris très en tête des sous-estimations n'est pas surprenant : c'est un département-commune unique, avec une densité extrême (plus de 20 000 hab/km²) hors de la plage sur laquelle le modèle a surtout appris.
+
 ### Exercices
 
-Corrigés téléchargeables dans `python/exercices/` (`exercice_2.1.py` à `exercice_2.6.py`).
+Corrigés téléchargeables dans `python/exercices/` (`exercice_2.1.py` à `exercice_2.8.py`).
 
 **2.1.** Reproduisez la carte de `exemple_2.4_cartographie.py`, mais coloriée par **densité moyenne** du département plutôt que par population totale.
 
@@ -492,6 +574,20 @@ Résultat réel :
 > 34 868 communes, **211 désaccords** commune/département, **163 communes sans correspondance géométrique** (point de centre en mer/frontière — communes littorales et communes nouvelles au centroïde recalculé, essentiellement).
 
 0,6 % de désaccords : les centroïdes déclarés et les contours départementaux généralisés (IGN ADMIN EXPRESS) proviennent de traitements différents — une jointure spatiale les confronte l'un à l'autre et révèle ces écarts, invisibles avec l'approche par points de la section 2.4 (elle ne fait que dessiner les polygones, jamais de test d'appartenance géométrique).
+
+**2.7.** Méthode du coude : calculez l'inertie intra-cluster (`KMeans(...).inertia_`) pour k = 1 à 10 sur les mêmes caractéristiques que l'exemple 2.7 (densité, altitude, superficie), pour objectiver a posteriori le choix de k=4.
+
+![Corrigé de l'exercice 2.7 : méthode du coude, inertie intra-cluster pour k=1 à 10](images/exercice_2.7_coude.png)
+
+Résultat réel : la baisse d'inertie ralentit nettement à partir de k=5 (+22,1 % de baisse pour passer de k=3 à k=4, contre +16,6 % seulement pour passer de k=4 à k=5) — k=4, choisi dans l'exemple, se situe bien au coude de la courbe.
+
+**2.8.** *Avancé* : reprenez le modèle de l'exemple 2.8, mais au niveau de la **commune** plutôt que du département (moyenne) : identifiez les 5 communes les plus sous-estimées et les 5 plus sur-estimées par le modèle, et tracez la distribution complète des résidus avec `seaborn`.
+
+![Corrigé de l'exercice 2.8 : distribution des résidus du modèle de régression](images/exercice_2.8_distribution_residus.png)
+
+Résultat réel (écart-type des résidus : 1,12) — sous-estimées : Arles (-17,90), Levallois-Perret (-15,58), Le Pré-Saint-Gervais (-13,96), Vincennes (-13,79), Saint-Mandé (-13,10) ; sur-estimées : Briançon (+4,32), Pontarlier (+3,56), Aurillac (+3,52), Gex (+3,50), Le Puy-en-Velay (+3,50).
+
+**Piège réel rencontré en écrivant ce corrigé** : Arles est la plus grande commune de France métropolitaine par la superficie (758 km², loin de la plage sur laquelle le modèle a surtout appris). Exponentier son résidu de -17,9 en population prédite (`exp(valeur_ajustée)`) donnerait un nombre absurde (plusieurs milliers de milliards d'habitants) — pas une erreur de calcul, mais un coefficient linéaire qui extrapole sans limite en dehors de sa plage d'estimation. Le résidu en log reste interprétable ; une « population prédite » convertie en unités réelles ne l'est plus pour les communes les plus atypiques, d'où son absence volontaire du corrigé.
 
 ---
 

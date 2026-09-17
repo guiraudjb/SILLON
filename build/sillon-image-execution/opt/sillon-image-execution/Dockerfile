@@ -46,6 +46,21 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install --no-instal
         # exclusivement sur les options d'execution imposees par worker.py
         # (--network interne) - voir NOMENCLATURE_LOGICIELLE_SILLON.md §7.
         python3-geopandas \
+        # Statistiques/apprentissage automatique (§7.7, ajout du
+        # 17/09/2026, demande utilisateur) : empreinte nettement plus
+        # legere que python3-geopandas plus haut - contrairement a GDAL,
+        # aucune de ces quatre bibliotheques n'entraine de pile de
+        # pilotes externe. Nouvelles dependances Debian reelles (le
+        # reste - numpy, pandas, matplotlib - est deja present) :
+        # scipy (+ libblas/liblapack/libgfortran), python3-sklearn-lib
+        # et python3-statsmodels-lib (extensions compilees), joblib,
+        # threadpoolctl, patsy, packaging. python3-scipy est liste
+        # explicitement bien qu'il soit de toute facon tire par les
+        # trois autres, car directement utile seul (tests statistiques).
+        python3-scipy \
+        python3-sklearn \
+        python3-statsmodels \
+        python3-seaborn \
         r-base-core \
         r-cran-tidyverse \
         r-cran-dbi \

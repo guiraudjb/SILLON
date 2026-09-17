@@ -56,6 +56,8 @@ SCRIPTS_EXEMPLE = [
     ("python/exemples", "exemple_2.4_cartographie.py"),
     ("python/exemples", "exemple_2.5_geopandas.py"),
     ("python/exemples", "exemple_2.6_synthese_ile_de_france.py"),
+    ("python/exemples", "exemple_2.7_typologie_scikit_learn.py"),
+    ("python/exemples", "exemple_2.8_regression_statsmodels_seaborn.py"),
     ("r/exemples", "exemple_3.4_cartographie.R"),
 ]
 

@@ -5,7 +5,11 @@
         { "module": "matplotlib", "paquet_debian": "python3-matplotlib" },
         { "module": "psycopg2", "paquet_debian": "python3-psycopg2" },
         { "module": "openpyxl", "paquet_debian": "python3-openpyxl" },
-        { "module": "geopandas (shapely, pyproj, pyogrio/GDAL)", "paquet_debian": "python3-geopandas" }
+        { "module": "geopandas (shapely, pyproj, pyogrio/GDAL)", "paquet_debian": "python3-geopandas" },
+        { "module": "scipy", "paquet_debian": "python3-scipy" },
+        { "module": "scikit-learn (sklearn)", "paquet_debian": "python3-sklearn" },
+        { "module": "statsmodels", "paquet_debian": "python3-statsmodels" },
+        { "module": "seaborn", "paquet_debian": "python3-seaborn" }
     ],
     "r": [
         { "module": "tidyverse (ggplot2, dplyr, tidyr, readr, purrr, tibble, stringr, forcats)", "paquet_debian": "r-cran-tidyverse" },
