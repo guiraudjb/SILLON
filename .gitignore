@@ -27,3 +27,7 @@ secrets/
 
 # Paramètres locaux d'outils (non liés au projet)
 .claude/
+
+# Audit serveur (inventaire de fichiers hors du périmètre SILLON, cas
+# d'usage personnel de l'utilisateur - jamais destiné au dépôt)
+auditserveur/
